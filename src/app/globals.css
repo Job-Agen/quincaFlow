@@ -1,0 +1,181 @@
+:root {
+  --c-bg: #0D0905;
+  --c-card: #1A1008;
+  --c-card2: #221408;
+  --c-amber: #F5A623;
+  --c-terra: #D4622A;
+  --c-green: #2EAA6B;
+  --c-red: #D93B2A;
+  --c-blue: #3A8FD4;
+  --c-text: #F5EDD8;
+  --c-muted: #8B7B64;
+  --c-border: #362210;
+  
+  --f-heading: 'Syne', sans-serif;
+  --f-body: 'DM Sans', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--f-body);
+  background: var(--c-bg);
+  color: var(--c-text);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE FIRST — base styles (< 768px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Responsive grid */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+/* Table container pour overflow horizontal */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Page container */
+.page-container {
+  padding: 16px;
+  background: var(--c-bg);
+  min-height: 100vh;
+}
+
+/* Page title — responsive */
+.page-title {
+  margin: 0;
+  font-family: var(--f-heading);
+  font-weight: 700;
+  color: var(--c-amber);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+/* Page header — wrapping layout */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* Flex utilities */
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.flex-row {
+  display: flex;
+  flex-direction: column; /* par défaut sur mobile */
+  gap: 12px;
+}
+
+.flex-row-mobile {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Cacher sur mobile par défaut */
+.hide-on-mobile {
+  display: none !important;
+}
+
+/* Modals & Layout fixes */
+.modal-content {
+  width: 100%;
+  max-width: none;
+  border-radius: 16px 16px 0 0;
+  max-height: 95vh;
+}
+
+/* Touch targets for mobile */
+button, input, select, .touch-target {
+  min-height: 44px; /* Apple/Google guidelines pour touch */
+}
+
+/* Safe area pour iPhones avec encoche */
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TABLETTE (min 768px, max 1024px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 768px) {
+  .page-container {
+    padding: 20px;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
+  .responsive-grid.cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .responsive-grid.cols-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .responsive-grid.cols-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .responsive-grid.auto-fit {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+  
+  .flex-row {
+    flex-direction: row;
+  }
+  
+  .hide-on-mobile {
+    display: flex !important;
+  }
+  
+  .show-on-mobile {
+    display: none !important;
+  }
+
+  .modal-content {
+    width: 95%;
+    max-width: 500px;
+    border-radius: 16px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESKTOP (min 1025px)
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 1025px) {
+  .page-container {
+    padding: 24px;
+  }
+
+  .page-title {
+    font-size: 28px;
+  }
+
+  .responsive-grid.cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .responsive-grid.cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
