@@ -9,6 +9,9 @@ import {
   BarChart2,
   Users,
   FileText,
+  HandCoins,
+  Truck,
+  Settings,
 } from 'lucide-react';
 import { COLORS } from '../../constants/theme';
 
@@ -16,10 +19,13 @@ const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Accueil' },
   { path: '/stock', icon: Package, label: 'Stock' },
   { path: '/caisse', icon: ShoppingCart, label: 'Caisse' },
+  { path: '/achats', icon: Truck, label: 'Achats' },
+  { path: '/credits', icon: HandCoins, label: 'Crédits' },
   { path: '/depenses', icon: TrendingDown, label: 'Dépenses' },
   { path: '/comptabilite', icon: BarChart2, label: 'Compta' },
   { path: '/contacts', icon: Users, label: 'Contacts' },
   { path: '/facturation', icon: FileText, label: 'Factures' },
+  { path: '/parametres', icon: Settings, label: 'Réglages' },
 ];
 
 export default function BottomNav({ currentPath }) {

@@ -3,8 +3,8 @@ import AppShell from '../components/layout/AppShell';
 import SeedData from '../components/layout/SeedData';
 
 export const metadata = {
-  title: 'QuincailPro',
-  description: 'Gestion de boutique',
+  title: 'Ma Boutique — Gestion',
+  description: 'Application de gestion de boutique',
 };
 
 export default function RootLayout({ children }) {

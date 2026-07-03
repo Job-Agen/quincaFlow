@@ -1,19 +1,29 @@
-export const PRODUCT_CATEGORIES = [
-  'Ciment',
-  'Ferronnerie',
-  'Briques & Parpaings',
-  'Tuyaux & Plomberie',
-  'Carrelage',
-  'Peinture',
-  'Granulats',
+export const DEFAULT_PRODUCT_CATEGORIES = [
+  'Alimentation',
+  'Boissons',
+  'Hygiène & Entretien',
+  'Cosmétiques',
+  'Papeterie',
+  'Électronique',
+  'Textile',
   'Quincaillerie',
-  'Électricité',
   'Autres',
 ];
 
-export const UNITS = ['sac', 'barre', 'm²', 'm³', 'm', 'kg', 'litre', 'bidon', 'unité', 'rouleau'];
+export const DEFAULT_UNITS = [
+  'unité',
+  'sac',
+  'carton',
+  'paquet',
+  'kg',
+  'litre',
+  'bidon',
+  'm',
+  'm²',
+  'rouleau',
+];
 
-export const EXPENSE_CATEGORIES = [
+export const DEFAULT_EXPENSE_CATEGORIES = [
   'Loyer',
   'Salaires',
   'Transport',
@@ -25,3 +35,8 @@ export const EXPENSE_CATEGORIES = [
 ];
 
 export const PAYMENT_METHODS = ['cash', 'mobile money', 'crédit'];
+
+// Alias rétrocompatibles pour les vues existantes
+export const PRODUCT_CATEGORIES = DEFAULT_PRODUCT_CATEGORIES;
+export const UNITS = DEFAULT_UNITS;
+export const EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORIES;

@@ -9,17 +9,24 @@ import {
   BarChart2,
   Users,
   FileText,
+  HandCoins,
+  Truck,
+  Settings,
 } from 'lucide-react';
 import { COLORS, FONTS } from '../../constants/theme';
+import useSettings from '../../hooks/useSettings';
 
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
   { path: '/stock', icon: Package, label: 'Stock' },
   { path: '/caisse', icon: ShoppingCart, label: 'Caisse' },
+  { path: '/achats', icon: Truck, label: 'Achats' },
+  { path: '/credits', icon: HandCoins, label: 'Crédits' },
   { path: '/depenses', icon: TrendingDown, label: 'Dépenses' },
   { path: '/comptabilite', icon: BarChart2, label: 'Comptabilité' },
   { path: '/contacts', icon: Users, label: 'Contacts' },
   { path: '/facturation', icon: FileText, label: 'Facturation' },
+  { path: '/parametres', icon: Settings, label: 'Paramètres' },
 ];
 
 /**
@@ -27,6 +34,13 @@ const NAV_ITEMS = [
  */
 export default function Sidebar({ currentPath, compact = false }) {
   const sidebarWidth = compact ? '60px' : '230px';
+  const { settings } = useSettings();
+  const initials = (settings.storeName || 'Ma Boutique')
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <div
@@ -55,7 +69,7 @@ export default function Sidebar({ currentPath, compact = false }) {
             letterSpacing: '-0.5px',
           }}
         >
-          {compact ? 'QP' : 'QuincailPro'}
+          {compact ? initials : settings.storeName}
         </div>
         {!compact && (
           <div
@@ -66,7 +80,7 @@ export default function Sidebar({ currentPath, compact = false }) {
               fontFamily: FONTS.body,
             }}
           >
-            Gestion de boutique
+            {settings.tagline}
           </div>
         )}
       </div>
