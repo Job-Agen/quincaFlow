@@ -76,3 +76,23 @@ export function formatTime(dateStr) {
   const d = new Date(dateStr);
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
+
+// Returns { start: Date (1st of month 00:00), end: Date (last day 23:59:59.999) }
+// for the month of `date` shifted by `offset` months (offset -1 = previous month).
+export function getMonthRange(date = new Date(), offset = 0) {
+  const base = new Date(date);
+  const start = new Date(base.getFullYear(), base.getMonth() + offset, 1, 0, 0, 0, 0);
+  const end = new Date(base.getFullYear(), base.getMonth() + offset + 1, 0, 23, 59, 59, 999);
+  return { start, end };
+}
+
+// Returns true if `iso` (ISO date "YYYY-MM-DD" or full ISO datetime) falls within
+// [start, end] (Date objects). Date-only strings are interpreted as local midnight.
+export function isInRange(iso, start, end) {
+  if (!iso || !start || !end) return false;
+  const str =
+    typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + 'T00:00:00' : iso;
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return false;
+  return d >= start && d <= end;
+}

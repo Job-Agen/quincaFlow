@@ -3,9 +3,9 @@
 import React, { useState, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import useExpenses from '../hooks/useExpenses';
+import useSettings from '../hooks/useSettings';
 import { fmt } from '../utils/formatCurrency';
 import { todayISO, formatDate } from '../utils/dateHelpers';
-import { EXPENSE_CATEGORIES } from '../constants/categories';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
@@ -30,8 +30,8 @@ function getCurrentMonth() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
-function emptyForm() {
-  return { date: todayISO(), cat: EXPENSE_CATEGORIES[0], description: '', amount: '' };
+function emptyForm(defaultCat = '') {
+  return { date: todayISO(), cat: defaultCat, description: '', amount: '' };
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -73,8 +73,10 @@ function Panel({ children, style }) {
 
 export default function Depenses() {
   const { expenses, addExpense, deleteExpense } = useExpenses();
+  const { settings } = useSettings();
+  const expenseCategories = settings.expenseCategories || [];
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(() => emptyForm(expenseCategories[0]));
   const [formError, setFormError] = useState('');
 
   // ── Derived data ────────────────────────────────────────────────────────────
@@ -242,7 +244,7 @@ export default function Depenses() {
               />
               <Select
                 label="Catégorie"
-                options={EXPENSE_CATEGORIES}
+                options={expenseCategories}
                 value={form.cat}
                 onChange={(e) => setField('cat', e.target.value)}
               />

@@ -2,7 +2,15 @@
 
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { ShoppingBag, Package, TrendingDown, TrendingUp, AlertTriangle, Users } from 'lucide-react';
+import {
+  ShoppingBag,
+  Package,
+  TrendingDown,
+  TrendingUp,
+  AlertTriangle,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import storage from '../storage';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
@@ -122,8 +130,11 @@ export default function Dashboard() {
 
   const today = todayISO();
 
+  // Exclure les ventes annulées de tous les KPIs, graphiques et listes
+  const activeSales = sales.filter((s) => s.status !== 'annulée');
+
   // --- KPI: Ventes aujourd'hui ---
-  const todaySales = sales.filter((s) => isSameDay(s.date, today));
+  const todaySales = activeSales.filter((s) => isSameDay(s.date, today));
   const ventesAujourdhui = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
 
   // --- KPI: Bénéfice du jour ---
@@ -160,7 +171,7 @@ export default function Dashboard() {
   // --- Graph data: 7 derniers jours ---
   const last7 = getLast7Days();
   const chartData = last7.map((dayISO) => {
-    const total = sales
+    const total = activeSales
       .filter((s) => isSameDay(s.date, dayISO))
       .reduce((sum, s) => sum + (s.total || 0), 0);
     return { day: getDayLabel(dayISO), value: total, date: dayISO };
@@ -170,7 +181,9 @@ export default function Dashboard() {
   const lowStock = products.filter((p) => (p.qty || 0) <= (p.minQty || 0));
 
   // --- Dernières ventes (6) ---
-  const lastSales = [...sales].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
+  const lastSales = [...activeSales]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 6);
 
   // --- Résumé contacts ---
   const clients = contacts.filter((c) => c.type === 'client');
@@ -229,6 +242,12 @@ export default function Dashboard() {
           label="Dépenses du mois"
           value={fmt(depensesMois)}
           color={COLORS.terra}
+        />
+        <KpiCard
+          icon={<Wallet size={20} color={COLORS.blue} />}
+          label="Créances clients"
+          value={fmt(totalCredit)}
+          color={COLORS.blue}
         />
       </div>
 
