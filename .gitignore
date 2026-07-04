@@ -29,3 +29,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# graphify tool output
+/graphify-out/
+
+# data backups exported from the app
+/boutique-sauvegarde-*.json
