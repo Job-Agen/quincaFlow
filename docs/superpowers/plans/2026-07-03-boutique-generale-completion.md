@@ -19,6 +19,7 @@
 - Chaque agent ne modifie QUE les fichiers listés dans sa tâche. Interdiction absolue de toucher `Sidebar.jsx`, `BottomNav.jsx`, `package.json`, ou les fichiers d'un autre agent.
 - `'use client'` en tête de toute vue/composant utilisant des hooks.
 - Commits fréquents avec messages `feat:`/`fix:`/`docs:`/`test:`.
+- **Exécution parallèle (Phase 2) : les agents A/B/C/D ne lancent AUCUNE commande `git`** (risque de course sur l'index avec 4 agents dans le même worktree) — l'orchestrateur commite chaque tâche après revue, avec le message indiqué dans la tâche.
 
 ---
 
@@ -68,7 +69,7 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 
 ### Task 0: Commit de sauvegarde
 
-- [ ] `git add -A && git commit -m "chore: baseline avant refonte boutique générale"`
+- [x] `git add -A && git commit -m "chore: baseline avant refonte boutique générale"` — fait (commit `8e8ab18`)
 
 ### Task 1: Hooks partagés + settings + devise dynamique
 
@@ -79,9 +80,9 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 
 **Interfaces:** Produit les 4 hooks du contrat ci-dessus. `fmt(value)` inchangé côté appelant.
 
-- [ ] Écrire les 4 hooks sur le modèle de `useProducts` (useState initialisé depuis storage + useEffect de persistance)
-- [ ] `fmt()` : cache module `cachedCurrency`, initialisé paresseusement depuis `qp_settings.currency`, export `setCurrency(c)` appelé par `saveSettings`
-- [ ] Commit `feat: hooks settings/mouvements/achats/credits + devise dynamique`
+- [x] Écrire les 4 hooks sur le modèle de `useProducts` (useState initialisé depuis storage + useEffect de persistance) — fait (commit `49cd813`)
+- [x] `fmt()` : cache module `cachedCurrency`, initialisé paresseusement depuis `qp_settings.currency`, export `setCurrency(c)` appelé par `saveSettings` — fait
+- [x] Commit `feat: hooks settings/mouvements/achats/credits + devise dynamique` — fait
 
 ### Task 2: Navigation + routes + stubs de vues
 
@@ -93,8 +94,8 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 - Modify: `src/app/layout.jsx` (metadata title « Gestion de Boutique »)
 - Modify: `package.json` (devDependency `vitest`, script `"test": "vitest run"`)
 
-- [ ] Vérifier `npm run lint` puis `npm run build` passent
-- [ ] Commit `feat: routes credits/achats/parametres + navigation + vitest`
+- [x] Vérifier `npm run lint` puis `npm run build` passent — fait
+- [x] Commit `feat: routes credits/achats/parametres + navigation + vitest` — fait (commit `49cd813`)
 
 ---
 
@@ -123,11 +124,14 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 
 **Spécification README.md :** présentation, fonctionnalités par module, stack, `npm install` / `npm run dev` / `lint` / `test`, avertissement stockage local + conseil d'export régulier.
 
+**État initial :** `src/utils/backup.js` existe déjà (non commité) et respecte le contrat ci-dessus (`BACKUP_KEYS` couvre les 9 clés `qp_*`) — le vérifier/compléter, ne pas le réécrire. `vitest` et `jsdom` sont déjà dans `package.json`, mais **`vitest.config.js` n'existe pas** : le créer avec `test: { environment: 'jsdom' }`.
+
 **Steps :**
-- [ ] Test vitest de `exportAll`/`importAll` (mock localStorage via `Object.defineProperty(window, 'localStorage', …)` ou environnement jsdom) : export→import restitue les données, import d'un objet invalide retourne `{ok:false}`
-- [ ] Implémenter `backup.js`, vérifier `npx vitest run` passe
-- [ ] Implémenter la vue Parametres, le nouveau SeedData, le README
-- [ ] Commit `feat: parametres boutique + export/import + seed generaliste + README`
+- [x] Créer `vitest.config.js` (environment jsdom)
+- [x] Test vitest de `exportAll`/`importAll` : export→import restitue les données, import d'un objet invalide retourne `{ok:false}`, `resetAll` supprime toutes les clés
+- [x] Vérifier `backup.js` existant contre le contrat, vérifier `npx vitest run` passe (14 tests verts)
+- [x] Implémenter la vue Parametres, le nouveau SeedData, le README
+- [x] Commit `feat: parametres boutique + export/import + seed generaliste + README`
 
 ### Task B: Crédits clients + annulation de vente
 
@@ -149,12 +153,13 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 **Spécification Caisse.jsx (modifications ciblées, ne pas réécrire le fichier) :**
 1. Paiement « crédit » ⇒ sélection d'un contact client **obligatoire** (Select alimenté par `useContacts`, filtré `type==='client'`, avec création rapide d'un client par nom+téléphone). Enregistrer `contactId` sur la vente et faire `updateCredit(contactId, +total)`.
 2. Dans l'historique des ventes du jour : bouton « Annuler » → Modal de confirmation → `cancelSale(id)` + restitution du stock de chaque item (`adjustStock(productId, +qty)` — retrouver le produit par nom si la vente n'a pas de productId) + `logMovement({type:'entrée', qty:+qty, reason:'Annulation vente', refId:saleId})` + si paiement crédit, `updateCredit(contactId, -total)`. Les ventes `status==='annulée'` s'affichent barrées avec Badge rouge et sont exclues des totaux.
+3. À la confirmation d'une vente (`handleConfirmSale`, après la déduction du stock) : capter le retour de `addSale(...)` et journaliser une sortie par article du panier : `logMovement({productId: item.id, productName: item.name, type:'sortie', qty: item.qty, reason:'Vente en caisse', refId: newSale.id})`.
 
 **Steps :**
-- [ ] Ajouter `cancelSale` à `useSales` (même pattern `useCallback` + `storage.set`)
-- [ ] Implémenter la vue Credits puis les modifications Caisse
-- [ ] `npm run lint` sur les fichiers touchés
-- [ ] Commit `feat: suivi credits clients + annulation de vente`
+- [x] Ajouter `cancelSale` à `useSales` (même pattern `useCallback` + `storage.set`)
+- [x] Implémenter la vue Credits puis les modifications Caisse
+- [x] `npm run lint` sur les fichiers touchés
+- [x] Commit `feat: suivi credits clients + annulation de vente`
 
 ### Task C: Mouvements de stock + achats fournisseurs
 
@@ -177,9 +182,9 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 3. Nouvel onglet/section « Mouvements » : journal `movements` trié par date desc (date, produit, type avec Badge coloré — entrée verte, sortie rouge, ajustement ambre —, quantité signée, motif).
 
 **Steps :**
-- [ ] Implémenter Achats.jsx puis les modifications Stock.jsx
-- [ ] `npm run lint`
-- [ ] Commit `feat: achats fournisseurs + journal des mouvements de stock`
+- [x] Implémenter Achats.jsx puis les modifications Stock.jsx
+- [x] `npm run lint`
+- [x] Commit `feat: achats fournisseurs + journal des mouvements de stock`
 
 ### Task D: Rapports comptables par période + généralisation Dashboard/Dépenses
 
@@ -203,10 +208,10 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 **Spécification Depenses.jsx :** catégories depuis `useSettings().settings.expenseCategories` au lieu de la constante statique.
 
 **Steps :**
-- [ ] Ajouter les helpers de dates (append-only) 
-- [ ] Implémenter Comptabilite, puis Dashboard, puis Depenses
-- [ ] `npm run lint`
-- [ ] Commit `feat: rapports comptables par periode + generalisation dashboard/depenses`
+- [x] Ajouter les helpers de dates (append-only) 
+- [x] Implémenter Comptabilite, puis Dashboard, puis Depenses
+- [x] `npm run lint`
+- [x] Commit `feat: rapports comptables par periode + generalisation dashboard/depenses`
 
 ---
 
@@ -214,11 +219,11 @@ useCredits() → { payments, addPayment({contactId, amount, note}), deletePaymen
 
 ### Task 3: Vérification finale
 
-- [ ] `npm run lint` — 0 erreur
-- [ ] `npm run build` — succès
-- [ ] `npx vitest run` — tests verts
-- [ ] Smoke test : `npm run dev`, vérifier les 10 routes s'affichent, une vente à crédit crée une créance visible dans /credits, une réception d'achat augmente le stock et apparaît dans le journal des mouvements, l'export JSON télécharge bien un fichier
-- [ ] Commit final `chore: integration boutique generale`
+- [x] `npm run lint` — 0 erreur (9 avertissements non bloquants, patterns préexistants)
+- [x] `npm run build` — succès (10 routes générées)
+- [x] `npx vitest run` — 14 tests verts
+- [x] Smoke test : `npm run dev` — les 10 routes s'affichent, la vente à crédit du seed crée une créance de 37 000 FCFA visible dans /credits, la réception d'un achat augmente le stock (8→58) + met à jour le prix d'achat + journalise le mouvement, l'export JSON produit un fichier valide (~7 Ko), l'annulation d'une vente restitue le stock, solde la créance, exclut la vente des totaux et journalise un mouvement « Annulation vente »
+- [x] Commit final `chore: integration boutique generale`
 
 ## Hors périmètre (phase ultérieure, nécessite décisions/comptes utilisateur)
 
