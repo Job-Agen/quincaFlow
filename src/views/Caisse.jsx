@@ -14,11 +14,15 @@ import {
   RotateCcw,
   CreditCard,
   Package,
+  Ban,
+  UserPlus,
 } from 'lucide-react';
 
-import storage from '../storage';
 import { useSales } from '../hooks/useSales';
 import useInvoices from '../hooks/useInvoices';
+import useProducts from '../hooks/useProducts';
+import useContacts from '../hooks/useContacts';
+import useStockMovements from '../hooks/useStockMovements';
 import { fmt } from '../utils/formatCurrency';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -116,28 +120,31 @@ function useIsMobile() {
 // CAISSE — Point de Vente
 // =============================================================================
 export default function Caisse() {
-  const { sales, addSale, deleteSale } = useSales();
+  const { sales, addSale, deleteSale, cancelSale } = useSales();
   const { addInvoice } = useInvoices();
+  const { products, adjustStock } = useProducts();
+  const { contacts: allContacts, addContact, updateCredit } = useContacts();
+  const { logMovement } = useStockMovements();
   const isMobile = useIsMobile();
 
   const [tab, setTab] = useState('vente');
-  const [products, setProducts] = useState(() => storage.get('qp_products', []));
 
-  useEffect(() => {
-    setProducts(storage.get('qp_products', []));
-  }, [tab]);
-
-  const contacts = useMemo(() => {
-    const all = storage.get('qp_contacts', []);
-    return all.filter((c) => c.type === 'client' || c.role === 'client');
-  }, []);
+  const contacts = useMemo(
+    () => allContacts.filter((c) => c.type === 'client' || c.role === 'client'),
+    [allContacts]
+  );
 
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState([]);
   const [clientName, setClientName] = useState('Client anonyme');
   const [payment, setPayment] = useState('cash');
+  const [creditContactId, setCreditContactId] = useState('');
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [cancelConfirmId, setCancelConfirmId] = useState(null);
   const [toast, setToast] = useState({ visible: false, message: '' });
   const [dateFilter, setDateFilter] = useState('');
 
@@ -189,34 +196,64 @@ export default function Caisse() {
     []
   );
 
+  // ── Quick client creation (credit sales) ─────────────────────────────────────
+  const handleQuickCreateClient = useCallback(() => {
+    const name = newClientName.trim();
+    if (!name) return;
+    const created = addContact({
+      name,
+      phone: newClientPhone.trim(),
+      type: 'client',
+      creditBalance: 0,
+    });
+    setCreditContactId(created.id);
+    setClientName(created.name);
+    setShowNewClient(false);
+    setNewClientName('');
+    setNewClientPhone('');
+  }, [addContact, newClientName, newClientPhone]);
+
   // ── Validate sale ────────────────────────────────────────────────────────────
   const handleConfirmSale = useCallback(() => {
+    if (payment === 'crédit' && !creditContactId) return;
+
     const saleDate = new Date().toISOString();
     const todayStr = saleDate.slice(0, 10);
     const saleItems = cart.map((i) => ({ name: i.name, qty: i.qty, unitPrice: i.unitPrice }));
-    const resolvedClient = clientName || 'Client anonyme';
+    const creditContact =
+      payment === 'crédit' ? contacts.find((c) => c.id === creditContactId) : null;
+    const resolvedClient = creditContact?.name || clientName || 'Client anonyme';
 
-    addSale({
+    const newSale = addSale({
       date: saleDate,
       items: saleItems,
       total: cartTotal,
       clientName: resolvedClient,
       payment,
+      ...(payment === 'crédit' ? { contactId: creditContactId } : {}),
     });
 
-    // Deduct stock
-    const current = storage.get('qp_products', []);
-    const updatedProducts = current.map((p) => {
-      const item = cart.find((i) => i.id === p.id);
-      if (item) return { ...p, qty: Math.max(0, (p.qty || 0) - item.qty) };
-      return p;
+    // Deduct stock + journal des mouvements
+    cart.forEach((item) => {
+      adjustStock(item.id, -item.qty);
+      logMovement({
+        productId: item.id,
+        productName: item.name,
+        type: 'sortie',
+        qty: item.qty,
+        reason: 'Vente en caisse',
+        refId: newSale.id,
+      });
     });
-    storage.set('qp_products', updatedProducts);
-    setProducts(updatedProducts);
+
+    // Créance client (vente à crédit)
+    if (payment === 'crédit' && creditContactId) {
+      updateCredit(creditContactId, +cartTotal);
+    }
 
     // Auto-generate invoice
     const isPaid = payment === 'cash' || payment === 'mobile money';
-    const contact = storage.get('qp_contacts', []).find((c) => c.name === resolvedClient);
+    const contact = creditContact || allContacts.find((c) => c.name === resolvedClient);
     const dueDate = isPaid
       ? todayStr
       : new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
@@ -238,10 +275,58 @@ export default function Caisse() {
     setCart([]);
     setClientName('Client anonyme');
     setPayment('cash');
+    setCreditContactId('');
+    setShowNewClient(false);
+    setNewClientName('');
+    setNewClientPhone('');
     setShowConfirm(false);
     setToast({ visible: true, message: 'Vente et facture enregistrées !' });
     setTimeout(() => setToast({ visible: false, message: '' }), 3000);
-  }, [addSale, addInvoice, cart, cartTotal, clientName, payment]);
+  }, [
+    addSale,
+    addInvoice,
+    adjustStock,
+    logMovement,
+    updateCredit,
+    allContacts,
+    contacts,
+    cart,
+    cartTotal,
+    clientName,
+    payment,
+    creditContactId,
+  ]);
+
+  // ── Cancel sale ──────────────────────────────────────────────────────────────
+  const handleCancelSale = useCallback(() => {
+    const sale = sales.find((s) => s.id === cancelConfirmId);
+    setCancelConfirmId(null);
+    if (!sale || sale.status === 'annulée') return;
+
+    cancelSale(sale.id);
+
+    // Restitution du stock + journal des mouvements
+    (sale.items || []).forEach((item) => {
+      const product = products.find((p) => p.name === item.name);
+      if (product) adjustStock(product.id, +item.qty);
+      logMovement({
+        productId: product?.id || null,
+        productName: item.name,
+        type: 'entrée',
+        qty: +item.qty,
+        reason: 'Annulation vente',
+        refId: sale.id,
+      });
+    });
+
+    // Annulation de la créance si vente à crédit
+    if (sale.payment === 'crédit' && sale.contactId) {
+      updateCredit(sale.contactId, -sale.total);
+    }
+
+    setToast({ visible: true, message: 'Vente annulée — stock restitué' });
+    setTimeout(() => setToast({ visible: false, message: '' }), 3000);
+  }, [sales, cancelConfirmId, cancelSale, products, adjustStock, logMovement, updateCredit]);
 
   // ── History ──────────────────────────────────────────────────────────────────
   const filteredSales = useMemo(() => {
@@ -252,7 +337,10 @@ export default function Caisse() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const todaySales = useMemo(
-    () => sales.filter((s) => s.date && s.date.slice(0, 10) === todayStr),
+    () =>
+      sales.filter(
+        (s) => s.date && s.date.slice(0, 10) === todayStr && s.status !== 'annulée'
+      ),
     [sales, todayStr]
   );
   const todaySalesTotal = todaySales.reduce((s, v) => s + (v.total || 0), 0);
@@ -265,6 +353,16 @@ export default function Caisse() {
     });
     return base;
   }, [contacts]);
+
+  const creditClientOptions = useMemo(
+    () => [
+      { value: '', label: '— Sélectionner un client —' },
+      ...contacts
+        .filter((c) => c.id && c.name)
+        .map((c) => ({ value: c.id, label: c.name })),
+    ],
+    [contacts]
+  );
 
   const paymentOptions = [
     { value: 'cash', label: 'Cash' },
@@ -657,14 +755,16 @@ export default function Caisse() {
                 </span>
               </div>
 
-              {/* Client */}
-              <Select
-                label="Client"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                options={clientOptions}
-                style={{ marginBottom: '12px' }}
-              />
+              {/* Client (paiement comptant) */}
+              {payment !== 'crédit' && (
+                <Select
+                  label="Client"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                  options={clientOptions}
+                  style={{ marginBottom: '12px' }}
+                />
+              )}
 
               {/* Payment */}
               <Select
@@ -672,14 +772,98 @@ export default function Caisse() {
                 value={payment}
                 onChange={(e) => setPayment(e.target.value)}
                 options={paymentOptions}
-                style={{ marginBottom: '16px' }}
+                style={{ marginBottom: payment === 'crédit' ? '12px' : '16px' }}
               />
+
+              {/* Client à créditer (obligatoire en mode crédit) */}
+              {payment === 'crédit' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <Select
+                    label="Client à créditer (obligatoire)"
+                    value={creditContactId}
+                    onChange={(e) => {
+                      setCreditContactId(e.target.value);
+                      const c = contacts.find((ct) => ct.id === e.target.value);
+                      if (c) setClientName(c.name);
+                    }}
+                    options={creditClientOptions}
+                  />
+                  {!showNewClient ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowNewClient(true)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: C.amber,
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        padding: '6px 0 0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <UserPlus size={13} />
+                      Nouveau client
+                    </button>
+                  ) : (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        marginTop: '10px',
+                        background: C.card2,
+                        border: `1px solid ${C.border}`,
+                        borderRadius: '8px',
+                        padding: '10px',
+                      }}
+                    >
+                      <Input
+                        label="Nom"
+                        type="text"
+                        placeholder="Nom du client"
+                        value={newClientName}
+                        onChange={(e) => setNewClientName(e.target.value)}
+                      />
+                      <Input
+                        label="Téléphone"
+                        type="text"
+                        placeholder="Ex : 90 00 00 00"
+                        value={newClientPhone}
+                        onChange={(e) => setNewClientPhone(e.target.value)}
+                      />
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <Button variant="ghost" size="sm" onClick={() => setShowNewClient(false)}>
+                          Annuler
+                        </Button>
+                        <Button
+                          variant="green"
+                          size="sm"
+                          disabled={!newClientName.trim()}
+                          onClick={handleQuickCreateClient}
+                        >
+                          <UserPlus size={13} />
+                          Créer
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {!creditContactId && (
+                    <p style={{ margin: '8px 0 0', fontSize: '12px', color: C.red }}>
+                      Sélectionnez un client pour une vente à crédit.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Validate button */}
               <Button
                 variant="primary"
                 size="lg"
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || (payment === 'crédit' && !creditContactId)}
                 onClick={() => setShowConfirm(true)}
                 style={{ width: '100%', justifyContent: 'center' }}
               >
@@ -778,8 +962,13 @@ export default function Caisse() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {filteredSales.map((sale) => (
-                <Card key={sale.id} style={{ padding: '16px 20px' }}>
+              {filteredSales.map((sale) => {
+                const isCancelled = sale.status === 'annulée';
+                return (
+                <Card
+                  key={sale.id}
+                  style={{ padding: '16px 20px', opacity: isCancelled ? 0.65 : 1 }}
+                >
                   <div
                     style={{
                       display: 'flex',
@@ -799,15 +988,42 @@ export default function Caisse() {
                       }}
                     >
                       <span style={{ fontSize: '13px', color: C.muted }}>{fmtDate(sale.date)}</span>
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          fontWeight: 700,
+                          color: C.text,
+                          textDecoration: isCancelled ? 'line-through' : 'none',
+                        }}
+                      >
                         {sale.clientName || 'Client anonyme'}
                       </span>
                       <PaymentBadge mode={sale.payment || 'cash'} />
+                      {isCancelled && <Badge variant="danger">Annulée</Badge>}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '18px', fontWeight: 900, color: C.amber }}>
+                      <span
+                        style={{
+                          fontSize: '18px',
+                          fontWeight: 900,
+                          color: isCancelled ? C.muted : C.amber,
+                          textDecoration: isCancelled ? 'line-through' : 'none',
+                        }}
+                      >
                         {fmt(sale.total)}
                       </span>
+                      {!isCancelled && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setCancelConfirmId(sale.id)}
+                          title="Annuler cette vente"
+                          style={{ color: C.red }}
+                        >
+                          <Ban size={13} />
+                          Annuler
+                        </Button>
+                      )}
                       <button
                         onClick={() => setDeleteConfirmId(sale.id)}
                         style={{
@@ -847,7 +1063,14 @@ export default function Caisse() {
                             idx < (sale.items || []).length - 1 ? `1px solid ${C.border}` : 'none',
                         }}
                       >
-                        <span style={{ fontSize: '13px', color: C.text, flex: 1 }}>
+                        <span
+                          style={{
+                            fontSize: '13px',
+                            color: C.text,
+                            flex: 1,
+                            textDecoration: isCancelled ? 'line-through' : 'none',
+                          }}
+                        >
                           {item.name}
                         </span>
                         <span style={{ fontSize: '12px', color: C.muted, flexShrink: 0 }}>
@@ -867,7 +1090,8 @@ export default function Caisse() {
                     ))}
                   </div>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1060,6 +1284,32 @@ export default function Caisse() {
           >
             <Trash2 size={15} />
             Supprimer
+          </Button>
+        </div>
+      </Modal>
+
+      {/* ======================================================================
+          MODAL — CANCEL SALE CONFIRM
+      ====================================================================== */}
+      <Modal
+        open={!!cancelConfirmId}
+        onClose={() => setCancelConfirmId(null)}
+        title="Annuler la vente"
+      >
+        <p style={{ color: C.text, fontSize: '15px', lineHeight: 1.6, marginTop: 0 }}>
+          Confirmer l&apos;annulation de cette vente ? La vente sera marquée comme annulée, le
+          stock des articles sera restitué et, s&apos;il s&apos;agit d&apos;une vente à crédit, la
+          créance du client sera annulée.
+        </p>
+        <div
+          style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}
+        >
+          <Button variant="ghost" size="md" onClick={() => setCancelConfirmId(null)}>
+            Retour
+          </Button>
+          <Button variant="danger" size="md" onClick={handleCancelSale}>
+            <Ban size={15} />
+            Annuler la vente
           </Button>
         </div>
       </Modal>

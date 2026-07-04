@@ -30,7 +30,20 @@ export function useSales() {
     });
   }, []);
 
-  return { sales, addSale, deleteSale };
+  const cancelSale = useCallback((id) => {
+    const current = storage.get('qp_sales', []);
+    const target = current.find((s) => s.id === id);
+    if (!target) return null;
+    const cancelled = { ...target, status: 'annulée' };
+    setSales((prev) => {
+      const updated = prev.map((s) => (s.id === id ? { ...s, status: 'annulée' } : s));
+      storage.set('qp_sales', updated);
+      return updated;
+    });
+    return cancelled;
+  }, []);
+
+  return { sales, addSale, deleteSale, cancelSale };
 }
 
 export default useSales;
