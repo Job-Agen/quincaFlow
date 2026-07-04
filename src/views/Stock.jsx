@@ -10,9 +10,12 @@ import {
   AlertTriangle,
   TrendingUp,
   DollarSign,
+  History,
 } from 'lucide-react';
 
 import useProducts from '../hooks/useProducts';
+import useSettings from '../hooks/useSettings';
+import useStockMovements from '../hooks/useStockMovements';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
@@ -20,7 +23,7 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Badge from '../components/ui/Badge';
 import { fmt } from '../utils/formatCurrency';
-import { PRODUCT_CATEGORIES, UNITS } from '../constants/categories';
+import { formatDate, formatTime } from '../utils/dateHelpers';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const C = {
@@ -52,24 +55,30 @@ function MarginLabel({ margin }) {
 }
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
-const BLANK_FORM = {
-  name: '',
-  cat: PRODUCT_CATEGORIES[0],
-  buyPrice: '',
-  sellPrice: '',
-  qty: '',
-  unit: UNITS[0],
-  minQty: '5',
-};
+function makeBlankForm(categories, units) {
+  return {
+    name: '',
+    cat: categories[0] || '',
+    buyPrice: '',
+    sellPrice: '',
+    qty: '',
+    unit: units[0] || '',
+    minQty: '5',
+  };
+}
+
+// Motifs proposés pour un ajustement manuel de stock
+const ADJUST_REASONS = ['Inventaire', 'Casse', 'Perte/Vol', 'Correction', 'Autre'];
 
 // ─── Product Form Modal ───────────────────────────────────────────────────────
-function ProductFormModal({ open, onClose, onSave, initial }) {
+function ProductFormModal({ open, onClose, onSave, initial, categories, units }) {
   const isEdit = !!initial;
-  const [form, setForm] = useState(initial || BLANK_FORM);
+  const [form, setForm] = useState(() => initial || makeBlankForm(categories, units));
 
   // Reset form when modal opens
   React.useEffect(() => {
-    if (open) setForm(initial || BLANK_FORM);
+    if (open) setForm(initial || makeBlankForm(categories, units));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial]);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -90,8 +99,8 @@ function ProductFormModal({ open, onClose, onSave, initial }) {
     onClose();
   }
 
-  const catOptions = PRODUCT_CATEGORIES.map((c) => ({ value: c, label: c }));
-  const unitOptions = UNITS.map((u) => ({ value: u, label: u }));
+  const catOptions = categories.map((c) => ({ value: c, label: c }));
+  const unitOptions = units.map((u) => ({ value: u, label: u }));
 
   return (
     <Modal
@@ -196,11 +205,13 @@ function ProductFormModal({ open, onClose, onSave, initial }) {
 // ─── Adjust Stock Modal ───────────────────────────────────────────────────────
 function AdjustStockModal({ open, onClose, product, onAdjust }) {
   const [qty, setQty] = useState('');
+  const [reason, setReason] = useState(ADJUST_REASONS[0]);
   const [error, setError] = useState('');
 
   React.useEffect(() => {
     if (open) {
       setQty('');
+      setReason(ADJUST_REASONS[0]);
       setError('');
     }
   }, [open]);
@@ -216,7 +227,7 @@ function AdjustStockModal({ open, onClose, product, onAdjust }) {
       setError(`Stock insuffisant. Stock actuel : ${product.qty} ${product.unit}.`);
       return;
     }
-    onAdjust(product.id, delta);
+    onAdjust(product, delta, reason);
     onClose();
   }
 
@@ -252,6 +263,13 @@ function AdjustStockModal({ open, onClose, product, onAdjust }) {
           type="number"
           min="0"
           placeholder="ex: 10"
+        />
+
+        <Select
+          label="Motif de l'ajustement"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          options={ADJUST_REASONS}
         />
 
         {error && (
@@ -327,6 +345,14 @@ function DeleteModal({ open, onClose, product, onConfirm }) {
 // ─── Main Stock Page ──────────────────────────────────────────────────────────
 export default function Stock() {
   const { products, addProduct, updateProduct, deleteProduct, adjustStock } = useProducts();
+  const { settings } = useSettings();
+  const { movements, logMovement } = useStockMovements();
+
+  const categories = settings.productCategories || [];
+  const units = settings.units || [];
+
+  // Tabs
+  const [tab, setTab] = useState('articles'); // 'articles' | 'mouvements'
 
   // Filters
   const [search, setSearch] = useState('');
@@ -368,14 +394,31 @@ export default function Stock() {
 
   const catOptions = [
     { value: '', label: 'Toutes les catégories' },
-    ...PRODUCT_CATEGORIES.map((c) => ({ value: c, label: c })),
+    ...categories.map((c) => ({ value: c, label: c })),
   ];
+
+  // 30 derniers mouvements, triés par date décroissante
+  const recentMovements = useMemo(
+    () =>
+      [...movements].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 30),
+    [movements]
+  );
 
   function handleSaveAdd(data) {
     addProduct(data);
   }
   function handleSaveEdit(data) {
     if (editProduct) updateProduct(editProduct.id, data);
+  }
+  function handleAdjustWithReason(product, delta, reason) {
+    adjustStock(product.id, delta);
+    logMovement({
+      productId: product.id,
+      productName: product.name,
+      type: 'ajustement',
+      qty: delta,
+      reason,
+    });
   }
 
   // Table column header style
@@ -430,6 +473,20 @@ export default function Stock() {
         </Button>
       </div>
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <TabButton active={tab === 'articles'} onClick={() => setTab('articles')}>
+          <Package size={14} /> Articles
+        </TabButton>
+        <TabButton active={tab === 'mouvements'} onClick={() => setTab('mouvements')}>
+          <History size={14} /> Mouvements
+        </TabButton>
+      </div>
+
+      {tab === 'mouvements' ? (
+        <MovementsSection movements={recentMovements} />
+      ) : (
+        <>
       {/* Filters */}
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
         <div style={{ flex: '1 1 220px', minWidth: '180px' }}>
@@ -667,6 +724,8 @@ export default function Stock() {
           color={lowStockCount > 0 ? C.red : C.muted}
         />
       </div>
+        </>
+      )}
 
       {/* Modals */}
       <ProductFormModal
@@ -674,6 +733,8 @@ export default function Stock() {
         onClose={() => setAddOpen(false)}
         onSave={handleSaveAdd}
         initial={null}
+        categories={categories}
+        units={units}
       />
       <ProductFormModal
         open={!!editProduct}
@@ -692,12 +753,14 @@ export default function Stock() {
               }
             : null
         }
+        categories={categories}
+        units={units}
       />
       <AdjustStockModal
         open={!!adjustProduct}
         onClose={() => setAdjustProduct(null)}
         product={adjustProduct}
-        onAdjust={adjustStock}
+        onAdjust={handleAdjustWithReason}
       />
       <DeleteModal
         open={!!deleteTarget}
@@ -709,7 +772,97 @@ export default function Stock() {
   );
 }
 
+// ─── Movements journal ────────────────────────────────────────────────────────
+const MOVEMENT_BADGE = {
+  entrée: 'success',
+  sortie: 'danger',
+  ajustement: 'warning',
+};
+
+function MovementsSection({ movements }) {
+  if (movements.length === 0) {
+    return (
+      <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
+        <History size={40} color={C.muted} style={{ marginBottom: '12px' }} />
+        <p style={{ color: C.muted, margin: 0, fontSize: '15px' }}>Aucun mouvement enregistré.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card style={{ padding: '8px 0' }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {movements.map((m) => {
+          const signedQty = m.qty > 0 ? `+${m.qty}` : String(m.qty);
+          const qtyColor = m.qty > 0 ? C.green : m.qty < 0 ? C.red : C.muted;
+          return (
+            <div
+              key={m.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 16px',
+                borderBottom: `1px solid ${C.border}`,
+                fontSize: '13px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ color: C.muted, whiteSpace: 'nowrap', minWidth: '110px' }}>
+                {formatDate(m.date)} {formatTime(m.date)}
+              </span>
+              <span style={{ flex: 1, color: C.text, fontWeight: 600, minWidth: '100px' }}>
+                {m.productName}
+              </span>
+              <Badge variant={MOVEMENT_BADGE[m.type] || 'neutral'}>{m.type}</Badge>
+              <span
+                style={{
+                  fontWeight: 700,
+                  color: qtyColor,
+                  minWidth: '48px',
+                  textAlign: 'right',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {signedQty}
+              </span>
+              <span style={{ color: C.muted, flex: '1 1 140px', minWidth: '120px' }}>
+                {m.reason || '—'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 // ─── Small helper components ──────────────────────────────────────────────────
+function TabButton({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '8px 16px',
+        borderRadius: '8px',
+        fontSize: '13px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        background: active ? 'rgba(245,166,35,0.15)' : 'transparent',
+        color: active ? C.amber : C.muted,
+        border: `1px solid ${active ? C.amber : C.border}`,
+        transition: 'all 0.15s',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 function MobileStatCell({ label, value }) {
   return (
     <div
