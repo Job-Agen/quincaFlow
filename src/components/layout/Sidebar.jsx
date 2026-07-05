@@ -12,9 +12,11 @@ import {
   HandCoins,
   Truck,
   Settings,
+  LogOut,
 } from 'lucide-react';
 import { COLORS, FONTS } from '../../constants/theme';
 import useSettings from '../../hooks/useSettings';
+import { useSession } from '../auth/SyncGate';
 
 const NAV_ITEMS = [
   { path: '/', icon: LayoutDashboard, label: 'Tableau de bord' },
@@ -35,6 +37,7 @@ const NAV_ITEMS = [
 export default function Sidebar({ currentPath, compact = false }) {
   const sidebarWidth = compact ? '60px' : '230px';
   const { settings } = useSettings();
+  const { user, configured, signOut } = useSession();
   const initials = (settings.storeName || 'Ma Boutique')
     .split(/\s+/)
     .map((w) => w[0])
@@ -118,6 +121,56 @@ export default function Sidebar({ currentPath, compact = false }) {
           );
         })}
       </nav>
+
+      {configured && user && (
+        <div
+          style={{
+            borderTop: `1px solid ${COLORS.border}`,
+            padding: compact ? '12px 0' : '12px 16px',
+          }}
+        >
+          {!compact && (
+            <div
+              style={{
+                fontSize: '11px',
+                color: COLORS.muted,
+                fontFamily: FONTS.body,
+                marginBottom: '8px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={user.email}
+            >
+              {user.email}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={signOut}
+            title="Se déconnecter"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: compact ? 'center' : 'flex-start',
+              gap: compact ? 0 : '8px',
+              width: '100%',
+              padding: compact ? '10px 0' : '8px 10px',
+              background: 'transparent',
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: '8px',
+              color: COLORS.muted,
+              cursor: 'pointer',
+              fontFamily: FONTS.body,
+              fontSize: '13px',
+              fontWeight: 600,
+            }}
+          >
+            <LogOut size={16} strokeWidth={2} />
+            {!compact && 'Se déconnecter'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

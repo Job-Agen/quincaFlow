@@ -1,6 +1,7 @@
 import './globals.css';
 import AppShell from '../components/layout/AppShell';
 import SeedData from '../components/layout/SeedData';
+import SyncGate from '../components/auth/SyncGate';
 
 export const metadata = {
   title: 'Ma Boutique — Gestion',
@@ -19,8 +20,10 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body>
-        <SeedData />
-        <AppShell>{children}</AppShell>
+        <SyncGate>
+          <SeedData />
+          <AppShell>{children}</AppShell>
+        </SyncGate>
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Download, Upload, Trash2, X, Plus, Save } from 'lucide-react';
+import { Download, Upload, Trash2, X, Plus, Save, LogOut } from 'lucide-react';
 import useSettings from '../hooks/useSettings';
 import { exportAll, importAll, resetAll } from '../utils/backup';
 import { COLORS, FONTS } from '../constants/theme';
@@ -9,6 +9,7 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
+import { useSession } from '../components/auth/SyncGate';
 
 const APP_VERSION = '0.1.0';
 
@@ -121,6 +122,7 @@ function ListEditor({ title, items, onChange, placeholder }) {
 
 export default function Parametres() {
   const { settings, saveSettings } = useSettings();
+  const { user, configured, signOut } = useSession();
 
   const [storeForm, setStoreForm] = useState({
     storeName: settings.storeName,
@@ -305,6 +307,21 @@ export default function Parametres() {
           )}
         </Card>
 
+        {/* ── COMPTE ───────────────────────────────── */}
+        {configured && user && (
+          <Card title="Compte">
+            <div style={{ fontSize: '13px', color: COLORS.text, lineHeight: 1.7 }}>
+              <div style={{ marginBottom: '12px' }}>
+                <span style={{ color: COLORS.muted }}>Connecté en tant que : </span>
+                {user.email}
+              </div>
+              <Button variant="ghost" size="md" onClick={signOut}>
+                <LogOut size={15} /> Se déconnecter
+              </Button>
+            </div>
+          </Card>
+        )}
+
         {/* ── À PROPOS ─────────────────────────────── */}
         <Card title="À propos">
           <div style={{ fontSize: '13px', color: COLORS.text, lineHeight: 1.7 }}>
@@ -313,10 +330,9 @@ export default function Parametres() {
               {APP_VERSION}
             </div>
             <p style={{ color: COLORS.muted, margin: '8px 0 0' }}>
-              Toutes les données sont stockées localement dans ce navigateur (localStorage). Elles
-              ne quittent jamais votre appareil, mais elles peuvent être perdues si vous videz les
-              données du navigateur. Pensez à faire un export JSON régulier depuis la section
-              « Données » ci-dessus.
+              {configured
+                ? 'Vos données sont synchronisées de façon sécurisée sur votre compte Supabase : elles sont sauvegardées dans le cloud et accessibles depuis n’importe quel appareil après connexion. L’export JSON de la section « Données » reste utile comme sauvegarde supplémentaire.'
+                : 'Les données sont stockées localement dans ce navigateur (localStorage). Elles ne quittent jamais votre appareil, mais peuvent être perdues si vous videz les données du navigateur. Pensez à faire un export JSON régulier depuis la section « Données » ci-dessus.'}
             </p>
           </div>
         </Card>
