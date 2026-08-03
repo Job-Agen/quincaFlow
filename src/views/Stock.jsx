@@ -11,6 +11,9 @@ import {
   TrendingUp,
   DollarSign,
   History,
+  CheckSquare,
+  Square,
+  X,
 } from 'lucide-react';
 
 import useProducts from '../hooks/useProducts';
@@ -216,35 +219,35 @@ function AdjustStockModal({ open, onClose, product, onAdjust }) {
     }
   }, [open]);
 
+  if (!product) return null;
+
   function handleAdjust(direction) {
-    const n = parseFloat(qty);
-    if (!n || n <= 0) {
-      setError('Veuillez saisir une quantité valide (> 0).');
+    const val = parseFloat(qty);
+    if (isNaN(val) || val <= 0) {
+      setError('Veuillez entrer une quantité valide (> 0)');
       return;
     }
-    const delta = direction === 'in' ? n : -n;
-    if ((product.qty || 0) + delta < 0) {
-      setError(`Stock insuffisant. Stock actuel : ${product.qty} ${product.unit}.`);
+    const delta = direction === 'in' ? val : -val;
+    if (direction === 'out' && (product.qty || 0) + delta < 0) {
+      setError(`Stock insuffisant. Stock actuel : ${product.qty}`);
       return;
     }
     onAdjust(product, delta, reason);
     onClose();
   }
 
-  if (!product) return null;
-
   return (
-    <Modal open={open} onClose={onClose} title={`Ajuster le stock — ${product.name}`}>
+    <Modal open={open} onClose={onClose} title={`Ajuster le stock : ${product.name}`}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div
           style={{
             background: C.card2,
+            border: `1px solid ${C.border}`,
             borderRadius: '8px',
-            padding: '12px 16px',
+            padding: '10px 14px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            border: `1px solid ${C.border}`,
           }}
         >
           <span style={{ color: C.muted, fontSize: '13px' }}>Stock actuel</span>
@@ -342,6 +345,33 @@ function DeleteModal({ open, onClose, product, onConfirm }) {
   );
 }
 
+// ─── Batch Delete Confirm Modal ───────────────────────────────────────────────
+function BatchDeleteModal({ open, onClose, count, onConfirm }) {
+  return (
+    <Modal open={open} onClose={onClose} title="Suppression par lot">
+      <div style={{ color: C.text, marginBottom: '20px', lineHeight: 1.6 }}>
+        Voulez-vous vraiment supprimer <strong style={{ color: C.red }}>{count} article(s)</strong> sélectionné(s) ?
+        <br />
+        <span style={{ color: C.muted, fontSize: '13px' }}>Cette action supprimera ces produits du stock définitivement.</span>
+      </div>
+      <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+        <Button variant="ghost" onClick={onClose}>
+          Annuler
+        </Button>
+        <Button
+          variant="danger"
+          onClick={() => {
+            onConfirm();
+            onClose();
+          }}
+        >
+          <Trash2 size={14} /> Supprimer les {count} articles
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Main Stock Page ──────────────────────────────────────────────────────────
 export default function Stock() {
   const { products, addProduct, updateProduct, deleteProduct, adjustStock } = useProducts();
@@ -358,11 +388,15 @@ export default function Stock() {
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('');
 
+  // Batch Selection State
+  const [selectedIds, setSelectedIds] = useState([]);
+
   // Modals
   const [addOpen, setAddOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const [adjustProduct, setAdjustProduct] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
 
   // Responsive: detect desktop
   const [isDesktop, setIsDesktop] = useState(true);
@@ -381,6 +415,29 @@ export default function Stock() {
       return matchSearch && matchCat;
     });
   }, [products, search, filterCat]);
+
+  // Selection helpers
+  const isAllSelected = filtered.length > 0 && filtered.every((p) => selectedIds.includes(p.id));
+  const isSomeSelected = selectedIds.length > 0;
+
+  function toggleSelect(id) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  function toggleSelectAll() {
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filtered.map((p) => p.id));
+    }
+  }
+
+  function handleBatchDeleteConfirm() {
+    selectedIds.forEach((id) => deleteProduct(id));
+    setSelectedIds([]);
+  }
 
   // Summary stats
   const totalValue = useMemo(
@@ -487,92 +544,290 @@ export default function Stock() {
         <MovementsSection movements={recentMovements} />
       ) : (
         <>
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
-        <div style={{ flex: '1 1 220px', minWidth: '180px' }}>
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un article..."
-          />
-        </div>
-        <div style={{ flex: '1 1 200px', minWidth: '160px' }}>
-          <Select
-            value={filterCat}
-            onChange={(e) => setFilterCat(e.target.value)}
-            options={catOptions}
-          />
-        </div>
-      </div>
+          {/* BARRE D'ACTIONS PAR LOT (SI SELECTION ACTIVE) */}
+          {isSomeSelected && (
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #2A170A 0%, #1A0D04 100%)',
+                border: `1px solid ${C.amber}`,
+                borderRadius: '12px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  style={{
+                    background: C.amber,
+                    color: '#000',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    borderRadius: '50%',
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {selectedIds.length}
+                </span>
+                <span style={{ color: C.text, fontSize: '14px', fontWeight: 600 }}>
+                  article(s) sélectionné(s)
+                </span>
+              </div>
 
-      {/* Content */}
-      {filtered.length === 0 ? (
-        <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <Package size={40} color={C.muted} style={{ marginBottom: '12px' }} />
-          <p style={{ color: C.muted, margin: 0, fontSize: '15px' }}>
-            {products.length === 0
-              ? 'Aucun article en stock. Ajoutez votre premier article.'
-              : 'Aucun article ne correspond à votre recherche.'}
-          </p>
-        </Card>
-      ) : isDesktop ? (
-        /* ── Desktop Table ── */
-        <Card style={{ padding: 0 }}>
-          <div className="table-responsive">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: C.card2 }}>
-                <th style={thStyle}>Article</th>
-                <th style={thStyle}>Catégorie</th>
-                <th style={thStyle}>Stock</th>
-                <th style={thStyle}>Unité</th>
-                <th style={thStyle}>Prix achat</th>
-                <th style={thStyle}>Prix vente</th>
-                <th style={thStyle}>Marge</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p, i) => {
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleSelectAll}
+                  style={{ fontSize: '13px' }}
+                >
+                  {isAllSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setBatchDeleteOpen(true)}
+                >
+                  <Trash2 size={14} /> Supprimer la sélection
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: C.muted,
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title="Fermer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
+            <div style={{ flex: '1 1 220px', minWidth: '180px' }}>
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Rechercher un article..."
+              />
+            </div>
+            <div style={{ flex: '1 1 200px', minWidth: '160px' }}>
+              <Select
+                value={filterCat}
+                onChange={(e) => setFilterCat(e.target.value)}
+                options={catOptions}
+              />
+            </div>
+          </div>
+
+          {/* Content */}
+          {filtered.length === 0 ? (
+            <Card style={{ textAlign: 'center', padding: '48px 20px' }}>
+              <Package size={40} color={C.muted} style={{ marginBottom: '12px' }} />
+              <p style={{ color: C.muted, margin: 0, fontSize: '15px' }}>
+                {products.length === 0
+                  ? 'Aucun article en stock. Ajoutez votre premier article.'
+                  : 'Aucun article ne correspond à votre recherche.'}
+              </p>
+            </Card>
+          ) : isDesktop ? (
+            /* ── Desktop Table ── */
+            <Card style={{ padding: 0 }}>
+              <div className="table-responsive">
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: C.card2 }}>
+                      <th style={{ ...thStyle, width: '40px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={isAllSelected}
+                          onChange={toggleSelectAll}
+                          style={{
+                            accentColor: C.amber,
+                            width: '16px',
+                            height: '16px',
+                            cursor: 'pointer',
+                          }}
+                        />
+                      </th>
+                      <th style={thStyle}>Article</th>
+                      <th style={thStyle}>Catégorie</th>
+                      <th style={thStyle}>Stock</th>
+                      <th style={thStyle}>Unité</th>
+                      <th style={thStyle}>Prix achat</th>
+                      <th style={thStyle}>Prix vente</th>
+                      <th style={thStyle}>Marge</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((p, i) => {
+                      const margin = calcMargin(p.buyPrice, p.sellPrice);
+                      const isLow = (p.qty || 0) <= (p.minQty || 0);
+                      const isChecked = selectedIds.includes(p.id);
+
+                      return (
+                        <tr
+                          key={p.id}
+                          style={{
+                            background: isChecked
+                              ? 'rgba(245, 166, 35, 0.08)'
+                              : i % 2 === 0
+                              ? C.card
+                              : C.card2,
+                            transition: 'background 0.15s',
+                          }}
+                        >
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleSelect(p.id)}
+                              style={{
+                                accentColor: C.amber,
+                                width: '16px',
+                                height: '16px',
+                                cursor: 'pointer',
+                              }}
+                            />
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={{ fontWeight: 600 }}>{p.name}</span>
+                          </td>
+                          <td style={tdStyle}>
+                            <Badge variant="neutral">{p.cat}</Badge>
+                          </td>
+                          <td style={tdStyle}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <span style={{ fontWeight: 700, color: isLow ? C.red : C.text }}>
+                                {p.qty || 0}
+                              </span>
+                              {isLow && (
+                                <Badge variant="danger">
+                                  <AlertTriangle size={10} /> Stock faible
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ ...tdStyle, color: C.muted }}>{p.unit}</td>
+                          <td style={tdStyle}>{fmt(p.buyPrice)}</td>
+                          <td style={tdStyle}>{fmt(p.sellPrice)}</td>
+                          <td style={tdStyle}>
+                            <MarginLabel margin={margin} />
+                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                              <button
+                                title="Ajuster le stock"
+                                onClick={() => setAdjustProduct(p)}
+                                style={iconBtnStyle(C.blue)}
+                              >
+                                <Plus size={14} />
+                              </button>
+                              <button
+                                title="Modifier"
+                                onClick={() => setEditProduct(p)}
+                                style={iconBtnStyle(C.amber)}
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                title="Supprimer"
+                                onClick={() => setDeleteTarget(p)}
+                                style={iconBtnStyle(C.red)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            /* ── Mobile Cards ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {filtered.map((p) => {
                 const margin = calcMargin(p.buyPrice, p.sellPrice);
                 const isLow = (p.qty || 0) <= (p.minQty || 0);
+                const isChecked = selectedIds.includes(p.id);
+
                 return (
-                  <tr key={p.id} style={{ background: i % 2 === 0 ? C.card : C.card2 }}>
-                    <td style={tdStyle}>
-                      <span style={{ fontWeight: 600 }}>{p.name}</span>
-                    </td>
-                    <td style={tdStyle}>
-                      <Badge variant="neutral">{p.cat}</Badge>
-                    </td>
-                    <td style={tdStyle}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ fontWeight: 700, color: isLow ? C.red : C.text }}>
-                          {p.qty || 0}
-                        </span>
-                        {isLow && (
-                          <Badge variant="danger">
-                            <AlertTriangle size={10} /> Stock faible
-                          </Badge>
-                        )}
+                  <Card
+                    key={p.id}
+                    style={{
+                      padding: '16px',
+                      border: isChecked ? `1px solid ${C.amber}` : `1px solid ${C.border}`,
+                      background: isChecked ? 'rgba(245, 166, 35, 0.05)' : C.card,
+                    }}
+                  >
+                    {/* Top row */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleSelect(p.id)}
+                          style={{
+                            accentColor: C.amber,
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer',
+                            marginTop: '2px',
+                          }}
+                        />
+                        <div>
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              fontSize: '15px',
+                              color: C.text,
+                              marginBottom: '4px',
+                            }}
+                          >
+                            {p.name}
+                          </div>
+                          <Badge variant="neutral">{p.cat}</Badge>
+                        </div>
                       </div>
-                    </td>
-                    <td style={{ ...tdStyle, color: C.muted }}>{p.unit}</td>
-                    <td style={tdStyle}>{fmt(p.buyPrice)}</td>
-                    <td style={tdStyle}>{fmt(p.sellPrice)}</td>
-                    <td style={tdStyle}>
-                      <MarginLabel margin={margin} />
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
                         <button
-                          title="Ajuster le stock"
+                          title="Ajuster"
                           onClick={() => setAdjustProduct(p)}
                           style={iconBtnStyle(C.blue)}
                         >
@@ -593,137 +848,76 @@ export default function Stock() {
                           <Trash2 size={14} />
                         </button>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
-        </Card>
-      ) : (
-        /* ── Mobile Cards ── */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {filtered.map((p) => {
-            const margin = calcMargin(p.buyPrice, p.sellPrice);
-            const isLow = (p.qty || 0) <= (p.minQty || 0);
-            return (
-              <Card key={p.id} style={{ padding: '16px' }}>
-                {/* Top row */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: '10px',
-                  }}
-                >
-                  <div>
+                    </div>
+
+                    {/* Stats grid */}
                     <div
                       style={{
-                        fontWeight: 700,
-                        fontSize: '15px',
-                        color: C.text,
-                        marginBottom: '4px',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px',
+                        marginTop: '8px',
                       }}
                     >
-                      {p.name}
+                      <MobileStatCell
+                        label="Stock"
+                        value={
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <span style={{ fontWeight: 700, color: isLow ? C.red : C.text }}>
+                              {p.qty || 0} {p.unit}
+                            </span>
+                            {isLow && (
+                              <Badge variant="danger">
+                                <AlertTriangle size={10} /> Faible
+                              </Badge>
+                            )}
+                          </div>
+                        }
+                      />
+                      <MobileStatCell label="Marge" value={<MarginLabel margin={margin} />} />
+                      <MobileStatCell label="Prix achat" value={fmt(p.buyPrice)} />
+                      <MobileStatCell label="Prix vente" value={fmt(p.sellPrice)} />
                     </div>
-                    <Badge variant="neutral">{p.cat}</Badge>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      title="Ajuster"
-                      onClick={() => setAdjustProduct(p)}
-                      style={iconBtnStyle(C.blue)}
-                    >
-                      <Plus size={14} />
-                    </button>
-                    <button
-                      title="Modifier"
-                      onClick={() => setEditProduct(p)}
-                      style={iconBtnStyle(C.amber)}
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      title="Supprimer"
-                      onClick={() => setDeleteTarget(p)}
-                      style={iconBtnStyle(C.red)}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
 
-                {/* Stats grid */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '8px',
-                    marginTop: '8px',
-                  }}
-                >
-                  <MobileStatCell
-                    label="Stock"
-                    value={
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <span style={{ fontWeight: 700, color: isLow ? C.red : C.text }}>
-                          {p.qty || 0} {p.unit}
-                        </span>
-                        {isLow && (
-                          <Badge variant="danger">
-                            <AlertTriangle size={10} /> Faible
-                          </Badge>
-                        )}
-                      </div>
-                    }
-                  />
-                  <MobileStatCell label="Marge" value={<MarginLabel margin={margin} />} />
-                  <MobileStatCell label="Prix achat" value={fmt(p.buyPrice)} />
-                  <MobileStatCell label="Prix vente" value={fmt(p.sellPrice)} />
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Summary footer */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: isDesktop ? 'repeat(3, 1fr)' : '1fr',
-          gap: '12px',
-          marginTop: '28px',
-        }}
-      >
-        <SummaryCard
-          icon={<Package size={20} color={C.amber} />}
-          label="Total articles"
-          value={`${products.length} produit${products.length !== 1 ? 's' : ''}`}
-        />
-        <SummaryCard
-          icon={<DollarSign size={20} color={C.green} />}
-          label="Valeur totale du stock"
-          value={fmt(totalValue)}
-          color={C.green}
-        />
-        <SummaryCard
-          icon={<AlertTriangle size={20} color={lowStockCount > 0 ? C.red : C.muted} />}
-          label="Articles en stock faible"
-          value={`${lowStockCount} article${lowStockCount !== 1 ? 's' : ''}`}
-          color={lowStockCount > 0 ? C.red : C.muted}
-        />
-      </div>
+          {/* Summary footer */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isDesktop ? 'repeat(3, 1fr)' : '1fr',
+              gap: '12px',
+              marginTop: '28px',
+            }}
+          >
+            <SummaryCard
+              icon={<Package size={20} color={C.amber} />}
+              label="Total articles"
+              value={`${products.length} produit${products.length !== 1 ? 's' : ''}`}
+            />
+            <SummaryCard
+              icon={<DollarSign size={20} color={C.green} />}
+              label="Valeur totale du stock"
+              value={fmt(totalValue)}
+              color={C.green}
+            />
+            <SummaryCard
+              icon={<AlertTriangle size={20} color={lowStockCount > 0 ? C.red : C.muted} />}
+              label="Articles en stock faible"
+              value={`${lowStockCount} article${lowStockCount !== 1 ? 's' : ''}`}
+              color={lowStockCount > 0 ? C.red : C.muted}
+            />
+          </div>
         </>
       )}
 
@@ -767,6 +961,12 @@ export default function Stock() {
         onClose={() => setDeleteTarget(null)}
         product={deleteTarget}
         onConfirm={deleteProduct}
+      />
+      <BatchDeleteModal
+        open={batchDeleteOpen}
+        onClose={() => setBatchDeleteOpen(false)}
+        count={selectedIds.length}
+        onConfirm={handleBatchDeleteConfirm}
       />
     </div>
   );
