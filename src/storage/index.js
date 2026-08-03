@@ -1,5 +1,5 @@
 // Couche de persistance locale (localStorage), SSR-safe.
-// Un écouteur optionnel est notifié à chaque écriture pour permettre le miroir Supabase.
+// Un écouteur optionnel est notifié à chaque écriture pour permettre le miroir Neon Postgres.
 // `setSilent` écrit sans notifier (utilisé par l'hydratation pour éviter les boucles).
 
 let changeListener = null;
@@ -42,7 +42,7 @@ const storage = {
     }
     notify(key, value);
   },
-  // Écrit sans notifier l'écouteur (hydratation depuis Supabase).
+  // Écrit sans notifier l'écouteur (hydratation depuis Neon).
   setSilent(key, value) {
     if (typeof window === 'undefined') return;
     try {

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { getSupabase } from '../../lib/supabaseClient';
+import { loginUser, signupUser } from '../../lib/neonClient';
 import { COLORS, FONTS } from '../../constants/theme';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 
-export default function LoginView() {
+export default function LoginView({ onSessionSuccess }) {
   const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,11 +18,7 @@ export default function LoginView() {
     e.preventDefault();
     setError('');
     setInfo('');
-    const supabase = getSupabase();
-    if (!supabase) {
-      setError('Supabase non configuré.');
-      return;
-    }
+
     if (!email || !password) {
       setError('Renseignez un e-mail et un mot de passe.');
       return;
@@ -34,16 +30,12 @@ export default function LoginView() {
     setLoading(true);
     try {
       if (mode === 'signin') {
-        const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-        if (err) throw err;
+        const data = await loginUser(email, password);
+        if (onSessionSuccess) onSessionSuccess(data.user);
       } else {
-        const { data, error: err } = await supabase.auth.signUp({ email, password });
-        if (err) throw err;
-        // Si la confirmation e-mail est requise, aucune session n'est créée.
-        if (!data.session) {
-          setInfo('Compte créé. Vérifiez votre e-mail si une confirmation est demandée, puis connectez-vous.');
-          setMode('signin');
-        }
+        const data = await signupUser(email, password);
+        setInfo('Compte créé avec succès ! Connexion en cours…');
+        if (onSessionSuccess) onSessionSuccess(data.user);
       }
     } catch (err) {
       setError(traduireErreur(err?.message));
@@ -151,8 +143,7 @@ export default function LoginView() {
 function traduireErreur(msg) {
   if (!msg) return 'Une erreur est survenue.';
   const m = msg.toLowerCase();
-  if (m.includes('invalid login')) return 'E-mail ou mot de passe incorrect.';
-  if (m.includes('already registered')) return 'Cet e-mail est déjà utilisé.';
-  if (m.includes('email not confirmed')) return 'E-mail non confirmé. Vérifiez votre boîte mail.';
+  if (m.includes('invalid') || m.includes('incorrect')) return 'E-mail ou mot de passe incorrect.';
+  if (m.includes('déjà utilisé') || m.includes('already')) return 'Cet e-mail est déjà utilisé.';
   return msg;
 }

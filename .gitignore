@@ -36,3 +36,5 @@ next-env.d.ts
 
 # data backups exported from the app
 /boutique-sauvegarde-*.json
+
+.vercel

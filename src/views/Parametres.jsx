@@ -331,7 +331,7 @@ export default function Parametres() {
             </div>
             <p style={{ color: COLORS.muted, margin: '8px 0 0' }}>
               {configured
-                ? 'Vos données sont synchronisées de façon sécurisée sur votre compte Supabase : elles sont sauvegardées dans le cloud et accessibles depuis n’importe quel appareil après connexion. L’export JSON de la section « Données » reste utile comme sauvegarde supplémentaire.'
+                ? 'Vos données sont synchronisées de façon sécurisée sur votre base Neon Postgres : elles sont sauvegardées dans le cloud et accessibles depuis n’importe quel appareil après connexion. L’export JSON de la section « Données » reste utile comme sauvegarde supplémentaire.'
                 : 'Les données sont stockées localement dans ce navigateur (localStorage). Elles ne quittent jamais votre appareil, mais peuvent être perdues si vous videz les données du navigateur. Pensez à faire un export JSON régulier depuis la section « Données » ci-dessus.'}
             </p>
           </div>

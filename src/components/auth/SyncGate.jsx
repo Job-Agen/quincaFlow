@@ -1,7 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { isSupabaseConfigured, getSupabase } from '../../lib/supabaseClient';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { getAuthUser, logoutUser } from '../../lib/neonClient';
 import { onStorageChange } from '../../storage';
 import { pullAll, pushKey, clearLocalData } from '../../lib/sync';
 import { configForKey } from '../../lib/syncConfig';
@@ -46,58 +46,43 @@ function Splash({ label }) {
 }
 
 export default function SyncGate({ children }) {
-  const configured = isSupabaseConfigured();
-  // undefined = en cours de détermination, null = déconnecté, objet = connecté
-  const [session, setSession] = useState(configured ? undefined : null);
+  const [user, setUser] = useState(undefined); // undefined = vérification en cours, null = non connecté
+  const [configured, setConfigured] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  // Suivi de la session d'authentification.
+  const checkSession = useCallback(async () => {
+    const res = await getAuthUser();
+    setConfigured(res.configured);
+    setUser(res.user);
+  }, []);
+
+  // Détermination initiale de la session utilisateur
   useEffect(() => {
-    if (!configured) return;
-    const supabase = getSupabase();
-    let mounted = true;
+    checkSession();
+  }, [checkSession]);
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) setSession(data.session ?? null);
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === 'SIGNED_OUT') clearLocalData();
-      setSession(s ?? null);
-    });
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, [configured]);
-
-  // Hydratation depuis Supabase + miroir des écritures locales, quand connecté.
+  // Hydratation depuis Neon + miroir des écritures locales quand connecté
   useEffect(() => {
-    if (!configured) return;
-    if (!session) {
-      setHydrated(false);
+    if (!configured || !user) {
       return;
     }
 
-    const userId = session.user.id;
     let cancelled = false;
     const timers = new Map();
 
-    // On enregistre le miroir AVANT l'hydratation (l'hydratation écrit en silencieux).
     const unsub = onStorageChange((key, value) => {
       if (!configForKey(key)) return;
       clearTimeout(timers.get(key));
       timers.set(
         key,
         setTimeout(() => {
-          pushKey(key, value, userId);
+          pushKey(key, value);
         }, 400)
       );
     });
 
     (async () => {
-      await pullAll(userId);
+      await pullAll();
       if (!cancelled) setHydrated(true);
     })();
 
@@ -106,28 +91,34 @@ export default function SyncGate({ children }) {
       unsub();
       timers.forEach((t) => clearTimeout(t));
     };
-  }, [configured, session]);
+  }, [configured, user]);
 
-  const signOut = async () => {
-    const supabase = getSupabase();
-    if (supabase) await supabase.auth.signOut();
+  const handleSignOut = async () => {
+    await logoutUser();
+    clearLocalData();
+    setUser(null);
+    setHydrated(false);
   };
 
-  // Mode local (Supabase non configuré) : comportement historique, sans login.
-  if (!configured) {
+  const handleLoginSuccess = (userData) => {
+    setUser(userData);
+  };
+
+  // Mode 100% local (Neon non configuré)
+  if (!configured && user === null) {
     return (
-      <SessionContext.Provider value={{ user: null, configured: false, signOut }}>
+      <SessionContext.Provider value={{ user: null, configured: false, signOut: handleSignOut }}>
         {children}
       </SessionContext.Provider>
     );
   }
 
-  if (session === undefined) return <Splash label="Chargement…" />;
-  if (session === null) return <LoginView />;
-  if (!hydrated) return <Splash label="Synchronisation de vos données…" />;
+  if (user === undefined) return <Splash label="Chargement…" />;
+  if (user === null) return <LoginView onSessionSuccess={handleLoginSuccess} />;
+  if (!hydrated) return <Splash label="Synchronisation de vos données avec Neon…" />;
 
   return (
-    <SessionContext.Provider value={{ user: session.user, configured: true, signOut }}>
+    <SessionContext.Provider value={{ user, configured: true, signOut: handleSignOut }}>
       {children}
     </SessionContext.Provider>
   );

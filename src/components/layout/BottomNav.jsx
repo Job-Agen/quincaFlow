@@ -1,50 +1,42 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import {
-  LayoutDashboard,
+  Home,
   Package,
   ShoppingCart,
-  TrendingDown,
   BarChart2,
-  Users,
-  FileText,
-  HandCoins,
-  Truck,
   Settings,
 } from 'lucide-react';
 import { COLORS } from '../../constants/theme';
 
 const NAV_ITEMS = [
-  { path: '/', icon: LayoutDashboard, label: 'Accueil' },
+  { path: '/', icon: Home, label: 'Accueil' },
   { path: '/stock', icon: Package, label: 'Stock' },
   { path: '/caisse', icon: ShoppingCart, label: 'Caisse' },
-  { path: '/achats', icon: Truck, label: 'Achats' },
-  { path: '/credits', icon: HandCoins, label: 'Crédits' },
-  { path: '/depenses', icon: TrendingDown, label: 'Dépenses' },
-  { path: '/comptabilite', icon: BarChart2, label: 'Compta' },
-  { path: '/contacts', icon: Users, label: 'Contacts' },
-  { path: '/facturation', icon: FileText, label: 'Factures' },
+  { path: '/comptabilite', icon: BarChart2, label: 'Rapports' },
   { path: '/parametres', icon: Settings, label: 'Réglages' },
 ];
 
 export default function BottomNav({ currentPath }) {
   return (
-    <div
-      className="bottom-nav"
+    <nav
       style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
         right: 0,
-        background: COLORS.card,
+        height: '68px',
+        background: 'rgba(26, 16, 8, 0.94)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         borderTop: `1px solid ${COLORS.border}`,
         display: 'flex',
-        alignItems: 'stretch',
+        alignItems: 'center',
         justifyContent: 'space-around',
-        zIndex: 100,
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
+        zIndex: 1000,
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
     >
       {NAV_ITEMS.map(({ path, icon: Icon, label }) => {
@@ -55,26 +47,41 @@ export default function BottomNav({ currentPath }) {
             key={path}
             href={path}
             style={{
-              flex: '1 0 auto',
+              flex: 1,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '2px',
-              minWidth: '48px',
-              padding: '8px 4px 6px',
-              color: isActive ? COLORS.amber : COLORS.muted,
+              gap: '4px',
               textDecoration: 'none',
-              transition: 'color 0.15s',
+              height: '100%',
+              position: 'relative',
             }}
           >
-            <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+            <div
+              style={{
+                width: '44px',
+                height: '28px',
+                borderRadius: '14px',
+                background: isActive ? 'rgba(245, 166, 35, 0.18)' : 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Icon
+                size={20}
+                color={isActive ? COLORS.amber : COLORS.muted}
+                strokeWidth={isActive ? 2.5 : 1.8}
+              />
+            </div>
             <span
               style={{
-                fontSize: '10px',
+                fontSize: '11px',
                 fontWeight: isActive ? 700 : 500,
-                lineHeight: 1.2,
-                whiteSpace: 'nowrap',
+                color: isActive ? COLORS.amber : COLORS.muted,
+                lineHeight: 1,
               }}
             >
               {label}
@@ -82,6 +89,6 @@ export default function BottomNav({ currentPath }) {
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }

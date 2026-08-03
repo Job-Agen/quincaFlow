@@ -2,7 +2,7 @@
 
 Application web de gestion pour boutique généraliste (alimentation, boissons, hygiène, papeterie, électronique…). Elle couvre le quotidien d'un commerce de détail : stock, caisse, achats fournisseurs, crédits clients, dépenses, comptabilité et facturation — le tout en français.
 
-Les données sont **synchronisées de façon sécurisée sur Supabase** après connexion (sauvegarde cloud, accès multi-appareils), avec repli en stockage local si Supabase n'est pas configuré.
+Les données sont **synchronisées de façon sécurisée sur Neon Serverless Postgres** après connexion (sauvegarde cloud, accès multi-appareils), avec repli en stockage local si Neon n'est pas configuré.
 
 ## Fonctionnalités par module
 
@@ -22,7 +22,7 @@ Les données sont **synchronisées de façon sécurisée sur Supabase** après c
 - [Next.js 15](https://nextjs.org/) (App Router) + React 18 — JavaScript, sans TypeScript
 - Styles inline avec un thème sombre ambre (`src/constants/theme.js`)
 - [lucide-react](https://lucide.dev/) pour les icônes, [recharts](https://recharts.org/) pour les graphiques
-- Backend : [Supabase](https://supabase.com/) (PostgreSQL + Auth), avec RLS par utilisateur
+- Backend : [Neon](https://neon.tech/) (Serverless Postgres) + Auth API Next.js avec sessions JWT & bcrypt
 - Persistance locale (cache hors-ligne / repli) : `localStorage` via le wrapper `src/storage/index.js` (clés préfixées `qp_`)
 - Tests unitaires avec [Vitest](https://vitest.dev/) (environnement jsdom)
 
@@ -30,22 +30,22 @@ Les données sont **synchronisées de façon sécurisée sur Supabase** après c
 
 ```bash
 npm install
-cp .env.example .env.local   # puis renseignez vos clés Supabase
+cp .env.example .env.local   # puis renseignez votre DATABASE_URL Neon
 npm run dev                  # http://localhost:3000
 ```
 
-### Configuration Supabase
+### Configuration Neon Postgres
 
-1. Créez un projet sur [supabase.com](https://supabase.com/) (ou réutilisez le vôtre).
-2. Dans **Project Settings → API**, copiez l'URL du projet et la clé *publishable* (`sb_publishable_…`).
-3. Renseignez-les dans `.env.local` :
+1. Créez un projet sur [neon.tech](https://neon.tech/).
+2. Copiez la chaîne de connexion PostgreSQL (`postgres://...`).
+3. Exécutez le script `schema.sql` dans l'éditeur SQL de Neon pour créer les tables (`users`, `products`, `contacts`, `sales`, `expenses`, `invoices`, `stock_movements`, `purchases`, `credit_payments`, `settings`).
+4. Renseignez la variable dans `.env.local` :
    ```
-   NEXT_PUBLIC_SUPABASE_URL=https://VOTRE-PROJET.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_XXXXXXXX
+   DATABASE_URL=postgres://user:password@ep-xyz.neon.tech/neondb?sslmode=require
+   JWT_SECRET=votre-cle-secrete-session
    ```
-4. Le schéma (tables `products`, `contacts`, `sales`, `expenses`, `invoices`, `stock_movements`, `purchases`, `credit_payments`, `settings`) est appliqué via les migrations Supabase. Chaque table est protégée par **Row Level Security** : un utilisateur n'accède qu'à ses propres données (`auth.uid() = user_id`).
 
-À la première utilisation, créez un compte via l'écran de connexion (e-mail + mot de passe). Sans variables Supabase, l'application fonctionne en mode 100 % local (sans connexion), comme avant.
+À la première utilisation, créez un compte via l'écran de connexion (e-mail + mot de passe). Sans variable `DATABASE_URL`, l'application fonctionne en mode 100 % local (sans connexion).
 
 Autres commandes :
 
@@ -55,10 +55,8 @@ npm test          # tests unitaires (vitest run)
 npm run build     # build de production
 ```
 
-Au premier lancement d'un nouveau compte, des données de démonstration (produits, ventes, contacts, dépenses) sont créées automatiquement si le stock est vide.
-
 ## Données & sauvegarde
 
-Après connexion, vos données sont **enregistrées sur votre compte Supabase** : elles sont sauvegardées dans le cloud et disponibles depuis n'importe quel appareil après connexion. Le `localStorage` du navigateur sert de cache local (l'interface reste rapide et réactive).
+Après connexion, vos données sont **enregistrées sur votre base Neon Postgres** : elles sont sauvegardées dans le cloud et disponibles depuis n'importe quel appareil après connexion. Le `localStorage` du navigateur sert de cache local.
 
 **Conseil : conservez aussi une sauvegarde locale.** Dans **Paramètres → Données → Exporter (JSON)**, téléchargez une copie complète (`boutique-sauvegarde-AAAA-MM-JJ.json`), restaurable via **Importer**.

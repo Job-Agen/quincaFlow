@@ -1,11 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "next build",
-  "build": {
-    "env": {
-      "NEXT_PUBLIC_SUPABASE_URL": "https://xcxfwleeyvwmuuglresn.supabase.co",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_V6XOPx23RzTlygMH5HSf5Q_bMEF7nD7"
-    }
-  }
+  "buildCommand": "next build"
 }
