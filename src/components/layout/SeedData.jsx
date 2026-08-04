@@ -99,6 +99,21 @@ export default function SeedData() {
         minQty: 10,
         createdAt: daysAgo(3),
       },
+      // Article vendu aussi en gros : le carton est l'unité de gros.
+      {
+        id: crypto.randomUUID(),
+        name: 'Lame de scie 60 cm',
+        cat: 'Quincaillerie',
+        buyPrice: 250,
+        sellPrice: 400,
+        qty: 100,
+        unit: 'pièce',
+        minQty: 20,
+        packLabel: 'carton',
+        packSize: 40,
+        packPrice: 13000,
+        createdAt: daysAgo(6),
+      },
     ];
     storage.set('qp_products', products);
 

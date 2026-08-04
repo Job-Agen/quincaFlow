@@ -14,6 +14,7 @@ import {
   CheckSquare,
   Square,
   X,
+  Layers,
 } from 'lucide-react';
 
 import useProducts from '../hooks/useProducts';
@@ -27,6 +28,14 @@ import Select from '../components/ui/Select';
 import Badge from '../components/ui/Badge';
 import { fmt } from '../utils/formatCurrency';
 import { formatDate, formatTime } from '../utils/dateHelpers';
+import {
+  hasWholesale,
+  packUnitPrice,
+  wholesaleDiscount,
+  wholesaleMargin,
+  packBreakdown,
+  packLabelOf,
+} from '../utils/pricing';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const C = {
@@ -67,11 +76,122 @@ function makeBlankForm(categories, units) {
     qty: '',
     unit: units[0] || '',
     minQty: '5',
+    // Conditionnement : laissé vide, l'article ne se vend qu'au détail.
+    packLabel: 'carton',
+    packSize: '',
+    packPrice: '',
   };
 }
 
 // Motifs proposés pour un ajustement manuel de stock
 const ADJUST_REASONS = ['Inventaire', 'Casse', 'Perte/Vol', 'Correction', 'Autre'];
+
+// ─── Conditionnement (vente en gros) ─────────────────────────────────────────
+/**
+ * Le conditionnement est optionnel : sans lui l'article ne se vend qu'au détail.
+ * L'aperçu ramène le prix du carton à la pièce, seul moyen de voir d'un coup
+ * d'œil si le tarif de gros tient la route face au prix d'achat.
+ */
+function WholesaleFields({ form, set }) {
+  const draft = {
+    buyPrice: form.buyPrice,
+    sellPrice: form.sellPrice,
+    packSize: form.packSize,
+    packPrice: form.packPrice,
+    packLabel: form.packLabel,
+  };
+  const active = hasWholesale(draft);
+  const perUnit = packUnitPrice(draft);
+  const discount = wholesaleDiscount(draft);
+  const margin = wholesaleMargin(draft);
+  const label = (form.packLabel || 'carton').trim() || 'carton';
+  const baseUnit = form.unit || 'unité';
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${C.border}`,
+        borderRadius: '10px',
+        padding: '14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Layers size={15} color={C.amber} />
+        <strong style={{ fontSize: '13px', color: C.amber }}>Vente en gros</strong>
+        <span style={{ fontSize: '12px', color: C.muted }}>— optionnel</span>
+      </div>
+
+      <p style={{ margin: 0, fontSize: '12px', color: C.muted, lineHeight: 1.5 }}>
+        Renseignez le conditionnement pour vendre aussi au {label}. Le stock reste
+        compté en {baseUnit} : vendre un {label} en retire {form.packSize || 'N'}.
+        Laissez vide si l&apos;article ne se vend qu&apos;au détail.
+      </p>
+
+      <div className="responsive-grid cols-2" style={{ gap: '12px' }}>
+        <Input
+          label="Nom du conditionnement"
+          value={form.packLabel}
+          onChange={set('packLabel')}
+          placeholder="carton"
+        />
+        <Input
+          label={`${baseUnit} par ${label}`}
+          value={form.packSize}
+          onChange={set('packSize')}
+          type="number"
+          min="0"
+          placeholder="ex: 40"
+        />
+      </div>
+
+      <Input
+        label={`Prix de gros — le ${label} entier (FCFA)`}
+        value={form.packPrice}
+        onChange={set('packPrice')}
+        type="number"
+        min="0"
+        placeholder="ex: 13000"
+      />
+
+      {active && (
+        <div
+          style={{
+            background: C.card2,
+            border: `1px solid ${C.border}`,
+            borderRadius: '8px',
+            padding: '10px 14px',
+            fontSize: '13px',
+            color: C.muted,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          <div>
+            Revient à <strong style={{ color: C.text }}>{fmt(perUnit)}</strong> la{' '}
+            {baseUnit}
+            {discount !== null && (
+              <>
+                {' — '}
+                <strong style={{ color: discount >= 0 ? C.green : C.red }}>
+                  {discount >= 0 ? '−' : '+'}
+                  {Math.abs(discount).toFixed(1)}%
+                </strong>{' '}
+                {discount >= 0 ? 'contre le détail' : 'PLUS CHER que le détail'}
+              </>
+            )}
+          </div>
+          <div>
+            Marge en gros : <MarginLabel margin={margin} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Product Form Modal ───────────────────────────────────────────────────────
 function ProductFormModal({ open, onClose, onSave, initial, categories, units }) {
@@ -98,6 +218,9 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
       qty: parseFloat(form.qty) || 0,
       unit: form.unit,
       minQty: parseFloat(form.minQty) || 0,
+      packLabel: (form.packLabel || '').trim() || 'carton',
+      packSize: parseFloat(form.packSize) || 0,
+      packPrice: parseFloat(form.packPrice) || 0,
     });
     onClose();
   }
@@ -188,6 +311,8 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
             min="0"
             placeholder="5"
           />
+
+          <WholesaleFields form={form} set={set} />
         </div>
 
         <div
@@ -732,10 +857,22 @@ export default function Stock() {
                                 </Badge>
                               )}
                             </div>
+                            {hasWholesale(p) && (
+                              <div style={{ fontSize: '11px', color: C.muted, marginTop: '3px' }}>
+                                {packBreakdown(p)}
+                              </div>
+                            )}
                           </td>
                           <td style={{ ...tdStyle, color: C.muted }}>{p.unit}</td>
                           <td style={tdStyle}>{fmt(p.buyPrice)}</td>
-                          <td style={tdStyle}>{fmt(p.sellPrice)}</td>
+                          <td style={tdStyle}>
+                            {fmt(p.sellPrice)}
+                            {hasWholesale(p) && (
+                              <div style={{ fontSize: '11px', color: C.amber, marginTop: '3px' }}>
+                                {fmt(p.packPrice)} / {packLabelOf(p)}
+                              </div>
+                            )}
+                          </td>
                           <td style={tdStyle}>
                             <MarginLabel margin={margin} />
                           </td>
@@ -878,12 +1015,27 @@ export default function Stock() {
                                 <AlertTriangle size={10} /> Faible
                               </Badge>
                             )}
+                            {packBreakdown(p) && (
+                              <span style={{ fontSize: '11px', color: C.muted, width: '100%' }}>
+                                {packBreakdown(p)}
+                              </span>
+                            )}
                           </div>
                         }
                       />
                       <MobileStatCell label="Marge" value={<MarginLabel margin={margin} />} />
                       <MobileStatCell label="Prix achat" value={fmt(p.buyPrice)} />
-                      <MobileStatCell label="Prix vente" value={fmt(p.sellPrice)} />
+                      <MobileStatCell label="Prix vente (détail)" value={fmt(p.sellPrice)} />
+                      {hasWholesale(p) && (
+                        <MobileStatCell
+                          label={`Prix de gros / ${packLabelOf(p)}`}
+                          value={
+                            <span style={{ color: C.amber, fontWeight: 700 }}>
+                              {fmt(p.packPrice)}
+                            </span>
+                          }
+                        />
+                      )}
                     </div>
                   </Card>
                 );
@@ -944,6 +1096,9 @@ export default function Stock() {
                 qty: String(editProduct.qty),
                 unit: editProduct.unit,
                 minQty: String(editProduct.minQty),
+                packLabel: packLabelOf(editProduct),
+                packSize: editProduct.packSize ? String(editProduct.packSize) : '',
+                packPrice: editProduct.packPrice ? String(editProduct.packPrice) : '',
               }
             : null
         }
