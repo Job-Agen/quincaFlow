@@ -106,9 +106,38 @@ body {
   max-height: 95vh;
 }
 
+/* Feuille modale mobile : vh compte la barre d'URL rétractable des navigateurs
+   mobiles, ce qui rend la feuille plus haute que la zone réellement visible et
+   pousse les boutons de validation hors de l'écran. dvh suit le viewport réel. */
+.modal-sheet {
+  max-height: 92vh;
+}
+
+@supports (max-height: 92dvh) {
+  .modal-sheet {
+    max-height: 92dvh;
+  }
+}
+
 /* Touch targets for mobile */
 button, input, select, .touch-target {
   min-height: 44px; /* Apple/Google guidelines pour touch */
+}
+
+/* La règle ci-dessus ne couvre pas les liens, or les raccourcis du tableau de
+   bord (« Vente Rapide », « Ajuster Stock », « Voir tout ») sont des <Link> :
+   ils retombaient à 15-38px de haut. Les boutons à icône seule, eux, tenaient
+   la hauteur mais pas la largeur — jusqu'à 13px pour les « ✕ » des catégories.
+   Le projet n'utilise aucun lien en pleine ligne de texte, donc viser a[href]
+   n'affecte que des contrôles. */
+@media (max-width: 767px) {
+  a[href] {
+    min-height: 44px;
+  }
+
+  button, a[href] {
+    min-width: 44px;
+  }
 }
 
 /* Safe area pour iPhones avec encoche */

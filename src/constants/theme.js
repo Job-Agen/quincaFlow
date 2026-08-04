@@ -16,3 +16,17 @@ export const FONTS = {
   heading: "'Syne', sans-serif",
   body: "'DM Sans', sans-serif",
 };
+
+/**
+ * Échelle d'empilement unique pour toute l'application.
+ *
+ * Les couches doivent rester distinctes : à valeur égale, c'est l'ordre du DOM
+ * qui tranche, et la navigation (rendue après <main> dans AppShell) passait
+ * devant les modales qu'elle aurait dû laisser au-dessus d'elle.
+ */
+export const Z = {
+  sidebar: 100,
+  bottomNav: 1000,
+  modal: 1500,
+  toast: 2000,
+};
