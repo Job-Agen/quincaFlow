@@ -1,6 +1,5 @@
 import './globals.css';
 import AppShell from '../components/layout/AppShell';
-import SeedData from '../components/layout/SeedData';
 import SyncGate from '../components/auth/SyncGate';
 
 export const metadata = {
@@ -21,7 +20,6 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <SyncGate>
-          <SeedData />
           <AppShell>{children}</AppShell>
         </SyncGate>
       </body>
