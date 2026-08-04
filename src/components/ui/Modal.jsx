@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Z } from '../../constants/theme';
 
 const COLORS = {
   card2: '#221408',
@@ -44,7 +45,7 @@ export default function Modal({ open, onClose, title, children }) {
         position: 'fixed',
         inset: 0,
         background: 'rgba(0,0,0,0.7)',
-        zIndex: 1000,
+        zIndex: Z.modal,
         display: 'flex',
         alignItems: isMobile ? 'flex-end' : 'center',
         justifyContent: 'center',
@@ -52,15 +53,21 @@ export default function Modal({ open, onClose, title, children }) {
       }}
     >
       <div
-        className={isMobile ? undefined : 'modal-content'}
+        className={isMobile ? 'modal-sheet' : 'modal-content'}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: COLORS.card2,
           border: isMobile ? 'none' : `1px solid ${COLORS.border}`,
           borderRadius: isMobile ? '16px 16px 0 0' : '16px',
-          padding: isMobile ? '20px 16px' : '24px',
+          // Sur mobile la feuille est collée au bas de l'écran : on réserve la
+          // hauteur de l'encoche pour que la dernière ligne (les boutons de
+          // validation) ne finisse pas sous l'indicateur d'accueil.
+          padding: isMobile
+            ? '20px 16px calc(20px + env(safe-area-inset-bottom, 0px))'
+            : '24px',
           width: isMobile ? '100%' : undefined,
-          maxHeight: isMobile ? '92vh' : '90vh',
+          // La hauteur mobile vient de .modal-sheet (dvh avec repli en vh).
+          maxHeight: isMobile ? undefined : '90vh',
           overflowY: 'auto',
           color: COLORS.text,
           animation: isMobile ? 'slideUp 0.25s ease-out' : undefined,

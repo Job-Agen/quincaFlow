@@ -30,6 +30,7 @@ import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Badge from '../components/ui/Badge';
+import { Z } from '../constants/theme';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -92,7 +93,7 @@ function Toast({ message, visible }) {
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
-        zIndex: 2000,
+        zIndex: Z.toast,
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         pointerEvents: 'none',
         whiteSpace: 'nowrap',
