@@ -10,6 +10,7 @@ import {
   wholesaleDiscount,
   wholesaleMargin,
   maxSellable,
+  clampQty,
   describeStock,
   packBreakdown,
   lineTotal,
@@ -190,6 +191,27 @@ describe('unitLabel', () => {
 
   it('retombe sur « carton » sans libellé', () => {
     expect(unitLabel({ ...lame, packLabel: '' }, WHOLESALE)).toBe('carton');
+  });
+});
+
+describe('clampQty', () => {
+  it('laisse passer une quantité dans les bornes', () => {
+    expect(clampQty(12, 60)).toBe(12);
+  });
+
+  it('plafonne au stock vendable', () => {
+    expect(clampQty(80, 60)).toBe(60);
+  });
+
+  it('ne descend pas sous 1', () => {
+    expect(clampQty(0, 60)).toBe(1);
+    expect(clampQty(-3, 60)).toBe(1);
+  });
+
+  it('garde la ligne à 1 quand plus rien n’est vendable', () => {
+    // Le cas qui laissait une ligne à 0 : stock fondu depuis l'ajout au panier
+    expect(clampQty(4, 0)).toBe(1);
+    expect(clampQty(1, 0)).toBe(1);
   });
 });
 

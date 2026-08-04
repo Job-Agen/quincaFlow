@@ -41,6 +41,7 @@ import {
   packLabelOf,
   packUnitPrice,
   maxSellable,
+  clampQty,
   lineTotal,
   lineUnits,
 } from '../utils/pricing';
@@ -237,7 +238,7 @@ export default function Caisse() {
           0
         );
         const max = maxSellable(line, line.mode, stock - otherUnits);
-        const next = Math.min(max, Math.max(1, line.qty + delta));
+        const next = clampQty(line.qty + delta, max);
         return prev.map((i) => (i.key === key ? { ...i, qty: next } : i));
       });
     },

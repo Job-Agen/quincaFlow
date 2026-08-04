@@ -129,6 +129,18 @@ export function lineTotal(line) {
   return num(line && line.unitPrice) * num(line && line.qty);
 }
 
+/**
+ * Nouvelle quantité d'une ligne après un +/−, bornée par le stock vendable.
+ *
+ * L'ordre des bornes compte : plafonner d'abord puis remonter à 1, jamais
+ * l'inverse. Si le stock a fondu depuis l'ajout au panier (inventaire passé
+ * ailleurs), `max` peut valoir 0 — plafonner en dernier laisserait alors une
+ * ligne à 0, ni supprimée ni vendable.
+ */
+export function clampQty(qty, max) {
+  return Math.max(1, Math.min(num(max), num(qty)));
+}
+
 /** Unités de base consommées par une ligne de panier déjà constituée. */
 export function lineUnits(line) {
   if (!line) return 0;
