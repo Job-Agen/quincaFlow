@@ -33,18 +33,15 @@ import Select from '../components/ui/Select';
 import Badge from '../components/ui/Badge';
 import { Z } from '../constants/theme';
 import {
-  RETAIL,
   WHOLESALE,
-  hasWholesale,
-  priceFor,
-  unitsFor,
-  packLabelOf,
-  packUnitPrice,
+  modeOf,
+  normalizePackagings,
+  unitsOf,
   maxSellable,
   clampQty,
   lineTotal,
   lineUnits,
-} from '../utils/pricing';
+} from '../utils/packaging';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -243,12 +240,11 @@ export default function Caisse() {
   }, [cart]);
 
   // ── Cart operations ──────────────────────────────────────────────────────────
-  /** `mode` vaut RETAIL (à la pièce) ou WHOLESALE (au carton entier). */
-  const addToCart = useCallback((product, mode = RETAIL) => {
-    if (!product.qty || product.qty <= 0) return;
-    if (mode === WHOLESALE && !hasWholesale(product)) return;
+  /** Ajoute un exemplaire du conditionnement choisi (pièce, carton, palette…). */
+  const addToCart = useCallback((product, packaging) => {
+    if (!product.qty || product.qty <= 0 || !packaging) return;
 
-    const key = `${product.id}::${mode}`;
+    const key = `${product.id}::${packaging.id}`;
 
     setCart((prev) => {
       const engaged = prev.reduce(
@@ -256,8 +252,8 @@ export default function Caisse() {
         0
       );
       const free = (product.qty || 0) - engaged;
-      // Une unité de plus dans ce mode, est-ce que le stock suit ?
-      if (free < unitsFor(product, mode, 1)) return prev;
+      // Un lot de plus, est-ce que le stock restant suit ?
+      if (free < unitsOf(packaging, 1)) return prev;
 
       const ex = prev.find((i) => i.key === key);
       if (ex) {
@@ -270,12 +266,13 @@ export default function Caisse() {
           id: product.id,
           name: product.name,
           cat: product.cat,
-          mode,
-          unitPrice: priceFor(product, mode),
+          packagingId: packaging.id,
+          label: packaging.label,
+          size: packaging.size,
+          mode: modeOf(packaging),
+          unitPrice: packaging.price,
           qty: 1,
           unit: product.unit,
-          packLabel: packLabelOf(product),
-          packSize: product.packSize || 0,
         },
       ];
     });
@@ -293,7 +290,7 @@ export default function Caisse() {
           (sum, i) => (i.id === line.id && i.key !== key ? sum + lineUnits(i) : sum),
           0
         );
-        const max = maxSellable(line, line.mode, stock - otherUnits);
+        const max = maxSellable(line, stock - otherUnits);
         const next = clampQty(line.qty + delta, max);
         return prev.map((i) => (i.key === key ? { ...i, qty: next } : i));
       });
@@ -318,7 +315,7 @@ export default function Caisse() {
         (sum, i) => (i.id === line.id && i.key !== line.key ? sum + lineUnits(i) : sum),
         0
       );
-      return maxSellable(line, line.mode, stock - otherUnits);
+      return maxSellable(line, stock - otherUnits);
     },
     [cart, products]
   );
@@ -354,9 +351,9 @@ export default function Caisse() {
       qty: i.qty,
       unitPrice: i.unitPrice,
       mode: i.mode,
-      unitLabel: i.mode === WHOLESALE ? i.packLabel : i.unit || 'unité',
+      unitLabel: i.label,
       units: lineUnits(i),
-      packSize: i.packSize || 0,
+      packSize: i.size || 0,
       lineTotal: lineTotal(i),
     }));
     const creditContact =
@@ -384,7 +381,7 @@ export default function Caisse() {
         qty: units,
         reason:
           item.mode === WHOLESALE
-            ? `Vente en caisse (gros — ${item.qty} ${item.packLabel})`
+            ? `Vente en caisse (gros — ${item.qty} ${item.label})`
             : 'Vente en caisse (détail)',
         refId: newSale.id,
       });
@@ -642,11 +639,10 @@ export default function Caisse() {
                   const outOfStock = !product.qty || product.qty <= 0;
                   const lowStock = !outOfStock && product.qty <= (product.minQty || 0);
                   const inCart = cart.some((i) => i.id === product.id);
-                  const wholesale = hasWholesale(product);
                   // Stock encore libre une fois le panier déduit : c'est lui qui
-                  // décide si un carton de plus est encore possible.
+                  // décide si un lot de plus tient encore.
                   const free = (product.qty || 0) - (unitsInCart.get(product.id) || 0);
-                  const packFits = wholesale && free >= (product.packSize || 0);
+                  const packagings = normalizePackagings(product);
                   return (
                     <div
                       key={product.id || product.name}
@@ -708,31 +704,30 @@ export default function Caisse() {
                             marginTop: '10px',
                           }}
                         >
-                          <PriceButton
-                            label="Détail"
-                            price={product.sellPrice}
-                            per={product.unit || 'unité'}
-                            color={C.amber}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addToCart(product, RETAIL);
-                            }}
-                          />
-                          {wholesale && (
-                            <PriceButton
-                              label="Gros"
-                              price={product.packPrice}
-                              per={`${packLabelOf(product)} de ${product.packSize}`}
-                              color={C.terra}
-                              icon={<Layers size={12} />}
-                              disabled={!packFits}
-                              disabledHint={`Il reste ${free} ${product.unit || 'u.'} : pas de quoi faire un ${packLabelOf(product)} entier`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addToCart(product, WHOLESALE);
-                              }}
-                            />
-                          )}
+                          {packagings.map((pk) => {
+                            const bulk = pk.size > 1;
+                            const fits = free >= pk.size;
+                            return (
+                              <PriceButton
+                                key={pk.id}
+                                label={bulk ? pk.label : 'Détail'}
+                                price={pk.price}
+                                per={
+                                  bulk
+                                    ? `${pk.label} de ${pk.size}`
+                                    : product.unit || 'unité'
+                                }
+                                color={bulk ? C.terra : C.amber}
+                                icon={bulk ? <Layers size={12} /> : null}
+                                disabled={!fits}
+                                disabledHint={`Il reste ${free} ${product.unit || 'u.'} : pas de quoi faire un ${pk.label} entier`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addToCart(product, pk);
+                                }}
+                              />
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -842,7 +837,7 @@ export default function Caisse() {
                               {item.mode === WHOLESALE ? 'Gros' : 'Détail'}
                             </span>
                             <span style={{ fontSize: '12px', color: C.muted }}>
-                              {fmt(item.unitPrice)} / {item.mode === WHOLESALE ? item.packLabel : item.unit || 'unité'}
+                              {fmt(item.unitPrice)} / {item.label}
                             </span>
                           </div>
                           {item.mode === WHOLESALE && (
@@ -1336,7 +1331,7 @@ export default function Caisse() {
                   <td
                     style={{ padding: '8px', fontSize: '13px', color: C.muted, textAlign: 'right' }}
                   >
-                    {item.qty} {item.mode === WHOLESALE ? item.packLabel : item.unit || ''}
+                    {item.qty} {item.label}
                     {item.mode === WHOLESALE && (
                       <div style={{ fontSize: '11px', opacity: 0.75 }}>
                         = {lineUnits(item)} {item.unit || 'u.'}

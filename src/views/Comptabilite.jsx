@@ -8,7 +8,7 @@ import useSettings from '../hooks/useSettings';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { fmt } from '../utils/formatCurrency';
-import { WHOLESALE } from '../utils/pricing';
+import { WHOLESALE } from '../utils/packaging';
 import {
   getMonthRange,
   isInRange,
@@ -250,8 +250,16 @@ export default function Comptabilite() {
               (p) =>
                 p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase()
             );
-            const buyPrice = prod ? prod.buyPrice || 0 : 0;
-            return s + ((item.unitPrice || 0) - buyPrice) * (item.qty || 0);
+            // Le coût est porté par l'unité de base : une ligne vendue au carton
+            // en consomme `units`, pas `qty`. Comparer le prix du carton au coût
+            // d'une pièce gonflerait la marge d'un facteur égal au lot.
+            const unitCost = prod ? prod.buyPrice || 0 : 0;
+            const revenu =
+              item.lineTotal != null
+                ? item.lineTotal
+                : (item.unitPrice || 0) * (item.qty || 0);
+            const unites = item.units != null ? item.units : item.qty || 0;
+            return s + (revenu - unitCost * unites);
           }, 0)
         );
       }, 0),
