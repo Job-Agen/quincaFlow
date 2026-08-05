@@ -35,6 +35,9 @@ import {
   wholesaleMargin,
   packBreakdown,
   packLabelOf,
+  unitBuyPrice,
+  PER_UNIT,
+  PER_PACK,
 } from '../utils/pricing';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
@@ -80,11 +83,89 @@ function makeBlankForm(categories, units) {
     packLabel: 'carton',
     packSize: '',
     packPrice: '',
+    // Le prix d'achat est saisi à la pièce par défaut, mais beaucoup
+    // d'articles s'achètent au carton : voir unitBuyPrice.
+    buyMode: PER_UNIT,
   };
 }
 
 // Motifs proposés pour un ajustement manuel de stock
 const ADJUST_REASONS = ['Inventaire', 'Casse', 'Perte/Vol', 'Correction', 'Autre'];
+
+/**
+ * Comme fmt(), mais sans arrondir à l'entier.
+ *
+ * Un carton de 40 payé 12 750 revient à 318,75 la pièce : afficher « 319 »
+ * dans la conversion laisserait croire à une valeur ronde et ferait douter
+ * du calcul. Ailleurs l'arrondi de fmt() convient, les prix de vente étant
+ * saisis en francs entiers.
+ */
+function fmtExact(value) {
+  const n = Number(value) || 0;
+  if (Number.isInteger(n)) return fmt(n);
+  return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
+    fmt(0).replace(/^0/, '');
+}
+
+// ─── Unité du prix d'achat ───────────────────────────────────────────────────
+/**
+ * Un article acheté au carton et revendu à la pièce piégeait la saisie : le
+ * prix du carton entré tel quel donnait des marges négatives et un stock
+ * surévalué. On demande donc explicitement l'unité du montant saisi, et on
+ * affiche la conversion pour que le chiffre retenu ne soit jamais une surprise.
+ */
+function BuyModeChoice({ form, setForm, resolved }) {
+  const perPack = form.buyMode === PER_PACK;
+  const label = (form.packLabel || 'carton').trim() || 'carton';
+  const size = parseFloat(form.packSize) || 0;
+  const baseUnit = form.unit || 'unité';
+
+  const choose = (mode) => () => setForm((f) => ({ ...f, buyMode: mode }));
+
+  const btn = (active) => ({
+    flex: 1,
+    padding: '7px 10px',
+    borderRadius: '7px',
+    border: `1px solid ${active ? C.amber : C.border}`,
+    background: active ? 'rgba(245,166,35,0.14)' : 'transparent',
+    color: active ? C.amber : C.muted,
+    font: 'inherit',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <span style={{ fontSize: '12px', color: C.muted }}>
+        Ce prix d&apos;achat est&nbsp;:
+      </span>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button type="button" onClick={choose(PER_UNIT)} style={btn(!perPack)}>
+          par {baseUnit}
+        </button>
+        <button type="button" onClick={choose(PER_PACK)} style={btn(perPack)}>
+          par {label}
+        </button>
+      </div>
+
+      {perPack && (
+        <div style={{ fontSize: '12px', color: size > 0 ? C.green : C.red }}>
+          {size > 0 ? (
+            <>
+              soit <strong>{fmtExact(resolved)}</strong> / {baseUnit} ({fmt(form.buyPrice || 0)}{' '}
+              ÷ {size})
+            </>
+          ) : (
+            <>
+              Renseignez « {baseUnit} par {label} » ci-dessous pour convertir.
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Conditionnement (vente en gros) ─────────────────────────────────────────
 /**
@@ -92,9 +173,9 @@ const ADJUST_REASONS = ['Inventaire', 'Casse', 'Perte/Vol', 'Correction', 'Autre
  * L'aperçu ramène le prix du carton à la pièce, seul moyen de voir d'un coup
  * d'œil si le tarif de gros tient la route face au prix d'achat.
  */
-function WholesaleFields({ form, set }) {
+function WholesaleFields({ form, set, buyPrice }) {
   const draft = {
-    buyPrice: form.buyPrice,
+    buyPrice,
     sellPrice: form.sellPrice,
     packSize: form.packSize,
     packPrice: form.packPrice,
@@ -171,7 +252,7 @@ function WholesaleFields({ form, set }) {
           }}
         >
           <div>
-            Revient à <strong style={{ color: C.text }}>{fmt(perUnit)}</strong> la{' '}
+            Revient à <strong style={{ color: C.text }}>{fmtExact(perUnit)}</strong> /{' '}
             {baseUnit}
             {discount !== null && (
               <>
@@ -206,14 +287,17 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  const margin = calcMargin(form.buyPrice, form.sellPrice);
+  // Le prix d'achat peut être saisi au carton : tout le reste de
+  // l'application raisonne à l'unité de base, on convertit donc ici.
+  const resolvedBuyPrice = unitBuyPrice(form.buyPrice, form.buyMode, form.packSize);
+  const margin = calcMargin(resolvedBuyPrice, form.sellPrice);
 
   function handleSubmit(e) {
     e.preventDefault();
     onSave({
       name: form.name.trim(),
       cat: form.cat,
-      buyPrice: parseFloat(form.buyPrice) || 0,
+      buyPrice: resolvedBuyPrice,
       sellPrice: parseFloat(form.sellPrice) || 0,
       qty: parseFloat(form.qty) || 0,
       unit: form.unit,
@@ -257,6 +341,7 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
               onChange={set('buyPrice')}
               type="number"
               min="0"
+              step="any"
               placeholder="0"
             />
             <Input
@@ -268,6 +353,8 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
               placeholder="0"
             />
           </div>
+
+          <BuyModeChoice form={form} setForm={setForm} resolved={resolvedBuyPrice} />
 
           {/* Live margin preview */}
           {form.buyPrice && form.sellPrice && (
@@ -294,7 +381,7 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
 
           {/* Le prix de gros est un prix : sa place est avec les autres, pas
               enterré sous les réglages de stock où personne ne le trouvait. */}
-          <WholesaleFields form={form} set={set} />
+          <WholesaleFields form={form} set={set} buyPrice={resolvedBuyPrice} />
 
           <div className="responsive-grid cols-2" style={{ gap: '12px' }}>
             <Input
@@ -1113,6 +1200,9 @@ export default function Stock() {
                 packLabel: packLabelOf(editProduct),
                 packSize: editProduct.packSize ? String(editProduct.packSize) : '',
                 packPrice: editProduct.packPrice ? String(editProduct.packPrice) : '',
+                // Seul le prix à l'unité est stocké : on rouvre donc toujours
+                // dans ce mode, quel que soit celui de la saisie initiale.
+                buyMode: PER_UNIT,
               }
             : null
         }

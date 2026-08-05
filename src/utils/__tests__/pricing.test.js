@@ -11,6 +11,9 @@ import {
   wholesaleMargin,
   maxSellable,
   clampQty,
+  unitBuyPrice,
+  PER_UNIT,
+  PER_PACK,
   describeStock,
   packBreakdown,
   lineTotal,
@@ -191,6 +194,37 @@ describe('unitLabel', () => {
 
   it('retombe sur « carton » sans libellé', () => {
     expect(unitLabel({ ...lame, packLabel: '' }, WHOLESALE)).toBe('carton');
+  });
+});
+
+describe('unitBuyPrice', () => {
+  it('laisse un prix déjà à la pièce', () => {
+    expect(unitBuyPrice(318.75, PER_UNIT, 40)).toBe(318.75);
+  });
+
+  it('ramène un prix d’achat au carton à la pièce', () => {
+    // Le cas réel : carton de 40 lames payé 12 750
+    expect(unitBuyPrice(12750, PER_PACK, 40)).toBe(318.75);
+  });
+
+  it('ne divise pas sans conditionnement connu', () => {
+    expect(unitBuyPrice(12750, PER_PACK, 0)).toBe(12750);
+    expect(unitBuyPrice(12750, PER_PACK, undefined)).toBe(12750);
+  });
+
+  it('tolère une saisie vide', () => {
+    expect(unitBuyPrice('', PER_PACK, 40)).toBe(0);
+  });
+
+  it('donne une marge cohérente sur le cas réel', () => {
+    const achat = unitBuyPrice(12750, PER_PACK, 40);
+    const art = { buyPrice: achat, sellPrice: 450, packSize: 40, packPrice: 17000 };
+    // détail 450 contre 318,75 d'achat
+    expect(((450 - achat) / achat) * 100).toBeCloseTo(41.18, 1);
+    // gros 17 000 le carton, soit 425 la pièce
+    expect(packUnitPrice(art)).toBe(425);
+    expect(wholesaleMargin(art)).toBeCloseTo(33.33, 1);
+    expect(wholesaleDiscount(art)).toBeCloseTo(5.56, 1);
   });
 });
 

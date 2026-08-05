@@ -130,6 +130,28 @@ export function lineTotal(line) {
 }
 
 /**
+ * Prix d'achat ramené à l'unité de base.
+ *
+ * Beaucoup d'articles s'achètent au carton et se revendent à la pièce : un
+ * carton de 40 lames payé 12 750 revient à 318,75 la lame. Le stock étant
+ * valorisé à l'unité, c'est ce prix-là qu'il faut conserver — saisir le prix
+ * du carton tel quel donnerait des marges négatives et un stock surévalué
+ * d'un facteur packSize.
+ *
+ * `mode` vaut PER_UNIT ou PER_PACK. Sans conditionnement connu, on ne peut
+ * pas diviser : la valeur est rendue telle quelle.
+ */
+export const PER_UNIT = 'unit';
+export const PER_PACK = 'pack';
+
+export function unitBuyPrice(value, mode, packSize) {
+  const v = num(value);
+  const size = num(packSize);
+  if (mode !== PER_PACK || size <= 0) return v;
+  return v / size;
+}
+
+/**
  * Nouvelle quantité d'une ligne après un +/−, bornée par le stock vendable.
  *
  * L'ordre des bornes compte : plafonner d'abord puis remonter à 1, jamais
