@@ -88,6 +88,62 @@ function PaymentBadge({ mode }) {
   return <Badge variant={variant}>{mode}</Badge>;
 }
 
+/**
+ * Un tarif de vente, nommé et cliquable.
+ *
+ * Le prix seul ne dit pas ce qu'on achète : « 400 FCFA » peut aussi bien être
+ * la pièce que le carton. Le libellé et l'unité lèvent l'ambiguïté, et chaque
+ * tarif a sa propre cible pour qu'aucun geste ne soit à deviner.
+ */
+function PriceButton({ label, price, per, color, icon, onClick, disabled, disabledHint }) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={disabled ? disabledHint : `Ajouter 1 ${per} au panier`}
+      style={{
+        width: '100%',
+        display: 'flex',
+        // Empilé plutôt qu'en ligne : « 13 000 FCFA / carton de 40 » ne tient
+        // pas sur la largeur d'une carte, et se faisait rogner à droite.
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        rowGap: '2px',
+        padding: '8px 10px',
+        borderRadius: '8px',
+        background: disabled ? 'transparent' : `${color}1F`,
+        border: `1px solid ${disabled ? C.border : color}`,
+        color: disabled ? C.muted : color,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.55 : 1,
+        font: 'inherit',
+        textAlign: 'left',
+      }}
+    >
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          fontSize: '10px',
+          fontWeight: 800,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {icon}
+        {label}
+      </span>
+      <span style={{ fontSize: '13px', fontWeight: 800, lineHeight: 1.3 }}>
+        <span style={{ whiteSpace: 'nowrap' }}>{fmt(price)}</span>
+        <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.75 }}> / {per}</span>
+      </span>
+    </button>
+  );
+}
+
 function Toast({ message, visible }) {
   return (
     <div
@@ -594,23 +650,14 @@ export default function Caisse() {
                   return (
                     <div
                       key={product.id || product.name}
-                      onClick={() => !outOfStock && addToCart(product, RETAIL)}
-                      title={outOfStock ? 'Rupture de stock' : `Ajouter ${product.name} au panier`}
+                      title={outOfStock ? 'Rupture de stock' : product.name}
                       style={{
                         background: outOfStock ? 'rgba(26,16,8,0.6)' : C.card,
                         border: `1px solid ${inCart ? C.amber : outOfStock ? C.red : C.border}`,
                         borderRadius: '10px',
                         padding: '14px',
-                        cursor: outOfStock ? 'not-allowed' : 'pointer',
                         opacity: outOfStock ? 0.5 : 1,
-                        transition: 'border-color 0.15s, transform 0.12s',
-                        userSelect: 'none',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!outOfStock) e.currentTarget.style.transform = 'translateY(-2px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
+                        transition: 'border-color 0.15s',
                       }}
                     >
                       <div
@@ -640,79 +687,53 @@ export default function Caisse() {
                       </div>
                       <div
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginTop: '10px',
+                          fontSize: '11px',
+                          color: outOfStock ? C.red : lowStock ? C.amber : C.muted,
+                          fontWeight: 600,
+                          marginTop: '6px',
                         }}
                       >
-                        <span style={{ fontSize: '15px', fontWeight: 800, color: C.amber }}>
-                          {fmt(product.sellPrice)}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '11px',
-                            color: outOfStock ? C.red : lowStock ? C.amber : C.muted,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {product.qty} {product.unit || 'u.'}
-                        </span>
+                        {product.qty} {product.unit || 'u.'} en stock
                       </div>
 
-                      {/* Vente en gros : cible distincte, pour ne pas obliger à
-                          composer un carton pièce par pièce. */}
-                      {wholesale && !outOfStock && (
-                        <button
-                          type="button"
-                          disabled={!packFits}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addToCart(product, WHOLESALE);
-                          }}
-                          title={
-                            packFits
-                              ? `Ajouter 1 ${packLabelOf(product)} (${product.packSize} ${product.unit || 'u.'})`
-                              : `Stock insuffisant pour un ${packLabelOf(product)} entier`
-                          }
+                      {/* Un article conditionné a deux tarifs : on les nomme et
+                          on leur donne chacun sa cible, plutôt que de laisser
+                          deviner que toucher la carte vend à la pièce. */}
+                      {!outOfStock && (
+                        <div
                           style={{
-                            marginTop: '10px',
-                            width: '100%',
                             display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            // La carte est étroite : sans repli, le prix passe
-                            // par-dessus le libellé du conditionnement.
-                            flexWrap: 'wrap',
-                            rowGap: '2px',
-                            gap: '8px',
-                            padding: '8px 10px',
-                            borderRadius: '8px',
-                            background: packFits ? 'rgba(212,98,42,0.12)' : 'transparent',
-                            border: `1px solid ${packFits ? C.terra : C.border}`,
-                            color: packFits ? C.terra : C.muted,
-                            cursor: packFits ? 'pointer' : 'not-allowed',
-                            opacity: packFits ? 1 : 0.55,
-                            font: 'inherit',
-                            fontSize: '12px',
-                            fontWeight: 700,
+                            flexDirection: 'column',
+                            gap: '6px',
+                            marginTop: '10px',
                           }}
                         >
-                          <span
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              whiteSpace: 'nowrap',
+                          <PriceButton
+                            label="Détail"
+                            price={product.sellPrice}
+                            per={product.unit || 'unité'}
+                            color={C.amber}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addToCart(product, RETAIL);
                             }}
-                          >
-                            <Layers size={13} />1 {packLabelOf(product)}
-                            <span style={{ fontWeight: 500, opacity: 0.8 }}>
-                              ({product.packSize})
-                            </span>
-                          </span>
-                          <span style={{ whiteSpace: 'nowrap' }}>{fmt(product.packPrice)}</span>
-                        </button>
+                          />
+                          {wholesale && (
+                            <PriceButton
+                              label="Gros"
+                              price={product.packPrice}
+                              per={`${packLabelOf(product)} de ${product.packSize}`}
+                              color={C.terra}
+                              icon={<Layers size={12} />}
+                              disabled={!packFits}
+                              disabledHint={`Il reste ${free} ${product.unit || 'u.'} : pas de quoi faire un ${packLabelOf(product)} entier`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToCart(product, WHOLESALE);
+                              }}
+                            />
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -754,7 +775,7 @@ export default function Caisse() {
                   <ShoppingCart size={28} color={C.muted} style={{ marginBottom: '10px' }} />
                   <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Panier vide</p>
                   <p style={{ margin: '6px 0 0', fontSize: '12px' }}>
-                    Cliquez sur un article pour l&apos;ajouter
+                    Choisissez un tarif — détail ou gros — sur un article
                   </p>
                 </div>
               ) : (

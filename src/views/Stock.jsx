@@ -260,7 +260,7 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
               placeholder="0"
             />
             <Input
-              label="Prix de vente (FCFA)"
+              label="Prix de vente au détail (FCFA)"
               value={form.sellPrice}
               onChange={set('sellPrice')}
               type="number"
@@ -292,6 +292,10 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
             </div>
           )}
 
+          {/* Le prix de gros est un prix : sa place est avec les autres, pas
+              enterré sous les réglages de stock où personne ne le trouvait. */}
+          <WholesaleFields form={form} set={set} />
+
           <div className="responsive-grid cols-2" style={{ gap: '12px' }}>
             <Input
               label="Quantité en stock"
@@ -311,8 +315,6 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
             min="0"
             placeholder="5"
           />
-
-          <WholesaleFields form={form} set={set} />
         </div>
 
         <div
@@ -835,6 +837,11 @@ export default function Stock() {
                           </td>
                           <td style={tdStyle}>
                             <span style={{ fontWeight: 600 }}>{p.name}</span>
+                            {hasWholesale(p) && (
+                              <Badge variant="warning">
+                                <Layers size={10} /> Gros
+                              </Badge>
+                            )}
                           </td>
                           <td style={tdStyle}>
                             <Badge variant="neutral">{p.cat}</Badge>
@@ -958,7 +965,14 @@ export default function Stock() {
                           >
                             {p.name}
                           </div>
-                          <Badge variant="neutral">{p.cat}</Badge>
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            <Badge variant="neutral">{p.cat}</Badge>
+                            {hasWholesale(p) && (
+                              <Badge variant="warning">
+                                <Layers size={10} /> Gros
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
 
