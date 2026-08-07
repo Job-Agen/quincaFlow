@@ -273,7 +273,7 @@ function PackagingsEditor({ form, setForm, unitCost }) {
               label={
                 isBase
                   ? `Prix de vente au détail — 1 ${baseUnit} (FCFA)`
-                  : `Prix du ${p.label || 'lot'} entier (FCFA)`
+                  : `Prix de vente en gros — 1 ${p.label || 'lot'} (FCFA)`
               }
               value={p.price}
               onChange={patch(p.id, 'price')}
@@ -1106,7 +1106,14 @@ export default function Stock() {
                           >
                             {p.name}
                           </div>
-                          <Badge variant="neutral">{p.cat}</Badge>
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            <Badge variant="neutral">{p.cat}</Badge>
+                            {hasBulk(p) && (
+                              <Badge variant="warning">
+                                <Layers size={10} /> Gros
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -1162,6 +1169,11 @@ export default function Stock() {
                               <Badge variant="danger">
                                 <AlertTriangle size={10} /> Faible
                               </Badge>
+                            )}
+                            {decomposeStock(p) && (
+                              <span style={{ fontSize: '11px', color: C.muted, width: '100%' }}>
+                                {decomposeStock(p)}
+                              </span>
                             )}
                           </div>
                         }
