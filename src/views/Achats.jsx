@@ -17,7 +17,6 @@ import useProducts from '../hooks/useProducts';
 import useContacts from '../hooks/useContacts';
 import useSettings from '../hooks/useSettings';
 import useStockMovements from '../hooks/useStockMovements';
-import { normalizePackagings, weightedAverageCost } from '../utils/packaging';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
@@ -62,7 +61,6 @@ function NewPurchaseModal({ open, onClose, suppliers, products, settings, onSave
   const [lineSellPrice, setLineSellPrice] = useState('');
   const [lineQty, setLineQty] = useState('');
   const [lineCost, setLineCost] = useState('');
-  const [linePackagingId, setLinePackagingId] = useState('');
 
   const categories = settings.productCategories || [];
   const units = settings.units || [];
@@ -89,20 +87,11 @@ function NewPurchaseModal({ open, onClose, suppliers, products, settings, onSave
     setLineCost('');
   }
 
-  const selectedProduct = products.find((p) => p.id === lineProductId) || null;
-  const selectedPackagings = selectedProduct ? normalizePackagings(selectedProduct) : [];
-  const linePackaging = selectedPackagings.find((pk) => pk.id === linePackagingId) || null;
-
   function handleProductSelect(e) {
     const id = e.target.value;
     setLineProductId(id);
     const product = products.find((p) => p.id === id);
-    if (product) {
-      setLineCost(String(product.buyPrice || ''));
-      // On propose l'unité de base : c'est dans cette unité qu'est le coût connu.
-      const base = normalizePackagings(product)[0];
-      setLinePackagingId(base ? base.id : '');
-    }
+    if (product) setLineCost(String(product.buyPrice || ''));
   }
 
   function handleAddLine() {
@@ -122,20 +111,9 @@ function NewPurchaseModal({ open, onClose, suppliers, products, settings, onSave
         setError('Veuillez sélectionner un produit.');
         return;
       }
-      const pk = normalizePackagings(product).find((x) => x.id === linePackagingId);
-      const size = pk ? pk.size : 1;
       setLines((prev) => [
         ...prev,
-        {
-          productId: product.id,
-          name: product.name,
-          qty,
-          unitCost,
-          packagingLabel: pk ? pk.label : product.unit || 'unité',
-          packagingSize: size,
-          // Unités de base réellement entrées en stock à la réception.
-          baseUnits: qty * size,
-        },
+        { productId: product.id, name: product.name, qty, unitCost },
       ]);
     } else {
       const name = lineName.trim();
@@ -308,21 +286,9 @@ function NewPurchaseModal({ open, onClose, suppliers, products, settings, onSave
             </>
           )}
 
-          {lineMode === 'existant' && selectedPackagings.length > 1 && (
-            <Select
-              label="Conditionnement acheté"
-              value={linePackagingId}
-              onChange={(e) => setLinePackagingId(e.target.value)}
-              options={selectedPackagings.map((pk) => ({
-                value: pk.id,
-                label: pk.size > 1 ? `${pk.label} (${pk.size})` : pk.label,
-              }))}
-            />
-          )}
-
           <div className="responsive-grid cols-2" style={{ gap: '10px' }}>
             <Input
-              label={`Quantité${linePackaging && linePackaging.size > 1 ? ` (en ${linePackaging.label}s)` : ''}`}
+              label="Quantité"
               type="number"
               min="0"
               value={lineQty}
@@ -330,7 +296,7 @@ function NewPurchaseModal({ open, onClose, suppliers, products, settings, onSave
               placeholder="0"
             />
             <Input
-              label={`Coût${linePackaging && linePackaging.size > 1 ? ` du ${linePackaging.label}` : ' unitaire'}`}
+              label="Coût unitaire"
               type="number"
               min="0"
               value={lineCost}
@@ -338,24 +304,6 @@ function NewPurchaseModal({ open, onClose, suppliers, products, settings, onSave
               placeholder="0"
             />
           </div>
-
-          {linePackaging && linePackaging.size > 1 && parseFloat(lineQty) > 0 && (
-            <div style={{ fontSize: '12px', color: C.green }}>
-              entrée en stock : <strong>{parseFloat(lineQty) * linePackaging.size}</strong>{' '}
-              {selectedProduct ? selectedProduct.unit || 'unité' : 'unité'}
-              {parseFloat(lineCost) > 0 && (
-                <>
-                  {' — soit '}
-                  <strong>
-                    {(parseFloat(lineCost) / linePackaging.size).toLocaleString('fr-FR', {
-                      maximumFractionDigits: 2,
-                    })}
-                  </strong>{' '}
-                  l&apos;unité
-                </>
-              )}
-            </div>
-          )}
           <Button
             variant="secondary"
             size="sm"
@@ -559,33 +507,18 @@ export default function Achats() {
     purchase.items.forEach((item) => {
       const existing = item.productId ? products.find((p) => p.id === item.productId) : null;
       let productId = item.productId;
-      // Les unités de base entrant réellement en stock : un carton de 40 en
-      // apporte 40, pas 1. Les anciennes commandes n'ont pas ce champ.
-      const size = item.packagingSize || 1;
-      const baseUnits = item.baseUnits != null ? item.baseUnits : item.qty * size;
-      const costPerBaseUnit = size > 0 ? item.unitCost / size : item.unitCost;
-
       if (existing) {
-        adjustStock(existing.id, +baseUnits);
-        // Coût moyen pondéré : réassortir à un autre prix ne doit pas écraser
-        // la valeur du stock déjà détenu, sinon les marges sautent à chaque achat.
-        updateProduct(existing.id, {
-          buyPrice: weightedAverageCost(
-            existing.qty || 0,
-            existing.buyPrice || 0,
-            baseUnits,
-            costPerBaseUnit
-          ),
-        });
+        adjustStock(existing.id, +item.qty);
+        updateProduct(existing.id, { buyPrice: item.unitCost });
       } else {
         const np = item.newProduct || {};
         const created = addProduct({
           name: item.name,
           cat: np.cat || settings.productCategories[0] || 'Autres',
           unit: np.unit || settings.units[0] || 'pièce',
-          sellPrice: np.sellPrice || costPerBaseUnit,
-          buyPrice: costPerBaseUnit,
-          qty: baseUnits,
+          sellPrice: np.sellPrice || item.unitCost,
+          buyPrice: item.unitCost,
+          qty: item.qty,
           minQty: 5,
         });
         productId = created.id;
@@ -594,11 +527,8 @@ export default function Achats() {
         productId,
         productName: item.name,
         type: 'entrée',
-        qty: +baseUnits,
-        reason:
-          size > 1
-            ? `Réception achat (${item.qty} ${item.packagingLabel}) — ${purchase.supplierName}`
-            : 'Réception achat — ' + purchase.supplierName,
+        qty: +item.qty,
+        reason: 'Réception achat — ' + purchase.supplierName,
         refId: purchase.id,
       });
     });

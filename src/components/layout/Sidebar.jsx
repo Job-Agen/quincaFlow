@@ -14,7 +14,7 @@ import {
   Settings,
   LogOut,
 } from 'lucide-react';
-import { COLORS, FONTS, Z } from '../../constants/theme';
+import { COLORS, FONTS } from '../../constants/theme';
 import useSettings from '../../hooks/useSettings';
 import { useSession } from '../auth/SyncGate';
 
@@ -57,7 +57,7 @@ export default function Sidebar({ currentPath, compact = false }) {
         borderRight: `1px solid ${COLORS.border}`,
         display: 'flex',
         flexDirection: 'column',
-        zIndex: Z.sidebar,
+        zIndex: 100,
         overflowY: 'auto',
         transition: 'width 0.2s ease',
       }}

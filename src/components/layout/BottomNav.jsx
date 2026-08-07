@@ -9,7 +9,7 @@ import {
   BarChart2,
   Settings,
 } from 'lucide-react';
-import { COLORS, Z } from '../../constants/theme';
+import { COLORS } from '../../constants/theme';
 
 const NAV_ITEMS = [
   { path: '/', icon: Home, label: 'Accueil' },
@@ -35,7 +35,7 @@ export default function BottomNav({ currentPath }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-around',
-        zIndex: Z.bottomNav,
+        zIndex: 1000,
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
     >

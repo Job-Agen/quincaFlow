@@ -14,7 +14,6 @@ import {
   CheckSquare,
   Square,
   X,
-  Layers,
 } from 'lucide-react';
 
 import useProducts from '../hooks/useProducts';
@@ -28,14 +27,6 @@ import Select from '../components/ui/Select';
 import Badge from '../components/ui/Badge';
 import { fmt } from '../utils/formatCurrency';
 import { formatDate, formatTime } from '../utils/dateHelpers';
-import {
-  normalizePackagings,
-  blankPackaging,
-  hasBulk,
-  marginOf,
-  discountOf,
-  decomposeStock,
-} from '../utils/packaging';
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const C = {
@@ -68,251 +59,19 @@ function MarginLabel({ margin }) {
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
 function makeBlankForm(categories, units) {
-  const baseUnit = units[0] || 'unité';
   return {
     name: '',
     cat: categories[0] || '',
     buyPrice: '',
+    sellPrice: '',
     qty: '',
-    unit: baseUnit,
+    unit: units[0] || '',
     minQty: '5',
-    // Le premier conditionnement est toujours l'unité de base : c'est lui qui
-    // porte le prix de détail et définit ce que compte le stock.
-    packagings: [{ ...blankPackaging(baseUnit, '1', ''), isDefault: true }],
-    // Vide = prix d'achat saisi à l'unité de base ; sinon l'id du lot acheté.
-    buyPackagingId: '',
   };
 }
 
 // Motifs proposés pour un ajustement manuel de stock
 const ADJUST_REASONS = ['Inventaire', 'Casse', 'Perte/Vol', 'Correction', 'Autre'];
-
-/**
- * Comme fmt(), mais sans arrondir à l'entier.
- *
- * Un carton de 40 payé 12 750 revient à 318,75 la pièce : afficher « 319 »
- * dans la conversion laisserait croire à une valeur ronde et ferait douter
- * du calcul. Ailleurs l'arrondi de fmt() convient, les prix de vente étant
- * saisis en francs entiers.
- */
-function fmtExact(value) {
-  const n = Number(value) || 0;
-  if (Number.isInteger(n)) return fmt(n);
-  return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
-    fmt(0).replace(/^0/, '');
-}
-
-// ─── Unité du prix d'achat ───────────────────────────────────────────────────
-/**
- * Un article acheté au carton et revendu à la pièce piégeait la saisie : le
- * prix du carton entré tel quel donnait des marges négatives et un stock
- * surévalué d'un facteur égal au conditionnement. On demande donc l'unité du
- * montant saisi, et on affiche la conversion pour qu'aucun chiffre retenu ne
- * soit une surprise.
- */
-function BuyUnitChoice({ form, setForm, resolved }) {
-  const baseUnit = form.unit || 'unité';
-  const lots = form.packagings.filter((p) => (parseFloat(p.size) || 0) > 1);
-  const current = lots.find((p) => p.id === form.buyPackagingId);
-  const size = current ? parseFloat(current.size) || 0 : 1;
-
-  const options = [
-    { value: '', label: `par ${baseUnit}` },
-    ...lots.map((p) => ({ value: p.id, label: `par ${p.label || 'lot'}` })),
-  ];
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <Select
-        label="Ce prix d'achat est"
-        value={form.buyPackagingId}
-        onChange={(e) => setForm((f) => ({ ...f, buyPackagingId: e.target.value }))}
-        options={options}
-      />
-      {current && (
-        <div style={{ fontSize: '12px', color: size > 0 ? C.green : C.red }}>
-          {size > 0 ? (
-            <>
-              soit <strong>{fmtExact(resolved)}</strong> / {baseUnit} (
-              {fmt(form.buyPrice || 0)} ÷ {size})
-            </>
-          ) : (
-            <>Indiquez combien de {baseUnit} contient ce {current.label}.</>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Conditionnements ────────────────────────────────────────────────────────
-/**
- * Les conditionnements d'un article et leurs prix de vente.
- *
- * Le premier est l'unité de base : sa taille vaut toujours 1 et il ne peut pas
- * être supprimé, c'est lui qui définit le stock. Les suivants sont des lots —
- * carton, sac, palette — dont on donne le contenu et le prix du lot entier.
- * Chaque ligne affiche son prix ramené à l'unité et sa marge, pour qu'un tarif
- * de gros incohérent se voie avant l'enregistrement.
- */
-function PackagingsEditor({ form, setForm, unitCost }) {
-  const baseUnit = form.unit || 'unité';
-
-  const patch = (id, field) => (e) =>
-    setForm((f) => ({
-      ...f,
-      packagings: f.packagings.map((p) =>
-        p.id === id ? { ...p, [field]: e.target.value } : p
-      ),
-    }));
-
-  const add = () =>
-    setForm((f) => ({ ...f, packagings: [...f.packagings, blankPackaging()] }));
-
-  const remove = (id) =>
-    setForm((f) => ({
-      ...f,
-      packagings: f.packagings.filter((p) => p.id !== id),
-      buyPackagingId: f.buyPackagingId === id ? '' : f.buyPackagingId,
-    }));
-
-  const draft = { unit: form.unit, packagings: form.packagings };
-
-  return (
-    <div
-      style={{
-        border: `1px solid ${C.border}`,
-        borderRadius: '10px',
-        padding: '14px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Layers size={15} color={C.amber} />
-        <strong style={{ fontSize: '13px', color: C.amber }}>
-          Conditionnements &amp; prix de vente
-        </strong>
-      </div>
-
-      <p style={{ margin: 0, fontSize: '12px', color: C.muted, lineHeight: 1.5 }}>
-        Le stock est compté en {baseUnit}. Ajoutez un lot pour vendre aussi au
-        carton, au sac ou à la palette : vendre un lot retire son contenu du même
-        stock.
-      </p>
-
-      {form.packagings.map((p, i) => {
-        const isBase = i === 0;
-        const size = parseFloat(p.size) || 0;
-        const perUnit = size > 0 ? (parseFloat(p.price) || 0) / size : null;
-        const marge = marginOf({ size, price: p.price }, unitCost);
-        const remise = discountOf({ size, price: p.price }, draft);
-
-        return (
-          <div
-            key={p.id}
-            style={{
-              border: `1px solid ${isBase ? C.border : C.card2}`,
-              borderRadius: '8px',
-              padding: '10px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              background: isBase ? 'transparent' : C.card2,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span
-                style={{
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  color: isBase ? C.muted : C.terra,
-                }}
-              >
-                {isBase ? `Unité de base — ${baseUnit}` : `Lot ${i}`}
-              </span>
-              {!isBase && (
-                <button
-                  type="button"
-                  onClick={() => remove(p.id)}
-                  title="Retirer ce conditionnement"
-                  style={{
-                    marginLeft: 'auto',
-                    background: 'none',
-                    border: 'none',
-                    color: C.red,
-                    cursor: 'pointer',
-                    padding: '2px 4px',
-                    display: 'flex',
-                  }}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-
-            <div className="responsive-grid cols-2" style={{ gap: '10px' }}>
-              <Input
-                label="Nom"
-                value={isBase ? baseUnit : p.label}
-                onChange={patch(p.id, 'label')}
-                disabled={isBase}
-                placeholder="ex: carton"
-              />
-              <Input
-                label={`${baseUnit} contenues`}
-                value={isBase ? '1' : p.size}
-                onChange={patch(p.id, 'size')}
-                type="number"
-                min="1"
-                disabled={isBase}
-                placeholder="ex: 40"
-              />
-            </div>
-            <Input
-              label={isBase ? `Prix de vente d'${baseUnit === 'unité' ? 'une' : 'un'} ${baseUnit} (FCFA)` : `Prix du ${p.label || 'lot'} entier (FCFA)`}
-              value={p.price}
-              onChange={patch(p.id, 'price')}
-              type="number"
-              min="0"
-              placeholder="0"
-            />
-
-            {size > 0 && parseFloat(p.price) > 0 && (
-              <div style={{ fontSize: '12px', color: C.muted }}>
-                {!isBase && (
-                  <>
-                    <strong style={{ color: C.text }}>{fmtExact(perUnit)}</strong> / {baseUnit}
-                    {remise !== null && (
-                      <>
-                        {' — '}
-                        <strong style={{ color: remise >= 0 ? C.green : C.red }}>
-                          {remise >= 0 ? '−' : '+'}
-                          {Math.abs(remise).toFixed(1)}%
-                        </strong>{' '}
-                        {remise >= 0 ? 'contre le détail' : 'PLUS CHER que le détail'}
-                        {' · '}
-                      </>
-                    )}
-                  </>
-                )}
-                Marge : <MarginLabel margin={marge} />
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      <Button variant="ghost" type="button" onClick={add}>
-        <Plus size={14} /> Ajouter un conditionnement
-      </Button>
-    </div>
-  );
-}
-
 
 // ─── Product Form Modal ───────────────────────────────────────────────────────
 function ProductFormModal({ open, onClose, onSave, initial, categories, units }) {
@@ -327,43 +86,18 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  // Le prix d'achat peut être saisi au lot : tout le reste de l'application
-  // raisonne à l'unité de base, on convertit donc ici une fois pour toutes.
-  const buyLot = form.packagings.find((p) => p.id === form.buyPackagingId);
-  const buyLotSize = buyLot ? parseFloat(buyLot.size) || 0 : 1;
-  const resolvedBuyPrice =
-    buyLot && buyLotSize > 0
-      ? (parseFloat(form.buyPrice) || 0) / buyLotSize
-      : parseFloat(form.buyPrice) || 0;
-
-  // Le prix de détail est celui du premier conditionnement, l'unité de base.
-  const basePrice = parseFloat(form.packagings[0] && form.packagings[0].price) || 0;
-  const margin = calcMargin(resolvedBuyPrice, basePrice);
+  const margin = calcMargin(form.buyPrice, form.sellPrice);
 
   function handleSubmit(e) {
     e.preventDefault();
-    const baseUnit = form.unit || 'unité';
-    const packagings = form.packagings
-      .map((p, i) => ({
-        id: p.id,
-        label: i === 0 ? baseUnit : (p.label || '').trim() || 'lot',
-        size: i === 0 ? 1 : parseFloat(p.size) || 0,
-        price: parseFloat(p.price) || 0,
-        isDefault: i === 0,
-      }))
-      .filter((p) => p.size > 0);
-
     onSave({
       name: form.name.trim(),
       cat: form.cat,
-      buyPrice: resolvedBuyPrice,
-      // sellPrice reste synchronisé sur l'unité de base : le tableau de bord,
-      // la comptabilité et les anciennes ventes s'y réfèrent encore.
-      sellPrice: basePrice,
+      buyPrice: parseFloat(form.buyPrice) || 0,
+      sellPrice: parseFloat(form.sellPrice) || 0,
       qty: parseFloat(form.qty) || 0,
-      unit: baseUnit,
+      unit: form.unit,
       minQty: parseFloat(form.minQty) || 0,
-      packagings,
     });
     onClose();
   }
@@ -393,20 +127,27 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
             options={catOptions}
             required
           />
-          <Input
-            label="Prix d'achat (FCFA)"
-            value={form.buyPrice}
-            onChange={set('buyPrice')}
-            type="number"
-            min="0"
-            step="any"
-            placeholder="0"
-          />
-
-          <BuyUnitChoice form={form} setForm={setForm} resolved={resolvedBuyPrice} />
+          <div className="responsive-grid cols-2" style={{ gap: '12px' }}>
+            <Input
+              label="Prix d'achat (FCFA)"
+              value={form.buyPrice}
+              onChange={set('buyPrice')}
+              type="number"
+              min="0"
+              placeholder="0"
+            />
+            <Input
+              label="Prix de vente (FCFA)"
+              value={form.sellPrice}
+              onChange={set('sellPrice')}
+              type="number"
+              min="0"
+              placeholder="0"
+            />
+          </div>
 
           {/* Live margin preview */}
-          {form.buyPrice && basePrice > 0 && (
+          {form.buyPrice && form.sellPrice && (
             <div
               style={{
                 background: C.card2,
@@ -427,10 +168,6 @@ function ProductFormModal({ open, onClose, onSave, initial, categories, units })
               </strong>
             </div>
           )}
-
-          {/* Le prix de gros est un prix : sa place est avec les autres, pas
-              enterré sous les réglages de stock où personne ne le trouvait. */}
-          <PackagingsEditor form={form} setForm={setForm} unitCost={resolvedBuyPrice} />
 
           <div className="responsive-grid cols-2" style={{ gap: '12px' }}>
             <Input
@@ -973,11 +710,6 @@ export default function Stock() {
                           </td>
                           <td style={tdStyle}>
                             <span style={{ fontWeight: 600 }}>{p.name}</span>
-                            {hasBulk(p) && (
-                              <Badge variant="warning">
-                                <Layers size={10} /> Gros
-                              </Badge>
-                            )}
                           </td>
                           <td style={tdStyle}>
                             <Badge variant="neutral">{p.cat}</Badge>
@@ -1000,27 +732,10 @@ export default function Stock() {
                                 </Badge>
                               )}
                             </div>
-                            {decomposeStock(p) && (
-                              <div style={{ fontSize: '11px', color: C.muted, marginTop: '3px' }}>
-                                {decomposeStock(p)}
-                              </div>
-                            )}
                           </td>
                           <td style={{ ...tdStyle, color: C.muted }}>{p.unit}</td>
                           <td style={tdStyle}>{fmt(p.buyPrice)}</td>
-                          <td style={tdStyle}>
-                            {fmt(p.sellPrice)}
-                            {normalizePackagings(p)
-                              .filter((pk) => pk.size > 1)
-                              .map((pk) => (
-                                <div
-                                  key={pk.id}
-                                  style={{ fontSize: '11px', color: C.amber, marginTop: '3px' }}
-                                >
-                                  {fmt(pk.price)} / {pk.label}
-                                </div>
-                              ))}
-                          </td>
+                          <td style={tdStyle}>{fmt(p.sellPrice)}</td>
                           <td style={tdStyle}>
                             <MarginLabel margin={margin} />
                           </td>
@@ -1106,14 +821,7 @@ export default function Stock() {
                           >
                             {p.name}
                           </div>
-                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            <Badge variant="neutral">{p.cat}</Badge>
-                            {hasBulk(p) && (
-                              <Badge variant="warning">
-                                <Layers size={10} /> Gros
-                              </Badge>
-                            )}
-                          </div>
+                          <Badge variant="neutral">{p.cat}</Badge>
                         </div>
                       </div>
 
@@ -1170,30 +878,12 @@ export default function Stock() {
                                 <AlertTriangle size={10} /> Faible
                               </Badge>
                             )}
-                            {decomposeStock(p) && (
-                              <span style={{ fontSize: '11px', color: C.muted, width: '100%' }}>
-                                {decomposeStock(p)}
-                              </span>
-                            )}
                           </div>
                         }
                       />
                       <MobileStatCell label="Marge" value={<MarginLabel margin={margin} />} />
                       <MobileStatCell label="Prix achat" value={fmt(p.buyPrice)} />
-                      <MobileStatCell label="Prix vente (détail)" value={fmt(p.sellPrice)} />
-                      {normalizePackagings(p)
-                        .filter((pk) => pk.size > 1)
-                        .map((pk) => (
-                          <MobileStatCell
-                            key={pk.id}
-                            label={`Prix / ${pk.label}`}
-                            value={
-                              <span style={{ color: C.amber, fontWeight: 700 }}>
-                                {fmt(pk.price)}
-                              </span>
-                            }
-                          />
-                        ))}
+                      <MobileStatCell label="Prix vente" value={fmt(p.sellPrice)} />
                     </div>
                   </Card>
                 );
@@ -1250,19 +940,10 @@ export default function Stock() {
                 name: editProduct.name,
                 cat: editProduct.cat,
                 buyPrice: String(editProduct.buyPrice),
+                sellPrice: String(editProduct.sellPrice),
                 qty: String(editProduct.qty),
                 unit: editProduct.unit,
                 minQty: String(editProduct.minQty),
-                // normalizePackagings convertit au passage les articles créés
-                // avant les conditionnements multiples.
-                packagings: normalizePackagings(editProduct).map((pk) => ({
-                  ...pk,
-                  size: String(pk.size),
-                  price: String(pk.price),
-                })),
-                // Seul le coût à l'unité est stocké : on rouvre donc toujours
-                // dans ce mode, quel que soit celui de la saisie initiale.
-                buyPackagingId: '',
               }
             : null
         }

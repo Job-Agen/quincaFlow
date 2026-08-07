@@ -12,7 +12,6 @@ import Select from '../components/ui/Select';
 import Badge from '../components/ui/Badge';
 import { fmt } from '../utils/formatCurrency';
 import { formatDate } from '../utils/dateHelpers';
-import { Z } from '../constants/theme';
 
 const C = {
   bg: '#0D0905',
@@ -56,7 +55,7 @@ function WideModal({ open, onClose, title, children, maxWidth = 520 }) {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: Z.modal,
+        zIndex: 1000,
         background: 'rgba(0,0,0,0.75)',
         display: 'flex',
         alignItems: 'center',

@@ -16,7 +16,6 @@ import {
   Package,
   Ban,
   UserPlus,
-  Layers,
 } from 'lucide-react';
 
 import { useSales } from '../hooks/useSales';
@@ -31,17 +30,6 @@ import Modal from '../components/ui/Modal';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Badge from '../components/ui/Badge';
-import { Z } from '../constants/theme';
-import {
-  WHOLESALE,
-  modeOf,
-  normalizePackagings,
-  unitsOf,
-  maxSellable,
-  clampQty,
-  lineTotal,
-  lineUnits,
-} from '../utils/packaging';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -85,62 +73,6 @@ function PaymentBadge({ mode }) {
   return <Badge variant={variant}>{mode}</Badge>;
 }
 
-/**
- * Un tarif de vente, nommé et cliquable.
- *
- * Le prix seul ne dit pas ce qu'on achète : « 400 FCFA » peut aussi bien être
- * la pièce que le carton. Le libellé et l'unité lèvent l'ambiguïté, et chaque
- * tarif a sa propre cible pour qu'aucun geste ne soit à deviner.
- */
-function PriceButton({ label, price, per, color, icon, onClick, disabled, disabledHint }) {
-  return (
-    <button
-      type="button"
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={disabled ? disabledHint : `Ajouter 1 ${per} au panier`}
-      style={{
-        width: '100%',
-        display: 'flex',
-        // Empilé plutôt qu'en ligne : « 13 000 FCFA / carton de 40 » ne tient
-        // pas sur la largeur d'une carte, et se faisait rogner à droite.
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        rowGap: '2px',
-        padding: '8px 10px',
-        borderRadius: '8px',
-        background: disabled ? 'transparent' : `${color}1F`,
-        border: `1px solid ${disabled ? C.border : color}`,
-        color: disabled ? C.muted : color,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.55 : 1,
-        font: 'inherit',
-        textAlign: 'left',
-      }}
-    >
-      <span
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '5px',
-          fontSize: '10px',
-          fontWeight: 800,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {icon}
-        {label}
-      </span>
-      <span style={{ fontSize: '13px', fontWeight: 800, lineHeight: 1.3 }}>
-        <span style={{ whiteSpace: 'nowrap' }}>{fmt(price)}</span>
-        <span style={{ fontSize: '11px', fontWeight: 500, opacity: 0.75 }}> / {per}</span>
-      </span>
-    </button>
-  );
-}
-
 function Toast({ message, visible }) {
   return (
     <div
@@ -160,7 +92,7 @@ function Toast({ message, visible }) {
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
-        zIndex: Z.toast,
+        zIndex: 2000,
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         pointerEvents: 'none',
         whiteSpace: 'nowrap',
@@ -225,99 +157,43 @@ export default function Caisse() {
     );
   }, [products, search]);
 
-  const cartTotal = useMemo(() => cart.reduce((s, i) => s + lineTotal(i), 0), [cart]);
+  const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.unitPrice * i.qty, 0), [cart]);
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
 
-  /**
-   * Pièces déjà engagées par article, tous modes confondus. Un même article peut
-   * figurer deux fois dans le panier (20 pièces au détail ET 1 carton en gros) :
-   * c'est ce cumul, pas la ligne, qui doit rester dans les limites du stock.
-   */
-  const unitsInCart = useMemo(() => {
-    const map = new Map();
-    cart.forEach((i) => map.set(i.id, (map.get(i.id) || 0) + lineUnits(i)));
-    return map;
-  }, [cart]);
-
   // ── Cart operations ──────────────────────────────────────────────────────────
-  /** Ajoute un exemplaire du conditionnement choisi (pièce, carton, palette…). */
-  const addToCart = useCallback((product, packaging) => {
-    if (!product.qty || product.qty <= 0 || !packaging) return;
-
-    const key = `${product.id}::${packaging.id}`;
-
+  const addToCart = useCallback((product) => {
+    if (!product.qty || product.qty <= 0) return;
     setCart((prev) => {
-      const engaged = prev.reduce(
-        (sum, i) => (i.id === product.id ? sum + lineUnits(i) : sum),
-        0
-      );
-      const free = (product.qty || 0) - engaged;
-      // Un lot de plus, est-ce que le stock restant suit ?
-      if (free < unitsOf(packaging, 1)) return prev;
-
-      const ex = prev.find((i) => i.key === key);
+      const ex = prev.find((i) => i.id === product.id);
       if (ex) {
-        return prev.map((i) => (i.key === key ? { ...i, qty: i.qty + 1 } : i));
+        if (ex.qty >= product.qty) return prev;
+        return prev.map((i) => (i.id === product.id ? { ...i, qty: i.qty + 1 } : i));
       }
       return [
         ...prev,
         {
-          key,
           id: product.id,
           name: product.name,
           cat: product.cat,
-          packagingId: packaging.id,
-          label: packaging.label,
-          size: packaging.size,
-          mode: modeOf(packaging),
-          unitPrice: packaging.price,
+          unitPrice: product.sellPrice,
           qty: 1,
-          unit: product.unit,
+          maxQty: product.qty,
         },
       ];
     });
   }, []);
 
-  const changeQty = useCallback(
-    (key, delta) => {
-      setCart((prev) => {
-        const line = prev.find((i) => i.key === key);
-        if (!line) return prev;
-        const product = products.find((p) => p.id === line.id);
-        const stock = product ? product.qty || 0 : 0;
-        // Pièces prises par les AUTRES lignes du même article.
-        const otherUnits = prev.reduce(
-          (sum, i) => (i.id === line.id && i.key !== key ? sum + lineUnits(i) : sum),
-          0
-        );
-        const max = maxSellable(line, stock - otherUnits);
-        const next = clampQty(line.qty + delta, max);
-        return prev.map((i) => (i.key === key ? { ...i, qty: next } : i));
-      });
-    },
-    [products]
-  );
+  const changeQty = useCallback((id, delta) => {
+    setCart((prev) =>
+      prev.map((i) =>
+        i.id === id ? { ...i, qty: Math.min(i.maxQty, Math.max(1, i.qty + delta)) } : i
+      )
+    );
+  }, []);
 
   const removeFromCart = useCallback(
-    (key) => setCart((prev) => prev.filter((i) => i.key !== key)),
+    (id) => setCart((prev) => prev.filter((i) => i.id !== id)),
     []
-  );
-
-  /**
-   * Plafond d'une ligne : le stock de l'article, moins ce que les autres lignes
-   * du même article ont déjà pris, converti dans l'unité vendue par cette ligne.
-   */
-  const maxForLine = useCallback(
-    (line) => {
-      const product = products.find((p) => p.id === line.id);
-      const stock = product ? product.qty || 0 : 0;
-      const otherUnits = cart.reduce(
-        (sum, i) => (i.id === line.id && i.key !== line.key ? sum + lineUnits(i) : sum),
-        0
-      );
-      return maxSellable(line, stock - otherUnits);
-    },
-    [cart, products]
   );
 
   // ── Quick client creation (credit sales) ─────────────────────────────────────
@@ -343,19 +219,7 @@ export default function Caisse() {
 
     const saleDate = new Date().toISOString();
     const todayStr = saleDate.slice(0, 10);
-    // `qty` est exprimée dans l'unité vendue (pièce ou carton) ; `units` porte
-    // toujours l'équivalent en unités de base, seule mesure comparable entre
-    // une vente au détail et une vente en gros.
-    const saleItems = cart.map((i) => ({
-      name: i.name,
-      qty: i.qty,
-      unitPrice: i.unitPrice,
-      mode: i.mode,
-      unitLabel: i.label,
-      units: lineUnits(i),
-      packSize: i.size || 0,
-      lineTotal: lineTotal(i),
-    }));
+    const saleItems = cart.map((i) => ({ name: i.name, qty: i.qty, unitPrice: i.unitPrice }));
     const creditContact =
       payment === 'crédit' ? contacts.find((c) => c.id === creditContactId) : null;
     const resolvedClient = creditContact?.name || clientName || 'Client anonyme';
@@ -369,20 +233,15 @@ export default function Caisse() {
       ...(payment === 'crédit' ? { contactId: creditContactId } : {}),
     });
 
-    // Deduct stock + journal des mouvements.
-    // Le stock est tenu en unités de base : un carton de 40 en retire 40.
+    // Deduct stock + journal des mouvements
     cart.forEach((item) => {
-      const units = lineUnits(item);
-      adjustStock(item.id, -units);
+      adjustStock(item.id, -item.qty);
       logMovement({
         productId: item.id,
         productName: item.name,
         type: 'sortie',
-        qty: units,
-        reason:
-          item.mode === WHOLESALE
-            ? `Vente en caisse (gros — ${item.qty} ${item.label})`
-            : 'Vente en caisse (détail)',
+        qty: item.qty,
+        reason: 'Vente en caisse',
         refId: newSale.id,
       });
     });
@@ -639,21 +498,26 @@ export default function Caisse() {
                   const outOfStock = !product.qty || product.qty <= 0;
                   const lowStock = !outOfStock && product.qty <= (product.minQty || 0);
                   const inCart = cart.some((i) => i.id === product.id);
-                  // Stock encore libre une fois le panier déduit : c'est lui qui
-                  // décide si un lot de plus tient encore.
-                  const free = (product.qty || 0) - (unitsInCart.get(product.id) || 0);
-                  const packagings = normalizePackagings(product);
                   return (
                     <div
                       key={product.id || product.name}
-                      title={outOfStock ? 'Rupture de stock' : product.name}
+                      onClick={() => !outOfStock && addToCart(product)}
+                      title={outOfStock ? 'Rupture de stock' : `Ajouter ${product.name} au panier`}
                       style={{
                         background: outOfStock ? 'rgba(26,16,8,0.6)' : C.card,
                         border: `1px solid ${inCart ? C.amber : outOfStock ? C.red : C.border}`,
                         borderRadius: '10px',
                         padding: '14px',
+                        cursor: outOfStock ? 'not-allowed' : 'pointer',
                         opacity: outOfStock ? 0.5 : 1,
-                        transition: 'border-color 0.15s',
+                        transition: 'border-color 0.15s, transform 0.12s',
+                        userSelect: 'none',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!outOfStock) e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
                       }}
                     >
                       <div
@@ -683,53 +547,25 @@ export default function Caisse() {
                       </div>
                       <div
                         style={{
-                          fontSize: '11px',
-                          color: outOfStock ? C.red : lowStock ? C.amber : C.muted,
-                          fontWeight: 600,
-                          marginTop: '6px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginTop: '10px',
                         }}
                       >
-                        {product.qty} {product.unit || 'u.'} en stock
-                      </div>
-
-                      {/* Un article conditionné a deux tarifs : on les nomme et
-                          on leur donne chacun sa cible, plutôt que de laisser
-                          deviner que toucher la carte vend à la pièce. */}
-                      {!outOfStock && (
-                        <div
+                        <span style={{ fontSize: '15px', fontWeight: 800, color: C.amber }}>
+                          {fmt(product.sellPrice)}
+                        </span>
+                        <span
                           style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '6px',
-                            marginTop: '10px',
+                            fontSize: '11px',
+                            color: outOfStock ? C.red : lowStock ? C.amber : C.muted,
+                            fontWeight: 600,
                           }}
                         >
-                          {packagings.map((pk) => {
-                            const bulk = pk.size > 1;
-                            const fits = free >= pk.size;
-                            return (
-                              <PriceButton
-                                key={pk.id}
-                                label={bulk ? pk.label : 'Détail'}
-                                price={pk.price}
-                                per={
-                                  bulk
-                                    ? `${pk.label} de ${pk.size}`
-                                    : product.unit || 'unité'
-                                }
-                                color={bulk ? C.terra : C.amber}
-                                icon={bulk ? <Layers size={12} /> : null}
-                                disabled={!fits}
-                                disabledHint={`Il reste ${free} ${product.unit || 'u.'} : pas de quoi faire un ${pk.label} entier`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  addToCart(product, pk);
-                                }}
-                              />
-                            );
-                          })}
-                        </div>
-                      )}
+                          {product.qty} {product.unit || 'u.'}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
@@ -770,7 +606,7 @@ export default function Caisse() {
                   <ShoppingCart size={28} color={C.muted} style={{ marginBottom: '10px' }} />
                   <p style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Panier vide</p>
                   <p style={{ margin: '6px 0 0', fontSize: '12px' }}>
-                    Choisissez un tarif — détail ou gros — sur un article
+                    Cliquez sur un article pour l&apos;ajouter
                   </p>
                 </div>
               ) : (
@@ -784,10 +620,10 @@ export default function Caisse() {
                 >
                   {cart.map((item) => (
                     <div
-                      key={item.key}
+                      key={item.id}
                       style={{
                         background: C.card2,
-                        border: `1px solid ${item.mode === WHOLESALE ? C.terra : C.border}`,
+                        border: `1px solid ${C.border}`,
                         borderRadius: '8px',
                         padding: '10px 12px',
                       }}
@@ -813,41 +649,12 @@ export default function Caisse() {
                           >
                             {item.name}
                           </div>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              flexWrap: 'wrap',
-                              marginTop: '3px',
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                letterSpacing: '0.04em',
-                                textTransform: 'uppercase',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                color: item.mode === WHOLESALE ? C.terra : C.muted,
-                                border: `1px solid ${item.mode === WHOLESALE ? C.terra : C.border}`,
-                              }}
-                            >
-                              {item.mode === WHOLESALE ? 'Gros' : 'Détail'}
-                            </span>
-                            <span style={{ fontSize: '12px', color: C.muted }}>
-                              {fmt(item.unitPrice)} / {item.label}
-                            </span>
+                          <div style={{ fontSize: '12px', color: C.muted, marginTop: '2px' }}>
+                            {fmt(item.unitPrice)} / unité
                           </div>
-                          {item.mode === WHOLESALE && (
-                            <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>
-                              {lineUnits(item)} {item.unit || 'u.'} retirées du stock
-                            </div>
-                          )}
                         </div>
                         <button
-                          onClick={() => removeFromCart(item.key)}
+                          onClick={() => removeFromCart(item.id)}
                           style={{
                             background: 'none',
                             border: 'none',
@@ -873,7 +680,7 @@ export default function Caisse() {
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <button
-                            onClick={() => changeQty(item.key, -1)}
+                            onClick={() => changeQty(item.id, -1)}
                             disabled={item.qty <= 1}
                             style={{
                               width: '26px',
@@ -903,16 +710,16 @@ export default function Caisse() {
                             {item.qty}
                           </span>
                           <button
-                            onClick={() => changeQty(item.key, 1)}
-                            disabled={item.qty >= maxForLine(item)}
+                            onClick={() => changeQty(item.id, 1)}
+                            disabled={item.qty >= item.maxQty}
                             style={{
                               width: '26px',
                               height: '26px',
                               borderRadius: '6px',
                               background: C.card,
                               border: `1px solid ${C.border}`,
-                              color: item.qty >= maxForLine(item) ? C.muted : C.text,
-                              cursor: item.qty >= maxForLine(item) ? 'not-allowed' : 'pointer',
+                              color: item.qty >= item.maxQty ? C.muted : C.text,
+                              cursor: item.qty >= item.maxQty ? 'not-allowed' : 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -923,7 +730,7 @@ export default function Caisse() {
                           </button>
                         </div>
                         <span style={{ fontSize: '14px', fontWeight: 800, color: C.amber }}>
-                          {fmt(lineTotal(item))}
+                          {fmt(item.unitPrice * item.qty)}
                         </span>
                       </div>
                     </div>
@@ -1318,25 +1125,12 @@ export default function Caisse() {
             </thead>
             <tbody>
               {cart.map((item) => (
-                <tr key={item.key} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: '8px', fontSize: '13px', color: C.text }}>
-                    {item.name}
-                    {item.mode === WHOLESALE && (
-                      <span style={{ color: C.terra, fontWeight: 700, fontSize: '11px' }}>
-                        {' '}
-                        · GROS
-                      </span>
-                    )}
-                  </td>
+                <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: '8px', fontSize: '13px', color: C.text }}>{item.name}</td>
                   <td
                     style={{ padding: '8px', fontSize: '13px', color: C.muted, textAlign: 'right' }}
                   >
-                    {item.qty} {item.label}
-                    {item.mode === WHOLESALE && (
-                      <div style={{ fontSize: '11px', opacity: 0.75 }}>
-                        = {lineUnits(item)} {item.unit || 'u.'}
-                      </div>
-                    )}
+                    {item.qty}
                   </td>
                   <td
                     style={{ padding: '8px', fontSize: '13px', color: C.muted, textAlign: 'right' }}
@@ -1352,7 +1146,7 @@ export default function Caisse() {
                       textAlign: 'right',
                     }}
                   >
-                    {fmt(lineTotal(item))}
+                    {fmt(item.qty * item.unitPrice)}
                   </td>
                 </tr>
               ))}

@@ -8,7 +8,6 @@ import useSettings from '../hooks/useSettings';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { fmt } from '../utils/formatCurrency';
-import { WHOLESALE } from '../utils/packaging';
 import {
   getMonthRange,
   isInRange,
@@ -250,16 +249,8 @@ export default function Comptabilite() {
               (p) =>
                 p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase()
             );
-            // Le coût est porté par l'unité de base : une ligne vendue au carton
-            // en consomme `units`, pas `qty`. Comparer le prix du carton au coût
-            // d'une pièce gonflerait la marge d'un facteur égal au lot.
-            const unitCost = prod ? prod.buyPrice || 0 : 0;
-            const revenu =
-              item.lineTotal != null
-                ? item.lineTotal
-                : (item.unitPrice || 0) * (item.qty || 0);
-            const unites = item.units != null ? item.units : item.qty || 0;
-            return s + (revenu - unitCost * unites);
+            const buyPrice = prod ? prod.buyPrice || 0 : 0;
+            return s + ((item.unitPrice || 0) - buyPrice) * (item.qty || 0);
           }, 0)
         );
       }, 0),
@@ -350,45 +341,6 @@ export default function Comptabilite() {
       { label: 'Crédit', amount: credit, pct: (credit / total) * 100, color: C.amber },
     ];
   }, [periodSales, chiffreAffaires]);
-
-  /**
-   * Répartition du chiffre d'affaires entre gros et détail, ligne par ligne.
-   * Les ventes enregistrées avant l'ouverture du gros n'ont pas de `mode` :
-   * elles étaient toutes au détail, on les compte comme telles.
-   */
-  const channelData = useMemo(() => {
-    let gros = 0;
-    let detail = 0;
-    periodSales.forEach((sale) => {
-      (sale.items || []).forEach((item) => {
-        const amount =
-          item.lineTotal != null
-            ? item.lineTotal
-            : (item.unitPrice || 0) * (item.qty || 0);
-        if (item.mode === WHOLESALE) gros += amount;
-        else detail += amount;
-      });
-    });
-    const total = gros + detail || 1;
-    return {
-      gros,
-      detail,
-      rows: [
-        {
-          label: 'Détail',
-          amount: detail,
-          pct: (detail / total) * 100,
-          color: C.amber,
-        },
-        {
-          label: 'Gros',
-          amount: gros,
-          pct: (gros / total) * 100,
-          color: C.terra,
-        },
-      ],
-    };
-  }, [periodSales]);
 
   // ── Accordion: days with activity within the period (most recent first) ─────
   const { accordionDays, activeDayCount } = useMemo(() => {
@@ -625,66 +577,6 @@ export default function Comptabilite() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {paymentData.map(({ label, amount, pct, color }) => (
-                  <div key={label}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        marginBottom: '4px',
-                        fontSize: '13px',
-                      }}
-                    >
-                      <span style={{ color: C.text }}>{label}</span>
-                      <span style={{ fontWeight: 700, color: color }}>
-                        {fmt(amount)}
-                        <span
-                          style={{
-                            color: C.muted,
-                            fontWeight: 400,
-                            fontSize: '11px',
-                            marginLeft: '6px',
-                          }}
-                        >
-                          {pct.toFixed(0)}%
-                        </span>
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        height: '6px',
-                        background: C.border,
-                        borderRadius: '99px',
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: '100%',
-                          width: pct + '%',
-                          background: color,
-                          borderRadius: '99px',
-                          transition: 'width 0.3s ease',
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          {/* Gros vs détail */}
-          <Panel>
-            <SecTitle>Ventes en gros et au détail</SecTitle>
-            {chiffreAffaires === 0 ? (
-              <p
-                style={{ color: C.muted, fontSize: '14px', textAlign: 'center', margin: '12px 0' }}
-              >
-                Aucune vente sur cette période.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {channelData.rows.map(({ label, amount, pct, color }) => (
                   <div key={label}>
                     <div
                       style={{
