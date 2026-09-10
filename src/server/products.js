@@ -184,7 +184,9 @@ function insertUnits(sql, businessId, productId, units) {
 
 export async function createProduct(session, body) {
   const input = readProductInput(body);
-  const initialStock = round3(num(body.stockQuantity, 'stock initial', { min: 0, required: false }));
+  const initialStock = round3(
+    num(body.stockQuantity, 'stock initial', { min: 0, required: false })
+  );
   const productId = newId('prd');
   const sql = getSql();
 

@@ -5,13 +5,7 @@
  * permet de répondre à « pourquoi le stock est-il passé de 50 à 37 ? ». Les
  * quantités y sont signées et exprimées en unité de base.
  */
-export const MOVEMENT_TYPES = [
-  'SALE',
-  'SALE_CANCEL',
-  'PURCHASE_RECEIPT',
-  'RETURN',
-  'ADJUSTMENT',
-];
+export const MOVEMENT_TYPES = ['SALE', 'SALE_CANCEL', 'PURCHASE_RECEIPT', 'RETURN', 'ADJUSTMENT'];
 
 export const MOVEMENT_LABELS = {
   SALE: 'Vente',

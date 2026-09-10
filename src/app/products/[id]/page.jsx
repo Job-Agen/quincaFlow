@@ -109,7 +109,9 @@ export default function ProductPage({ params }) {
               </div>
 
               {data.units.length > 1 ? (
-                <p className="small muted">{describeStock(data.stock_quantity, data.units, data.base_unit)}</p>
+                <p className="small muted">
+                  {describeStock(data.stock_quantity, data.units, data.base_unit)}
+                </p>
               ) : null}
 
               <div className="grid-2">
@@ -183,7 +185,9 @@ export default function ProductPage({ params }) {
                     <div className="list__end">
                       <strong
                         className="num"
-                        style={{ color: movement.quantity < 0 ? 'var(--red)' : 'var(--green-dark)' }}
+                        style={{
+                          color: movement.quantity < 0 ? 'var(--red)' : 'var(--green-dark)',
+                        }}
                       >
                         {movement.quantity > 0 ? '+' : ''}
                         {quantity(movement.quantity)}

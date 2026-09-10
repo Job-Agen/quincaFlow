@@ -29,6 +29,17 @@ export const PO_STATUS_LABELS = {
   CANCELLED: 'Annulée',
 };
 
+/** Teinte de badge par statut : vert quand c'est livré, ambre tant que ça court. */
+export const PO_STATUS_TONES = {
+  DRAFT: 'grey',
+  SENT: 'blue',
+  INVOICE_RECEIVED: 'amber',
+  PAID: 'blue',
+  PARTIALLY_RECEIVED: 'amber',
+  RECEIVED: 'green',
+  CANCELLED: 'grey',
+};
+
 /** Statuts que le gérant peut poser à la main ; la réception, elle, est déduite. */
 export const PO_MANUAL_STATUSES = ['DRAFT', 'SENT', 'INVOICE_RECEIVED', 'PAID', 'CANCELLED'];
 

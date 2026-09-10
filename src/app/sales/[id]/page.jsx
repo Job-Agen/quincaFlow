@@ -202,8 +202,8 @@ function CancelSheet({ open, reference, onClose, onConfirm }) {
     <Sheet open={open} title={`Annuler la vente ${reference}`} onClose={onClose}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <Notice tone="warn">
-        La vente restera dans l&apos;historique, marquée annulée, et les articles
-        retourneront en stock par un mouvement inverse.
+        La vente restera dans l&apos;historique, marquée annulée, et les articles retourneront en
+        stock par un mouvement inverse.
       </Notice>
       <TextField
         label="Motif"

@@ -86,7 +86,11 @@ export async function createSale(session, body) {
   const lines = await priceLines(session.businessId, body.lines);
   const totals = totalsOf(lines, num(body.discount, 'remise', { min: 0, required: false }));
 
-  const paymentMethod = enumValue(body.paymentMethod || 'CASH', 'mode de paiement', PAYMENT_METHODS);
+  const paymentMethod = enumValue(
+    body.paymentMethod || 'CASH',
+    'mode de paiement',
+    PAYMENT_METHODS
+  );
   // Sans montant précisé, la vente est réputée réglée intégralement : c'est le
   // cas de très loin le plus courant au comptoir.
   const amountPaid =

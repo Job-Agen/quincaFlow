@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api } from './api';
 
@@ -20,23 +20,24 @@ const PUBLIC_ROUTES = ['/login', '/register'];
 
 export function SessionProvider({ children }) {
   const [state, setState] = useState({ status: 'loading', profile: null });
+  const [nonce, setNonce] = useState(0);
   const router = useRouter();
   const pathname = usePathname();
 
-  const load = useCallback(async () => {
-    try {
-      const profile = await api.get('/api/auth/me');
-      setState({ status: 'authenticated', profile });
-      return profile;
-    } catch {
-      setState({ status: 'anonymous', profile: null });
-      return null;
-    }
-  }, []);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    api
+      .get('/api/auth/me')
+      .then((profile) => {
+        if (!cancelled) setState({ status: 'authenticated', profile });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ status: 'anonymous', profile: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [nonce]);
 
   // La redirection est faite ici plutôt que dans chaque page : une seule règle,
   // appliquée partout, évite qu'un écran oublié reste accessible sans session.
@@ -55,7 +56,7 @@ export function SessionProvider({ children }) {
       role: state.profile?.role || null,
       isOwner: state.profile?.role === 'OWNER',
       currency: state.profile?.business?.currency || 'FCFA',
-      reload: load,
+      reload: () => setNonce((current) => current + 1),
       setProfile: (profile) => setState({ status: 'authenticated', profile }),
       signOut: async () => {
         await api.post('/api/auth/logout').catch(() => {});
@@ -63,7 +64,7 @@ export function SessionProvider({ children }) {
         router.replace('/login');
       },
     }),
-    [state, load, router]
+    [state, router]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

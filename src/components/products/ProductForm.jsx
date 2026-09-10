@@ -164,11 +164,16 @@ export default function ProductForm({ initial, onSubmit, submitLabel, currency }
           </p>
 
           {form.units.length === 0 ? (
-            <p className="small muted">Aucun conditionnement : le produit se vend à l&apos;unité.</p>
+            <p className="small muted">
+              Aucun conditionnement : le produit se vend à l&apos;unité.
+            </p>
           ) : null}
 
           {form.units.map((unit, index) => {
-            const perUnit = pricePerBaseUnit({ factor: Number(unit.factor), price: Number(unit.price) });
+            const perUnit = pricePerBaseUnit({
+              factor: Number(unit.factor),
+              price: Number(unit.price),
+            });
             const cost = costPerBaseUnit(form.purchasePrice, { factor: 1 });
             return (
               <div key={index} className="stack" style={{ gap: 8 }}>
@@ -214,7 +219,10 @@ export default function ProductForm({ initial, onSubmit, submitLabel, currency }
                   <p className="small muted">
                     Revient à {money(perUnit, currency)} l&apos;{form.baseUnit || 'unité'}
                     {cost > 0 && perUnit < cost ? (
-                      <span style={{ color: 'var(--red)' }}> — en dessous du prix d&apos;achat</span>
+                      <span style={{ color: 'var(--red)' }}>
+                        {' '}
+                        — en dessous du prix d&apos;achat
+                      </span>
                     ) : null}
                   </p>
                 ) : null}

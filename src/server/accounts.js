@@ -26,9 +26,7 @@ export async function register(body) {
   };
 
   const sql = getSql();
-  const existing = one(
-    await sql`SELECT id FROM users WHERE email = ${input.email} LIMIT 1`
-  );
+  const existing = one(await sql`SELECT id FROM users WHERE email = ${input.email} LIMIT 1`);
   if (existing) throw conflict('Un compte existe déjà avec cette adresse e-mail.');
 
   const userId = newId('usr');

@@ -39,7 +39,10 @@ function readInput(kind, body) {
   const spec = specOf(kind);
   const input = { name: str(body.name, 'nom', { max: 160 }) };
   spec.fields.slice(1).forEach((field) => {
-    input[field] = str(body[field], field, { required: false, max: field === 'notes' ? 1000 : 120 });
+    input[field] = str(body[field], field, {
+      required: false,
+      max: field === 'notes' ? 1000 : 120,
+    });
   });
   return input;
 }

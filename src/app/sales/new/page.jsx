@@ -135,7 +135,11 @@ export default function NewSalePage() {
           ))}
         </SelectField>
 
-        <button type="button" className="btn btn--ghost btn--block" onClick={() => setPicking(true)}>
+        <button
+          type="button"
+          className="btn btn--ghost btn--block"
+          onClick={() => setPicking(true)}
+        >
           <Search size={18} />
           Rechercher un produit…
         </button>
@@ -183,7 +187,8 @@ export default function NewSalePage() {
                             >
                               {units.map((unit) => (
                                 <option key={unit.id} value={unit.id}>
-                                  {unit.label} ({fmtQuantity(unit.factor)} {found.product.base_unit})
+                                  {unit.label} ({fmtQuantity(unit.factor)} {found.product.base_unit}
+                                  )
                                 </option>
                               ))}
                             </select>
@@ -219,7 +224,9 @@ export default function NewSalePage() {
                             inputMode="decimal"
                             min="0"
                             step="any"
-                            value={line.entry.unitPrice === '' ? line.unitPrice : line.entry.unitPrice}
+                            value={
+                              line.entry.unitPrice === '' ? line.unitPrice : line.entry.unitPrice
+                            }
                             aria-label={`Prix unitaire — ${line.productName}`}
                             onChange={(event) =>
                               patchLine(line.key, { unitPrice: event.target.value })
@@ -247,7 +254,11 @@ export default function NewSalePage() {
           )}
         </Card>
 
-        <button type="button" className="btn btn--dashed btn--block" onClick={() => setPicking(true)}>
+        <button
+          type="button"
+          className="btn btn--dashed btn--block"
+          onClick={() => setPicking(true)}
+        >
           <Plus size={18} />
           Ajouter un produit
         </button>
@@ -335,7 +346,12 @@ function ProductPicker({ open, onClose, products, loading, currency, onPick }) {
       ) : null}
       <div className="list">
         {results.map((product) => (
-          <button key={product.id} type="button" className="list__row" onClick={() => onPick(product)}>
+          <button
+            key={product.id}
+            type="button"
+            className="list__row"
+            onClick={() => onPick(product)}
+          >
             <div className="list__body">
               <div className="list__title">{product.name}</div>
               <div className="list__sub">

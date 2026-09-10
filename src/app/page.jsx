@@ -114,7 +114,8 @@ export default function DashboardPage() {
                       <span
                         className="thumb"
                         style={{
-                          background: product.stock_quantity <= 0 ? 'var(--red-soft)' : 'var(--amber-soft)',
+                          background:
+                            product.stock_quantity <= 0 ? 'var(--red-soft)' : 'var(--amber-soft)',
                           borderColor: 'transparent',
                           color: product.stock_quantity <= 0 ? 'var(--red)' : 'var(--amber)',
                         }}
@@ -156,9 +157,7 @@ export default function DashboardPage() {
                     <Link
                       key={`${entry.kind}-${entry.id}`}
                       href={
-                        entry.kind === 'SALE'
-                          ? `/sales/${entry.id}`
-                          : `/out-of-stock/${entry.id}`
+                        entry.kind === 'SALE' ? `/sales/${entry.id}` : `/out-of-stock/${entry.id}`
                       }
                       className="list__row"
                     >

@@ -1,40 +1,50 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 
 /**
- * Lecture d'une ressource d'API, avec état de chargement et rechargement.
+ * Lecture d'une ressource d'API.
  *
  * `query` est sérialisé pour servir de dépendance : passer l'objet lui-même
- * relancerait la requête à chaque rendu, puisqu'un littéral fraîchement créé
- * n'est jamais égal au précédent. Une réponse arrivée après le démontage du
- * composant est ignorée, de même qu'une réponse périmée doublée par une
- * recherche plus récente.
+ * relancerait la requête à chaque rendu, un littéral fraîchement créé n'étant
+ * jamais égal au précédent.
+ *
+ * L'état retenu porte la clé qui l'a produit. C'en est le cœur : `loading` s'en
+ * déduit — les données affichées ne correspondent pas encore à la requête
+ * demandée — et les données précédentes restent visibles pendant qu'une nouvelle
+ * recherche se charge, plutôt que de faire clignoter la liste à chaque lettre.
+ * Une réponse arrivée après un démontage ou doublée par une requête plus récente
+ * est ignorée.
  */
 export function useResource(path, query, { enabled = true } = {}) {
-  const [state, setState] = useState({ data: null, error: null, loading: enabled });
   const key = JSON.stringify(query ?? null);
-  const latest = useRef(0);
-
-  const reload = useCallback(async () => {
-    if (!path || !enabled) return;
-    const ticket = ++latest.current;
-    setState((current) => ({ ...current, loading: true }));
-    try {
-      const data = await api.get(path, JSON.parse(key));
-      if (ticket === latest.current) setState({ data, error: null, loading: false });
-    } catch (error) {
-      if (ticket === latest.current) setState({ data: null, error, loading: false });
-    }
-  }, [path, key, enabled]);
+  const [nonce, setNonce] = useState(0);
+  const [state, setState] = useState({ data: null, error: null, key: null });
 
   useEffect(() => {
-    reload();
+    if (!path || !enabled) return undefined;
+    let cancelled = false;
+    api
+      .get(path, JSON.parse(key))
+      .then((data) => {
+        if (!cancelled) setState({ data, error: null, key });
+      })
+      .catch((error) => {
+        if (!cancelled) setState({ data: null, error, key });
+      });
     return () => {
-      latest.current += 1;
+      cancelled = true;
     };
-  }, [reload]);
+  }, [path, key, enabled, nonce]);
 
-  return { ...state, reload, setData: (data) => setState({ data, error: null, loading: false }) };
+  const setData = useCallback((data) => setState({ data, error: null, key }), [key]);
+
+  return {
+    data: state.data,
+    error: state.key === key ? state.error : null,
+    loading: enabled && state.key !== key,
+    reload: useCallback(() => setNonce((current) => current + 1), []),
+    setData,
+  };
 }

@@ -107,8 +107,7 @@ async function readItems(businessId, rawItems) {
       quantityOrdered: entry.quantity,
       // À défaut de coût saisi, on retient le coût connu du produit ramené au
       // conditionnement commandé : commander au carton n'est pas commander à la pièce.
-      unitCost:
-        entry.unitCost || round2((found.product.purchase_price || 0) * unit.factor),
+      unitCost: entry.unitCost || round2((found.product.purchase_price || 0) * unit.factor),
     };
   });
 }

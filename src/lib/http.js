@@ -15,7 +15,8 @@ export class ApiError extends Error {
 }
 
 export const badRequest = (message, details) => new ApiError(400, message, details);
-export const unauthorized = (message = 'Session expirée ou invalide.') => new ApiError(401, message);
+export const unauthorized = (message = 'Session expirée ou invalide.') =>
+  new ApiError(401, message);
 export const forbidden = (message = 'Action non autorisée.') => new ApiError(403, message);
 export const notFound = (message = 'Introuvable.') => new ApiError(404, message);
 export const conflict = (message) => new ApiError(409, message);

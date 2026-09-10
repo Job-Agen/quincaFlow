@@ -39,7 +39,5 @@ export async function nextReference(businessId, kind) {
   `;
 
   const value = String(rows[0].value).padStart(format.pad, '0');
-  return format.yearly
-    ? `${format.prefix}-${year}-${value}`
-    : `${format.prefix}-${value}`;
+  return format.yearly ? `${format.prefix}-${year}-${value}` : `${format.prefix}-${value}`;
 }
