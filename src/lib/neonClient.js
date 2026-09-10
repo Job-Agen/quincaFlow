@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Client pour communiquer avec les API de l'application QuincailPro (Neon Postgres & Auth).
+ * Client pour communiquer avec les API de l'application QuincaFlow (Neon Postgres & Auth).
  */
 
 export async function getAuthUser() {

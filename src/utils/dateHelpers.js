@@ -1,5 +1,5 @@
 /**
- * Date utility helpers for QuincailPro.
+ * Date utility helpers for QuincaFlow.
  */
 
 // Returns "YYYY-MM-DD" for today

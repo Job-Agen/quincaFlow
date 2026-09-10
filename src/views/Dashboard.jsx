@@ -294,7 +294,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ── BANNIÈRE HÉRO AMBRE / SOMBRE (THÈME QUINCAILPRO) ─────── */}
+      {/* ── BANNIÈRE HÉRO AMBRE / SOMBRE (THÈME QUINCAFLOW) ─────── */}
       <div
         style={{
           background: 'linear-gradient(135deg, #341F0B 0%, #1A0D04 100%)',

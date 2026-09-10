@@ -1,4 +1,4 @@
--- Schema SQL pour QuincailPro avec Neon Serverless Postgres
+-- Schema SQL pour QuincaFlow avec Neon Serverless Postgres
 
 -- Table des utilisateurs (Auth)
 CREATE TABLE IF NOT EXISTS users (
