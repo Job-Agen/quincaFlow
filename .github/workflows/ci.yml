@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Une nouvelle poussée sur une branche annule la vérification en cours :
+# seul le dernier état compte, et les minutes des runs dépassés sont perdues.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualite:
+    name: Lint, format et build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      # Volontairement sans DATABASE_URL ni JWT_SECRET : le build ne doit
+      # dépendre d'aucun secret. S'il commence à en exiger un, c'est qu'une
+      # lecture de base a glissé dans le rendu statique — et il faut le savoir ici.
+      - run: npm run build
+
+  tests:
+    name: Tests unitaires et d'intégration
+    runs-on: ubuntu-latest
+
+    # Sans ce service, les tests d'intégration s'ignorent silencieusement et la
+    # CI passerait au vert sans avoir vérifié ni l'atomicité des ventes, ni les
+    # contraintes de stock, ni l'isolation multi-tenant.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: quincaflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/quincaflow_test
+
+      # Filet de sécurité : `npm test` reste vert quand la suite d'intégration
+      # est ignorée. Ici elle doit s'exécuter, donc on exige qu'elle apparaisse.
+      - name: Vérifier que les tests d'intégration ont bien tourné
+        run: |
+          npx vitest run src/server --reporter=json --outputFile=/tmp/resultats.json
+          node -e "
+            const { testResults } = require('/tmp/resultats.json');
+            const total = testResults.reduce((n, f) => n + f.assertionResults.length, 0);
+            const passed = testResults.reduce(
+              (n, f) => n + f.assertionResults.filter((t) => t.status === 'passed').length,
+              0
+            );
+            if (passed === 0) {
+              console.error('Aucun test d\'intégration exécuté : le service Postgres est-il joignable ?');
+              process.exit(1);
+            }
+            console.log(\`\${passed}/\${total} tests d'intégration exécutés.\`);
+          "
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/quincaflow_test
