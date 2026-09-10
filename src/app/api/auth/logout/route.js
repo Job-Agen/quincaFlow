@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server';
-import { clearSessionCookie } from '../../../../lib/authServer';
+import { handle, json } from '../../../../lib/http';
+import { clearSessionCookies, readRefreshCookie, revokeRefreshToken } from '../../../../lib/auth';
 
+/** Déconnexion : le refresh token est réellement révoqué en base, pas seulement oublié. */
 export async function POST() {
-  await clearSessionCookie();
-  return NextResponse.json({ ok: true });
+  return handle(async () => {
+    await revokeRefreshToken(await readRefreshCookie());
+    await clearSessionCookies();
+    return json({ ok: true });
+  });
 }
