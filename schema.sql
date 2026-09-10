@@ -147,6 +147,11 @@ CREATE TABLE IF NOT EXISTS sales (
   id             text PRIMARY KEY,
   business_id    text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
   reference      text NOT NULL,
+  -- Deux numérotations distinctes : `reference` (VE-0001) identifie l'opération
+  -- dans l'historique, `invoice_reference` (FA-2026-0001) numérote le document
+  -- remis au client. Les confondre obligerait à renuméroter l'un des deux le
+  -- jour où l'autre change de format.
+  invoice_reference text NOT NULL,
   customer_id    text REFERENCES customers (id) ON DELETE SET NULL,
   customer_name  text,
   user_id        text REFERENCES users (id) ON DELETE SET NULL,
@@ -163,7 +168,8 @@ CREATE TABLE IF NOT EXISTS sales (
   note           text,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (business_id, reference)
+  UNIQUE (business_id, reference),
+  UNIQUE (business_id, invoice_reference)
 );
 
 CREATE INDEX IF NOT EXISTS sales_business_date_idx ON sales (business_id, created_at DESC);

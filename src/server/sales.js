@@ -101,17 +101,23 @@ export async function createSale(session, body) {
     : str(body.customerName, 'client', { required: false }) || 'Client comptoir';
 
   const saleId = newId('sal');
-  const reference = await nextReference(session.businessId, 'SALE');
+  // Les deux numéros sont réservés en parallèle : ce sont deux allers-retours
+  // vers Neon, et les enchaîner se verrait sur une connexion mobile.
+  const [reference, invoiceReference] = await Promise.all([
+    nextReference(session.businessId, 'SALE'),
+    nextReference(session.businessId, 'INVOICE'),
+  ]);
   const sql = getSql();
 
   const queries = [
     sql`
       INSERT INTO sales (
-        id, business_id, reference, customer_id, customer_name, user_id,
+        id, business_id, reference, invoice_reference, customer_id, customer_name, user_id,
         subtotal, discount, total, cost_of_goods,
         payment_method, amount_paid, payment_status, status, note
       ) VALUES (
-        ${saleId}, ${session.businessId}, ${reference}, ${customerId}, ${customerName},
+        ${saleId}, ${session.businessId}, ${reference}, ${invoiceReference},
+        ${customerId}, ${customerName},
         ${session.userId}, ${totals.subtotal}, ${totals.discount}, ${totals.total},
         ${totals.costOfGoods}, ${paymentMethod}, ${amountPaid}, ${paymentStatus},
         'COMPLETED', ${str(body.note, 'note', { required: false, max: 500 })}
@@ -169,7 +175,7 @@ async function customerNameOf(businessId, customerId) {
 }
 
 const SALE_COLUMNS = `
-  id, business_id, reference, customer_id, customer_name, user_id,
+  id, business_id, reference, invoice_reference, customer_id, customer_name, user_id,
   subtotal::float8 AS subtotal, discount::float8 AS discount, total::float8 AS total,
   cost_of_goods::float8 AS cost_of_goods, amount_paid::float8 AS amount_paid,
   payment_method, payment_status, status, note, created_at

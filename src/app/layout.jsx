@@ -1,29 +1,27 @@
 import './globals.css';
-import AppShell from '../components/layout/AppShell';
-import SeedData from '../components/layout/SeedData';
-import SyncGate from '../components/auth/SyncGate';
+import { SessionProvider } from '@/client/session';
+import AppShell from '@/components/layout/AppShell';
 
 export const metadata = {
-  title: 'Ma Boutique — Gestion',
-  description: 'Application de gestion de boutique',
+  title: 'QuincaFlow — gestion de quincaillerie',
+  description: 'Ventes, stock, ventes hors stock et achats fournisseurs, pour les quincailleries.',
+};
+
+/** Le thème du navigateur suit la barre d'application : pas de bande blanche en haut. */
+export const viewport = {
+  themeColor: '#134e8e',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="fr">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Syne:wght@800&family=DM+Sans:wght@400;600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
       <body>
-        <SyncGate>
-          <SeedData />
+        <SessionProvider>
           <AppShell>{children}</AppShell>
-        </SyncGate>
+        </SessionProvider>
       </body>
     </html>
   );

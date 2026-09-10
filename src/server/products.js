@@ -26,11 +26,18 @@ const COLUMNS = `
   archived, created_at, updated_at
 `;
 
-/** Liste filtrable du catalogue. `filter` : all | low | out. */
+/**
+ * Liste filtrable du catalogue, conditionnements compris. `filter` : all|low|out.
+ *
+ * Les unités sont jointes ici parce que l'écran de vente en a besoin pour chaque
+ * article proposé : les charger à la sélection d'un produit ajouterait une
+ * attente réseau au moment précis où le vendeur ne doit pas en avoir.
+ */
 export async function listProducts(businessId, { search = '', filter = 'all', limit = 200 } = {}) {
   const sql = getSql();
   const term = search.trim() ? `%${search.trim()}%` : null;
-  return sql`
+
+  const products = await sql`
     SELECT ${sql.unsafe(COLUMNS)}
       FROM products
      WHERE business_id = ${businessId}
@@ -45,6 +52,21 @@ export async function listProducts(businessId, { search = '', filter = 'all', li
      ORDER BY name
      LIMIT ${Math.min(limit, 500)}
   `;
+  if (products.length === 0) return products;
+
+  const units = await sql`
+    SELECT id, product_id, label, factor::float8 AS factor, price::float8 AS price, is_base
+      FROM product_units
+     WHERE business_id = ${businessId} AND product_id = ANY(${products.map((p) => p.id)})
+  `;
+
+  const byProduct = new Map(products.map((product) => [product.id, []]));
+  units.forEach((unit) => byProduct.get(unit.product_id)?.push(unit));
+
+  return products.map((product) => ({
+    ...product,
+    units: unitsOf(product, byProduct.get(product.id)),
+  }));
 }
 
 /** Produits en alerte de stock, pour le tableau de bord (§8). */
