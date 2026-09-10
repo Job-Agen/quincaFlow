@@ -1,5 +1,5 @@
 /**
- * Date utility helpers for QuincailPro.
+ * Date utility helpers for QuincaFlow.
  */
 
 // Returns "YYYY-MM-DD" for today
@@ -90,8 +90,7 @@ export function getMonthRange(date = new Date(), offset = 0) {
 // [start, end] (Date objects). Date-only strings are interpreted as local midnight.
 export function isInRange(iso, start, end) {
   if (!iso || !start || !end) return false;
-  const str =
-    typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + 'T00:00:00' : iso;
+  const str = typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + 'T00:00:00' : iso;
   const d = new Date(str);
   if (isNaN(d.getTime())) return false;
   return d >= start && d <= end;
