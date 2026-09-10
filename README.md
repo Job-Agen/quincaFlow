@@ -131,6 +131,22 @@ code testé est bien le code livré, jusqu'au texte SQL : `src/test/neonOverPg.j
 présente l'interface du pilote Neon au-dessus de `node-postgres`, plutôt que de
 tordre le code de production pour le rendre testable.
 
+### Intégration continue
+
+`.github/workflows/ci.yml` rejoue tout cela sur chaque pull request et sur chaque
+poussée vers `master`, en deux tâches parallèles : lint + format + build d'un
+côté, tests de l'autre.
+
+La tâche de tests démarre un service PostgreSQL 16, donc la suite d'intégration
+s'exécute réellement en CI. Une étape de garde le vérifie : comme ces tests
+s'ignorent d'eux-mêmes quand la base manque, une erreur de configuration du
+service rendrait sinon la CI verte sans avoir contrôlé ni l'atomicité des ventes,
+ni les contraintes de stock, ni l'isolation multi-tenant.
+
+Le build tourne sans `DATABASE_URL` ni `JWT_SECRET` : aucun secret ne doit lui
+être nécessaire. Le jour où il en réclame un, c'est qu'une lecture de base a
+glissé dans le rendu statique.
+
 ## Modèle de données
 
 19 tables. Toutes portent `business_id`, à deux exceptions près : `users` et
