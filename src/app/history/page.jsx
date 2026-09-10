@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeftRight, ChevronRight, PackageCheck, Receipt, Truck } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Card, Empty, Notice, SearchField, Segmented, Skeleton } from '@/components/ui';
@@ -71,10 +72,12 @@ function statusBadge(entry) {
   return <Badge tone="green">Reçue</Badge>;
 }
 
-export default function HistoryPage() {
+function HistoryView() {
+  const params = useSearchParams();
   const { currency } = useSession();
   const [period, setPeriod] = useState('7d');
-  const [kind, setKind] = useState('');
+  // La nature vient de l'URL : /sales redirige ici en pré-filtrant sur les ventes.
+  const [kind, setKind] = useState(params.get('kind') || '');
   const [search, setSearch] = useState('');
 
   const { data, loading, error } = useResource('/api/history', { period, kind, search });
@@ -131,11 +134,9 @@ export default function HistoryPage() {
                         <Icon size={19} />
                       </span>
                       <div className="list__body">
-                        <div className="list__title">
-                          {shape.label} {entry.reference}
-                        </div>
+                        <div className="list__title">{entry.reference}</div>
                         <div className="list__sub">
-                          {time(entry.created_at)}
+                          {shape.label} · {time(entry.created_at)}
                           {entry.party ? ` · ${entry.party}` : ''}
                         </div>
                       </div>
@@ -153,5 +154,15 @@ export default function HistoryPage() {
         ))}
       </main>
     </>
+  );
+}
+
+export default function HistoryPage() {
+  // useSearchParams suspend au premier rendu : la limite est posée ici pour que
+  // la lecture de l'URL ne fasse pas disparaître le reste de la page.
+  return (
+    <Suspense fallback={<Skeleton count={5} height={64} />}>
+      <HistoryView />
+    </Suspense>
   );
 }

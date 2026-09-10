@@ -88,7 +88,9 @@ export default function DashboardPage() {
                       <Icon size={16} />
                     </span>
                     <span className="tile__value num">
-                      {isMoney ? Number(data[key]).toLocaleString('fr-FR') : data[key]}
+                      {isMoney
+                        ? Number(data[key]).toLocaleString('fr-FR', { maximumFractionDigits: 0 })
+                        : data[key]}
                     </span>
                     {isMoney ? <span className="tile__unit">{currency}</span> : null}
                   </Tag>

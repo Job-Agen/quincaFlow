@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Home, ShoppingCart, Package, Truck, LayoutGrid } from 'lucide-react';
+import { Home, ShoppingCart, Package, Truck, LayoutGrid, Store } from 'lucide-react';
 import { useSession } from '@/client/session';
 
 /**
@@ -16,6 +16,8 @@ import { useSession } from '@/client/session';
  * À partir de 900 px la même liste devient une colonne latérale : une seule
  * définition de navigation, deux présentations.
  */
+
+const PUBLIC_ROUTES = ['/login', '/register'];
 
 const TABS = [
   { href: '/', label: 'Accueil', icon: Home },
@@ -38,9 +40,14 @@ export default function AppShell({ children }) {
   const pathname = usePathname();
   const { status } = useSession();
 
-  // Connexion et inscription occupent tout l'écran : ni barre, ni onglets.
-  const bare = ['/login', '/register'].includes(pathname) || status !== 'authenticated';
-  if (bare) return children;
+  // Connexion et inscription occupent tout l'écran, et n'attendent aucune session.
+  if (PUBLIC_ROUTES.includes(pathname)) return children;
+
+  // Tant que la session n'est pas connue, les écrans protégés ne sont pas montés.
+  // Les monter d'abord leur ferait lancer des requêtes vouées au 401, puis les
+  // relancer une fois la session établie — deux fois le réseau pour rien, sur
+  // précisément le type de connexion que QuincaFlow doit ménager.
+  if (status !== 'authenticated') return <Splash />;
 
   const active = activeHref(pathname);
 
@@ -55,6 +62,15 @@ export default function AppShell({ children }) {
           </Link>
         ))}
       </nav>
+    </div>
+  );
+}
+
+function Splash() {
+  return (
+    <div className="splash" role="status" aria-label="Chargement">
+      <Store size={30} />
+      <span>QuincaFlow</span>
     </div>
   );
 }

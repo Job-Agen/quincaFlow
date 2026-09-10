@@ -67,19 +67,20 @@ function ProductsView() {
                         {product.sku ? `${product.sku} · ` : ''}
                         Stock : {quantity(product.stock_quantity)} {product.base_unit}
                       </div>
-                      <div className="list__sub">
-                        Prix vente : {money(product.selling_price, currency)}
+                      {/* Le badge d'alerte partage la dernière ligne plutôt que la
+                          colonne de droite : en colonne, il rétrécissait le texte
+                          au point de le faire passer à la ligne. */}
+                      <div className="list__sub row" style={{ gap: 8 }}>
+                        <span>Prix vente : {money(product.selling_price, currency)}</span>
+                        {product.stock_quantity <= 0 ? (
+                          <Badge tone="red">Rupture</Badge>
+                        ) : product.low_stock_threshold > 0 &&
+                          product.stock_quantity <= product.low_stock_threshold ? (
+                          <Badge tone="amber">Stock bas</Badge>
+                        ) : null}
                       </div>
                     </div>
-                    <div className="list__end">
-                      {product.stock_quantity <= 0 ? (
-                        <Badge tone="red">Rupture</Badge>
-                      ) : product.low_stock_threshold > 0 &&
-                        product.stock_quantity <= product.low_stock_threshold ? (
-                        <Badge tone="amber">Stock bas</Badge>
-                      ) : null}
-                      <ChevronRight size={18} className="muted" />
-                    </div>
+                    <ChevronRight size={18} className="muted" />
                   </Link>
                 ))}
               </div>
