@@ -685,6 +685,58 @@ select.input {
   white-space: nowrap;
 }
 
+/*
+ * Panier de vente.
+ *
+ * Un tableau à cinq colonnes est illisible sur un téléphone de 400 px : le
+ * libellé du conditionnement s'y réduit à « sa… » et le vendeur ne sait plus
+ * s'il vend un sac ou une palette de quarante. Chaque article est donc une
+ * fiche empilée — nom, conditionnement, puis « quantité × prix = total » —
+ * qui tient en largeur sans défilement horizontal.
+ */
+.cart {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cart__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cart__item:last-child {
+  border-bottom: none;
+}
+
+.cart__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cart__calc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Les deux champs se partagent la place restante ; le total garde la sienne. */
+.cart__calc .input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.cart__total {
+  flex: 0 0 auto;
+  min-width: 74px;
+  text-align: right;
+}
+
 /* ─────────────────────────────── Divers ────────────────────────────── */
 
 .row {
