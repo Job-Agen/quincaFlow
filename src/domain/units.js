@@ -98,14 +98,6 @@ export function weightedAverageCost(currentQty, currentCost, addedQty, addedCost
   return round2((q0 * c0 + q1 * c1) / (q0 + q1));
 }
 
-/** Combien de conditionnements entiers tiennent dans le stock disponible. */
-export function maxSellable(unit, availableBaseQty) {
-  const factor = toNumber(unit?.factor, 0);
-  const stock = Math.max(0, toNumber(availableBaseQty));
-  if (factor <= 0) return 0;
-  return Math.floor(stock / factor);
-}
-
 /**
  * Décompose un stock sur les conditionnements, du plus grand au plus petit :
  * « 2 cartons + 22 ». Ne compte que les lots entiers.

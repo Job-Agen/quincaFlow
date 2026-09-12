@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Plus, Search, Trash2 } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import {
@@ -18,8 +19,14 @@ import {
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { buildSaleLine, totalsOf, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/domain/sale';
-import { maxSellable, unitsOf } from '@/domain/units';
+import {
+  baseQuantitiesByProduct,
+  buildSaleLine,
+  totalsOf,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+} from '@/domain/sale';
+import { unitsOf } from '@/domain/units';
 import { money, quantity as fmtQuantity } from '@/utils/format';
 
 /**
@@ -70,6 +77,32 @@ export default function NewSalePage() {
   );
 
   const totals = useMemo(() => totalsOf(priced, discount || 0), [priced, discount]);
+
+  /**
+   * Produits dont le panier demande plus que le stock.
+   *
+   * Le cumul se fait par produit, avec la fonction même qu'emploie le serveur :
+   * deux lignes d'un article — une palette puis un sac — passent chacune
+   * isolément et dépassent ensemble. Le contrôle ne fait que devancer celui de
+   * la base ; c'est la contrainte `stock_quantity >= 0` qui reste l'arbitre.
+   */
+  const shortages = useMemo(() => {
+    const missing = [];
+    baseQuantitiesByProduct(priced).forEach((needed, productId) => {
+      const found = catalog.get(productId);
+      if (!found || needed <= found.product.stock_quantity) return;
+      missing.push({
+        productId,
+        name: found.product.name,
+        needed,
+        stock: found.product.stock_quantity,
+        unit: found.product.base_unit,
+      });
+    });
+    return missing;
+  }, [priced, catalog]);
+
+  const shortageIds = useMemo(() => new Set(shortages.map((item) => item.productId)), [shortages]);
 
   function addProduct(product) {
     const units = unitsOf(product, product.units);
@@ -156,10 +189,7 @@ export default function NewSalePage() {
               {priced.map((line) => {
                 const found = catalog.get(line.productId);
                 const units = found.units;
-                const available = maxSellable(
-                  units.find((unit) => unit.id === line.entry.unitId) || units[0],
-                  found.product.stock_quantity
-                );
+                const short = shortageIds.has(line.productId);
                 return (
                   <li className="cart__item" key={line.key}>
                     <div className="cart__head">
@@ -227,9 +257,9 @@ export default function NewSalePage() {
                       </span>
                     </div>
 
-                    {line.entry.quantity > available ? (
+                    {short ? (
                       <div className="small" style={{ color: 'var(--red)' }}>
-                        Stock disponible : {available}
+                        Stock insuffisant pour cet article.
                       </div>
                     ) : null}
                   </li>
@@ -274,10 +304,31 @@ export default function NewSalePage() {
           </div>
         </Card>
 
+        {shortages.length > 0 ? (
+          <Notice tone="warn">
+            <strong>Stock insuffisant</strong>
+            <ul className="stack" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+              {shortages.map((item) => (
+                <li key={item.productId}>
+                  {item.name} — {fmtQuantity(item.needed)} {item.unit} demandés,{' '}
+                  {fmtQuantity(item.stock)} en stock.
+                </li>
+              ))}
+            </ul>
+            <p className="small" style={{ margin: '8px 0 0' }}>
+              Réduisez la quantité, ou enregistrez une{' '}
+              <Link href="/out-of-stock/new" className="link">
+                vente hors stock
+              </Link>{' '}
+              si le client veut être livré par un confrère.
+            </p>
+          </Notice>
+        ) : null}
+
         <Button
           variant="success"
           block
-          disabled={priced.length === 0 || busy}
+          disabled={priced.length === 0 || busy || shortages.length > 0}
           onClick={() => setCheckout(true)}
         >
           Valider la vente
