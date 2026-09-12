@@ -3,7 +3,7 @@ import { newId } from '../lib/ids';
 import { badRequest, conflict, notFound } from '../lib/http';
 import { str, num, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
-import { nextReference } from '../lib/references';
+import { referenceFormat } from '../lib/references';
 import { OOS_STATUSES, canTransition, marginOf } from '../domain/outOfStock';
 
 /**
@@ -74,14 +74,24 @@ export async function createOutOfStockSale(session, body) {
 
   const customerId = str(body.customerId, 'client', { required: false });
   const id = newId('oos');
-  const reference = await nextReference(session.businessId, 'OUT_OF_STOCK');
+  const format = referenceFormat('OUT_OF_STOCK');
 
+  // Le numéro est tiré par la CTE, dans la même instruction que l'insertion :
+  // une opération rejetée ne laisse pas un HS- consommé derrière elle.
   await getSql()`
+    WITH numero AS (
+      INSERT INTO counters (business_id, kind, value)
+      VALUES (${session.businessId}, ${format.counterKey}, 1)
+      ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+      RETURNING value
+    )
     INSERT INTO out_of_stock_sales (
       id, business_id, reference, customer_id, customer_name, product_id, product_name,
       other_seller, quantity, cost_price, selling_price, gross_margin, status, note, user_id
     ) VALUES (
-      ${id}, ${session.businessId}, ${reference}, ${customerId},
+      ${id}, ${session.businessId},
+      ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
+      ${customerId},
       ${str(body.customerName, 'client', { required: false }) || 'Client comptoir'},
       ${productId}, ${productName},
       ${str(body.otherSeller, 'autre vendeur', { required: false, max: 160 })},

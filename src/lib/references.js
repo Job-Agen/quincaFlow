@@ -1,13 +1,16 @@
-import { getSql } from './db';
-
 /**
  * Numérotation des documents : VE-0001, FA-2026-0001, HS-0001, PO-0042, RC-0007.
  *
- * Le compteur est incrémenté par un unique `UPDATE … RETURNING`, donc atomique
- * même si deux vendeurs valident au même instant. Il est volontairement bumpé
- * *avant* la transaction métier : si celle-ci échoue, un numéro est consommé
- * pour rien. Un trou dans la numérotation est sans conséquence — deux ventes
- * portant le même numéro, non.
+ * Le numéro n'est pas réservé avant l'écriture métier : il est calculé *dans*
+ * la même transaction, par une CTE qui incrémente le compteur au moment de
+ * l'INSERT. Une vente refusée — stock insuffisant, par exemple — annule donc
+ * aussi son numéro, et la boutique n'émet pas sa première facture sous le
+ * numéro 5.
+ *
+ * La continuité compte surtout pour la facture : une séquence à trous se lit,
+ * lors d'un contrôle, comme des factures effacées. L'incrément reste atomique
+ * même si deux vendeurs valident au même instant, `ON CONFLICT DO UPDATE`
+ * sérialisant les accès à la ligne du compteur.
  */
 
 const FORMATS = {
@@ -19,25 +22,19 @@ const FORMATS = {
 };
 
 /**
- * Réserve le prochain numéro de `kind` pour la boutique et renvoie la référence
- * formatée. Les compteurs annuels (facture) repartent à 1 chaque année civile.
+ * Décrit une séquence : la clé de son compteur et la façon de l'habiller.
+ *
+ * Les compteurs annuels (facture) repartent à 1 chaque année civile, d'où
+ * l'année dans la clé.
  */
-export async function nextReference(businessId, kind) {
+export function referenceFormat(kind) {
   const format = FORMATS[kind];
   if (!format) throw new Error(`Type de référence inconnu : ${kind}`);
 
   const year = new Date().getFullYear();
-  const counterKey = format.yearly ? `${kind}:${year}` : kind;
-  const sql = getSql();
-
-  const rows = await sql`
-    INSERT INTO counters (business_id, kind, value)
-    VALUES (${businessId}, ${counterKey}, 1)
-    ON CONFLICT (business_id, kind)
-      DO UPDATE SET value = counters.value + 1
-    RETURNING value
-  `;
-
-  const value = String(rows[0].value).padStart(format.pad, '0');
-  return format.yearly ? `${format.prefix}-${year}-${value}` : `${format.prefix}-${value}`;
+  return {
+    counterKey: format.yearly ? `${kind}:${year}` : kind,
+    prefix: format.yearly ? `${format.prefix}-${year}-` : `${format.prefix}-`,
+    pad: format.pad,
+  };
 }

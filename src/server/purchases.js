@@ -3,7 +3,7 @@ import { newId } from '../lib/ids';
 import { badRequest, conflict, notFound } from '../lib/http';
 import { str, num, list, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
-import { nextReference } from '../lib/references';
+import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
 import { findUnit, weightedAverageCost } from '../domain/units';
 import {
@@ -129,16 +129,26 @@ export async function createPurchaseOrder(session, body) {
   if (!supplierName) throw badRequest('Indiquez le fournisseur.');
 
   const orderId = newId('po');
-  const reference = await nextReference(session.businessId, 'PURCHASE_ORDER');
+  const format = referenceFormat('PURCHASE_ORDER');
   const sql = getSql();
 
   await runTransaction([
+    // Numéro tiré dans la transaction : une commande dont les lignes seraient
+    // rejetées n'emporte pas un PO- avec elle.
     sql`
+      WITH numero AS (
+        INSERT INTO counters (business_id, kind, value)
+        VALUES (${session.businessId}, ${format.counterKey}, 1)
+        ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+        RETURNING value
+      )
       INSERT INTO purchase_orders (
         id, business_id, reference, supplier_id, supplier_name,
         status, total_estimated, notes, user_id
       ) VALUES (
-        ${orderId}, ${session.businessId}, ${reference}, ${supplierId}, ${supplierName},
+        ${orderId}, ${session.businessId},
+        ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
+        ${supplierId}, ${supplierName},
         'DRAFT', ${orderTotal(items)},
         ${str(body.notes, 'notes', { required: false, max: 1000 })}, ${session.userId}
       )
@@ -224,15 +234,24 @@ export async function receivePurchaseOrder(session, orderId, body) {
   );
 
   const receiptId = newId('rcp');
-  const reference = await nextReference(session.businessId, 'RECEIPT');
+  const format = referenceFormat('RECEIPT');
   const sql = getSql();
 
   const queries = [
+    // Une réception qui dépasserait le reste à livrer est rejetée par la
+    // contrainte : son numéro doit disparaître avec elle.
     sql`
+      WITH numero AS (
+        INSERT INTO counters (business_id, kind, value)
+        VALUES (${session.businessId}, ${format.counterKey}, 1)
+        ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+        RETURNING value
+      )
       INSERT INTO purchase_receipts (
         id, business_id, purchase_order_id, reference, notes, user_id
       ) VALUES (
-        ${receiptId}, ${session.businessId}, ${orderId}, ${reference},
+        ${receiptId}, ${session.businessId}, ${orderId},
+        ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
         ${str(body.notes, 'notes', { required: false, max: 500 })}, ${session.userId}
       )
     `,

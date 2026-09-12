@@ -181,6 +181,32 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expect(rows[0].n).toBe(0);
   });
 
+  it('ne consomme aucun numéro de facture quand la vente est refusée', async () => {
+    const vitre = await seedVitre(30);
+    const carton = vitre.units.find((unit) => unit.factor === 40);
+
+    // Trois tentatives impossibles : un carton de 40 pour 30 pièces en stock.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(
+        sales.createSale(OWNER, {
+          lines: [{ productId: vitre.id, unitId: carton.id, quantity: 1 }],
+        })
+      ).rejects.toThrow(/stock insuffisant/i);
+    }
+
+    const first = await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0].id, quantity: 1 }],
+    });
+
+    // Une facture est une pièce comptable : sa séquence ne doit pas commencer
+    // au numéro 4 sous prétexte que trois ventes ont échoué avant elle.
+    expect(first.reference).toBe('VE-0001');
+    expect(first.invoice_reference).toMatch(/^FA-\d{4}-0001$/);
+
+    const { rows } = await pool.query('SELECT kind, value FROM counters ORDER BY kind');
+    expect(rows.every((row) => row.value === 1)).toBe(true);
+  });
+
   it('refuse un produit appartenant à une autre quincaillerie', async () => {
     const vitre = await seedVitre();
     await expect(
