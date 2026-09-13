@@ -347,6 +347,93 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expect(await stockOf(vitre.id)).toBe(50);
   });
 
+  // ───────────────────────────── Hors stock ────────────────────────────
+
+  it('reprend le nom du client désigné et refuse celui d’une autre boutique', async () => {
+    const outOfStock = await import('../outOfStock');
+    await pool.query(
+      `INSERT INTO customers (id, business_id, name) VALUES
+         ('cus_a', $1, 'Entreprise Sodji BTP'), ('cus_b', $2, 'Client de la rivale')`,
+      [OWNER.businessId, RIVAL.businessId]
+    );
+
+    // Le nom vient du carnet, jamais du navigateur : sans cela l'opération
+    // portait « Client comptoir » et la recherche par client ne la trouvait pas.
+    const designe = await outOfStock.createOutOfStockSale(OWNER, {
+      productName: 'Groupe 3 kVA',
+      customerId: 'cus_a',
+      customerName: 'nom que le navigateur aurait pu inventer',
+      quantity: 1,
+      costPrice: 185000,
+      sellingPrice: 225000,
+    });
+    expect(designe.customer_name).toBe('Entreprise Sodji BTP');
+    await expect(
+      outOfStock.listOutOfStockSales(OWNER.businessId, { search: 'Sodji' })
+    ).resolves.toHaveLength(1);
+
+    // Sans client désigné, le nom libre — puis « Client comptoir ».
+    const libre = await outOfStock.createOutOfStockSale(OWNER, {
+      productName: 'Groupe 3 kVA',
+      customerName: 'Kodjo menuisier',
+      quantity: 1,
+      costPrice: 100,
+      sellingPrice: 200,
+    });
+    expect(libre.customer_name).toBe('Kodjo menuisier');
+
+    // Le client d'une autre quincaillerie est rejeté, comme sur une vente (§29).
+    await expect(
+      outOfStock.createOutOfStockSale(OWNER, {
+        productName: 'Groupe 3 kVA',
+        customerId: 'cus_b',
+        quantity: 1,
+        costPrice: 100,
+        sellingPrice: 200,
+      })
+    ).rejects.toThrow(/client introuvable/i);
+    await expect(
+      sales.createSale(OWNER, {
+        customerId: 'cus_b',
+        lines: [{ productId: (await seedVitre()).id, quantity: 1 }],
+      })
+    ).rejects.toThrow(/client introuvable/i);
+  });
+
+  it('ne touche pas au stock et ne franchit qu’une étape à la fois', async () => {
+    const outOfStock = await import('../outOfStock');
+    const vitre = await seedVitre(0);
+
+    const operation = await outOfStock.createOutOfStockSale(OWNER, {
+      productId: vitre.id,
+      quantity: 3,
+      costPrice: 6800,
+      sellingPrice: 9500,
+      otherSeller: 'Quincaillerie Adjogbé',
+    });
+
+    // 3 × (9 500 − 6 800) = 8 100, et le produit n'entre jamais en stock.
+    expect(operation.gross_margin).toBe(8100);
+    expect(await stockOf(vitre.id)).toBe(0);
+    const { rows } = await pool.query(
+      "SELECT count(*)::int AS n FROM stock_movements WHERE type <> 'ADJUSTMENT'"
+    );
+    expect(rows[0].n).toBe(0);
+
+    await expect(
+      outOfStock.advanceOutOfStockSale(OWNER, operation.id, { status: 'COMPLETED' })
+    ).rejects.toThrow(/ne peut pas suivre/i);
+
+    let current = operation;
+    for (const status of ['SOURCED', 'CUSTOMER_PAID', 'SELLER_PAID', 'COMPLETED']) {
+      current = await outOfStock.advanceOutOfStockSale(OWNER, operation.id, { status });
+      expect(current.status).toBe(status);
+    }
+    await expect(
+      outOfStock.advanceOutOfStockSale(OWNER, operation.id, { status: 'CANCELLED' })
+    ).rejects.toThrow(/ne peut pas suivre/i);
+  });
+
   // ────────────────────────────── Comptes ──────────────────────────────
 
   it("crée l'utilisateur, sa boutique et le lien OWNER en une transaction", async () => {

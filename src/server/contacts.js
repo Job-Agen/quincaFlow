@@ -1,6 +1,6 @@
 import { getSql, one } from '../lib/db';
 import { newId } from '../lib/ids';
-import { notFound } from '../lib/http';
+import { badRequest, notFound } from '../lib/http';
 import { str } from '../lib/validate';
 
 /**
@@ -33,6 +33,30 @@ function specOf(kind) {
   const spec = TABLES[kind];
   if (!spec) throw notFound('Ressource inconnue.');
   return spec;
+}
+
+/**
+ * Nom du client à porter sur une vente ou une opération hors stock.
+ *
+ * Un client choisi dans le carnet impose son nom, relu en base : ce que le
+ * navigateur envoie n'a pas autorité sur une donnée que la boutique possède
+ * déjà. La lecture filtre sur `business_id`, ce qui écarte du même geste le
+ * client d'une autre quincaillerie (§29).
+ *
+ * Sans client désigné, l'opération porte « Client comptoir » : c'est le cas
+ * ordinaire, et rien ne justifie d'imposer une fiche pour trois vis.
+ */
+export async function resolveCustomerName(businessId, customerId, fallback) {
+  if (!customerId) {
+    return str(fallback, 'client', { required: false }) || 'Client comptoir';
+  }
+  const row = one(
+    await getSql()`
+      SELECT name FROM customers WHERE id = ${customerId} AND business_id = ${businessId}
+    `
+  );
+  if (!row) throw badRequest('Client introuvable.');
+  return row.name;
 }
 
 function readInput(kind, body) {

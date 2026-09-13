@@ -4,6 +4,7 @@ import { badRequest, conflict, notFound } from '../lib/http';
 import { str, num, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
 import { referenceFormat } from '../lib/references';
+import { resolveCustomerName } from './contacts';
 import { OOS_STATUSES, canTransition, marginOf } from '../domain/outOfStock';
 
 /**
@@ -73,6 +74,10 @@ export async function createOutOfStockSale(session, body) {
   if (!productName) throw badRequest('Indiquez le produit demandé par le client.');
 
   const customerId = str(body.customerId, 'client', { required: false });
+  // Même règle que pour une vente : le client désigné impose son nom, relu en
+  // base. Sans cela l'opération portait « Client comptoir » quel que soit le
+  // client choisi, et la recherche par nom ne la retrouvait jamais.
+  const customerName = await resolveCustomerName(session.businessId, customerId, body.customerName);
   const id = newId('oos');
   const format = referenceFormat('OUT_OF_STOCK');
 
@@ -91,8 +96,7 @@ export async function createOutOfStockSale(session, body) {
     ) VALUES (
       ${id}, ${session.businessId},
       ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
-      ${customerId},
-      ${str(body.customerName, 'client', { required: false }) || 'Client comptoir'},
+      ${customerId}, ${customerName},
       ${productId}, ${productName},
       ${str(body.otherSeller, 'autre vendeur', { required: false, max: 160 })},
       ${quantity}, ${costPrice}, ${sellingPrice},

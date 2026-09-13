@@ -5,6 +5,7 @@ import { str, num, list, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
 import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
+import { resolveCustomerName } from './contacts';
 import {
   PAYMENT_METHODS,
   baseQuantitiesByProduct,
@@ -109,9 +110,7 @@ export async function createSale(session, body) {
   const paymentStatus = paymentStatusOf(totals.total, amountPaid);
 
   const customerId = str(body.customerId, 'client', { required: false });
-  const customerName = customerId
-    ? await customerNameOf(session.businessId, customerId)
-    : str(body.customerName, 'client', { required: false }) || 'Client comptoir';
+  const customerName = await resolveCustomerName(session.businessId, customerId, body.customerName);
 
   const saleId = newId('sal');
   const saleRef = referenceFormat('SALE');
@@ -189,16 +188,6 @@ export async function createSale(session, body) {
 
   await runTransaction(queries);
   return getSale(session.businessId, saleId);
-}
-
-async function customerNameOf(businessId, customerId) {
-  const row = one(
-    await getSql()`
-      SELECT name FROM customers WHERE id = ${customerId} AND business_id = ${businessId}
-    `
-  );
-  if (!row) throw badRequest('Client introuvable.');
-  return row.name;
 }
 
 const SALE_COLUMNS = `
