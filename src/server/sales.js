@@ -205,7 +205,7 @@ const SALE_COLUMNS = `
   id, business_id, reference, invoice_reference, customer_id, customer_name, user_id,
   subtotal::float8 AS subtotal, discount::float8 AS discount, total::float8 AS total,
   cost_of_goods::float8 AS cost_of_goods, amount_paid::float8 AS amount_paid,
-  payment_method, payment_status, status, note, created_at
+  payment_method, payment_status, status, note, created_at, updated_at
 `;
 
 export async function getSale(businessId, saleId) {

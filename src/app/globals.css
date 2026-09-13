@@ -952,6 +952,56 @@ select.input {
   padding: 22px 18px;
 }
 
+/*
+ * Facture annulée.
+ *
+ * Un bandeau au-dessus du document ne suffit pas : c'est la facture seule qui
+ * part par WhatsApp ou sort de l'imprimante, et elle se lit alors comme une
+ * pièce valide. Le filigrane traverse le corps du document, donc il survit à la
+ * capture d'écran comme à l'impression — d'où `print-color-adjust`, sans quoi
+ * les navigateurs suppriment l'aplat à l'impression.
+ */
+.invoice--cancelled {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--red);
+}
+
+.invoice--cancelled::after {
+  content: 'ANNULÉE';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-24deg);
+  /* Incliné, « ANNULÉE » déborde vite : la taille est calée sur la largeur de
+     la carte, pas sur celle de l'écran, pour que le mot reste entier. */
+  font-size: clamp(26px, 9.5vw, 54px);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: rgba(200, 32, 26, 0.16);
+  border: 6px solid rgba(200, 32, 26, 0.16);
+  border-radius: 12px;
+  padding: 4px 18px;
+  pointer-events: none;
+  white-space: nowrap;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* Rappel lisible en toutes circonstances, filigrane ignoré ou non. */
+.invoice__void {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--red);
+  border-radius: var(--r);
+  color: #96201b;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
 .invoice__brand {
   text-align: center;
   display: flex;
