@@ -305,6 +305,48 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     ).rejects.toThrow(/plus de .* qu'il n'en reste/i);
   });
 
+  it('cumule les lignes visant la même ligne de commande avant de les vérifier', async () => {
+    const vitre = await products.createProduct(OWNER, {
+      name: 'Vitre 60 cm',
+      baseUnit: 'pièce',
+      purchasePrice: 300,
+      sellingPrice: 450,
+      stockQuantity: 0,
+      units: [],
+    });
+    await pool.query(
+      "INSERT INTO suppliers (id, business_id, name) VALUES ('sup_1', $1, 'Bâtir Plus')",
+      [OWNER.businessId]
+    );
+    const order = await purchases.createPurchaseOrder(OWNER, {
+      supplierId: 'sup_1',
+      items: [{ productId: vitre.id, quantity: 50, unitCost: 320 }],
+    });
+    const itemId = order.items[0].id;
+
+    // 30 et 30 passent chacun isolément : c'est leur somme qui dépasse. Le
+    // message doit rester métier, et non la contrainte remontée telle quelle.
+    await expect(
+      purchases.receivePurchaseOrder(OWNER, order.id, {
+        lines: [
+          { itemId, quantity: 30 },
+          { itemId, quantity: 30 },
+        ],
+      })
+    ).rejects.toThrow(/reste à livrer/i);
+    expect(await stockOf(vitre.id)).toBe(0);
+
+    // Cumulées jusqu'au reliquat exact, les deux mêmes lignes sont acceptées.
+    const received = await purchases.receivePurchaseOrder(OWNER, order.id, {
+      lines: [
+        { itemId, quantity: 30 },
+        { itemId, quantity: 20 },
+      ],
+    });
+    expect(received.status).toBe('RECEIVED');
+    expect(await stockOf(vitre.id)).toBe(50);
+  });
+
   // ────────────────────────────── Comptes ──────────────────────────────
 
   it("crée l'utilisateur, sa boutique et le lien OWNER en une transaction", async () => {

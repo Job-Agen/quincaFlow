@@ -214,11 +214,22 @@ export async function receivePurchaseOrder(session, orderId, body) {
   const order = await getPurchaseOrder(session.businessId, orderId);
   if (order.status === 'CANCELLED') throw conflict('Cette commande est annulée.');
 
+  // Les quantités sont cumulées par ligne de commande avant d'être vérifiées :
+  // deux entrées visant la même ligne — 30 puis 30 sur un reliquat de 50 —
+  // passent chacune isolément et ne dépassent qu'ensemble. Sans ce regroupement,
+  // seule la contrainte les arrêtait, et l'écran affichait une erreur technique
+  // au lieu d'expliquer ce qui cloche.
   const itemsById = new Map(order.items.map((item) => [item.id, item]));
-  const lines = list(body.lines, 'lignes reçues').map((line, index) => {
+  const quantities = new Map();
+  list(body.lines, 'lignes reçues').forEach((line, index) => {
     const item = itemsById.get(str(line.itemId, `ligne ${index + 1}`));
     if (!item) throw badRequest('Ligne de commande introuvable.');
     const quantity = round3(num(line.quantity, `quantité reçue (ligne ${index + 1})`, { min: 0 }));
+    quantities.set(item.id, round3((quantities.get(item.id) || 0) + quantity));
+  });
+
+  const lines = [...quantities].map(([itemId, quantity]) => {
+    const item = itemsById.get(itemId);
     if (quantity > remainingOf(item)) {
       throw conflict(`Vous recevez plus de ${item.product_name} qu'il n'en reste à livrer.`);
     }

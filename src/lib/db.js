@@ -59,7 +59,10 @@ export async function runTransaction(queries) {
     if (error?.code === '23514' && message.includes('stock_quantity')) {
       throw new ApiError(409, "Stock insuffisant : la vente n'a pas été enregistrée.");
     }
-    if (error?.code === '23514' && message.includes('quantity_received')) {
+    // `purchase_order_items` couvre les bases créées avant que la contrainte ne
+    // soit nommée : anonyme, elle s'appelle `purchase_order_items_check` et le
+    // seul test sur `quantity_received` ne rattrapait rien.
+    if (error?.code === '23514' && /quantity_received|purchase_order_items/.test(message)) {
       throw new ApiError(409, 'Quantité reçue supérieure à la quantité commandée.');
     }
     if (error?.code === '23505') {

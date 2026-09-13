@@ -253,6 +253,11 @@ CREATE INDEX IF NOT EXISTS po_business_date_idx ON purchase_orders (business_id,
 
 -- `quantity_received` ≤ `quantity_ordered` : la livraison partielle (§22) est
 -- prévue dès la conception plutôt que rajoutée après coup.
+--
+-- La contrainte est nommée explicitement : anonyme, PostgreSQL l'appellerait
+-- `purchase_order_items_check`, un libellé qui ne dit pas quelle règle a cédé.
+-- Or c'est sur ce nom que la couche d'accès reconnaît la violation pour la
+-- traduire en message métier.
 CREATE TABLE IF NOT EXISTS purchase_order_items (
   id                text PRIMARY KEY,
   business_id       text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
@@ -265,7 +270,8 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
   quantity_received numeric(14, 3) NOT NULL DEFAULT 0,
   unit_cost         numeric(14, 2) NOT NULL DEFAULT 0,
   position          integer NOT NULL DEFAULT 0,
-  CHECK (quantity_received >= 0 AND quantity_received <= quantity_ordered)
+  CONSTRAINT purchase_order_items_quantity_received_check
+    CHECK (quantity_received >= 0 AND quantity_received <= quantity_ordered)
 );
 
 CREATE INDEX IF NOT EXISTS po_items_order_idx ON purchase_order_items (purchase_order_id);
