@@ -54,7 +54,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     // TRUNCATE … CASCADE remet les 19 tables à zéro d'un coup : chaque test part
     // d'une boutique vierge, sans dépendre de l'ordre d'exécution.
     await pool.query(`
-      TRUNCATE users, businesses, business_members, refresh_tokens, counters,
+      TRUNCATE users, businesses, business_members, refresh_tokens, counters, login_attempts,
         products, product_units, customers, suppliers, sales, sale_items, payments,
         out_of_stock_sales, purchase_orders, purchase_order_items,
         purchase_receipts, purchase_receipt_items, stock_movements, documents
@@ -435,6 +435,70 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   });
 
   // ────────────────────────────── Comptes ──────────────────────────────
+
+  it('change le mot de passe et ferme les autres sessions', async () => {
+    const auth = await import('../../lib/auth');
+    const created = await accounts.register({
+      ownerName: 'Kossi',
+      businessName: 'Le Bâtisseur',
+      email: 'change@test.tg',
+      password: 'batisseur2026',
+    });
+    const session = { userId: created.userId, businessId: created.businessId, role: 'OWNER' };
+
+    // Deux sessions ouvertes : le téléphone du comptoir et celui de la maison.
+    const comptoir = await auth.issueRefreshToken(created.userId, created.businessId);
+    const maison = await auth.issueRefreshToken(created.userId, created.businessId);
+
+    await expect(
+      accounts.changePassword(session, { currentPassword: 'faux', newPassword: 'nouveau2026' })
+    ).rejects.toThrow(/actuel incorrect/i);
+    await expect(
+      accounts.changePassword(session, {
+        currentPassword: 'batisseur2026',
+        newPassword: 'court',
+      })
+    ).rejects.toThrow(/8 caractères/i);
+
+    await accounts.changePassword(session, {
+      currentPassword: 'batisseur2026',
+      newPassword: 'nouveau-secret-2026',
+    });
+
+    // Changer son mot de passe, c'est souvent le soupçonner connu : les jetons
+    // déjà distribués ne doivent pas survivre au geste.
+    await expect(auth.rotateRefreshToken(comptoir)).resolves.toBeNull();
+    await expect(auth.rotateRefreshToken(maison)).resolves.toBeNull();
+
+    await expect(
+      accounts.authenticate({ identifier: 'change@test.tg', password: 'batisseur2026' })
+    ).rejects.toThrow(/incorrect/i);
+    await expect(
+      accounts.authenticate({ identifier: 'change@test.tg', password: 'nouveau-secret-2026' })
+    ).resolves.toMatchObject({ businessId: created.businessId });
+  });
+
+  it('freine les essais de mot de passe sans enfermer dehors le commerçant', async () => {
+    const { guardLogin, recordFailedLogin } = await import('../../lib/throttle');
+    const headers = (ip) => ({ headers: { get: () => ip } });
+    const attaquant = headers('203.0.113.7');
+    const boutique = headers('198.51.100.2');
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      await guardLogin('kossi@test.tg', attaquant);
+      await recordFailedLogin('kossi@test.tg', attaquant);
+    }
+
+    await expect(guardLogin('kossi@test.tg', attaquant)).rejects.toThrow(/trop de tentatives/i);
+
+    // Le commerçant, depuis sa propre adresse, n'est pas concerné : verrouiller
+    // un compte à distance reviendrait à pouvoir fermer la boutique.
+    await expect(guardLogin('kossi@test.tg', boutique)).resolves.toBeUndefined();
+
+    // Un autre compte visé depuis l'adresse de l'attaquant reste possible tant
+    // que le quota par adresse n'est pas atteint : c'est une portée distincte.
+    await expect(guardLogin('autre@test.tg', attaquant)).resolves.toBeUndefined();
+  });
 
   it("crée l'utilisateur, sa boutique et le lien OWNER en une transaction", async () => {
     const session = await accounts.register({

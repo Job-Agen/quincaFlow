@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Store } from 'lucide-react';
+import { KeyRound, Store } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Button, Card, CardHead, Notice, TextField } from '@/components/ui';
 import { api } from '@/client/api';
@@ -106,7 +106,92 @@ export default function SettingsPage() {
             </Button>
           ) : null}
         </form>
+
+        <PasswordCard />
       </main>
     </>
+  );
+}
+
+/**
+ * Changement de mot de passe.
+ *
+ * Séparé du formulaire de la boutique : ce sont deux gestes sans rapport, et
+ * mêler un secret à des coordonnées d'affichage inviterait à enregistrer l'un
+ * en croyant modifier l'autre. Accessible à tous, propriétaire ou vendeur —
+ * chacun est responsable de son propre accès.
+ */
+function PasswordCard() {
+  const empty = { currentPassword: '', newPassword: '', confirmation: '' };
+  const [form, setForm] = useState(empty);
+  const [state, setState] = useState({ busy: false, error: null, done: false });
+
+  const set = (field) => (event) => {
+    setForm({ ...form, [field]: event.target.value });
+    setState((current) => ({ ...current, done: false }));
+  };
+
+  async function submit(event) {
+    event.preventDefault();
+    if (form.newPassword !== form.confirmation) {
+      setState({ busy: false, error: 'Les deux saisies ne correspondent pas.', done: false });
+      return;
+    }
+    setState({ busy: true, error: null, done: false });
+    try {
+      await api.patch('/api/auth/password', {
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+      });
+      setForm(empty);
+      setState({ busy: false, error: null, done: true });
+    } catch (issue) {
+      setState({ busy: false, error: issue.message, done: false });
+    }
+  }
+
+  return (
+    <form onSubmit={submit} style={{ marginTop: 22 }}>
+      <Card>
+        <CardHead title="Mot de passe" action={<KeyRound size={18} className="muted" />} />
+        <div className="stack" style={{ padding: 16 }}>
+          {state.error ? <Notice tone="error">{state.error}</Notice> : null}
+          {state.done ? (
+            <Notice>
+              Mot de passe modifié. Les sessions ouvertes sur vos autres appareils ont été fermées.
+            </Notice>
+          ) : null}
+
+          <TextField
+            label="Mot de passe actuel"
+            type="password"
+            autoComplete="current-password"
+            value={form.currentPassword}
+            onChange={set('currentPassword')}
+            required
+          />
+          <TextField
+            label="Nouveau mot de passe"
+            type="password"
+            autoComplete="new-password"
+            hint="Au moins 8 caractères."
+            value={form.newPassword}
+            onChange={set('newPassword')}
+            required
+          />
+          <TextField
+            label="Confirmer le nouveau mot de passe"
+            type="password"
+            autoComplete="new-password"
+            value={form.confirmation}
+            onChange={set('confirmation')}
+            required
+          />
+          <Button block type="submit" disabled={state.busy}>
+            {state.busy ? 'Modification…' : 'Changer le mot de passe'}
+          </Button>
+        </div>
+      </Card>
+    </form>
   );
 }

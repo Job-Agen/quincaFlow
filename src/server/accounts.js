@@ -107,6 +107,46 @@ export async function profile(session) {
   return { user: user[0], business: business[0], role: session.role };
 }
 
+/**
+ * Changement de mot de passe.
+ *
+ * L'ancien est exigé même si la session est valide : un téléphone laissé
+ * déverrouillé sur le comptoir ne doit pas suffire à s'approprier la boutique.
+ *
+ * Toutes les autres sessions sont révoquées dans la foulée. Quand on change son
+ * mot de passe, c'est souvent qu'on le soupçonne connu ; laisser vivre les
+ * sessions ouvertes ailleurs viderait le geste de son sens. Celle qui fait la
+ * demande est réémise pour ne pas se déconnecter elle-même.
+ */
+export async function changePassword(session, body) {
+  const current = str(body.currentPassword, 'mot de passe actuel', { max: 200 });
+  const next = str(body.newPassword, 'nouveau mot de passe', { max: 200 });
+  if (next.length < 8) {
+    throw badRequest('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+  }
+  if (next === current) {
+    throw badRequest('Le nouveau mot de passe doit être différent de l’ancien.');
+  }
+
+  const sql = getSql();
+  const user = one(await sql`SELECT password_hash FROM users WHERE id = ${session.userId}`);
+  if (!user) throw notFound('Compte introuvable.');
+  if (!(await verifyPassword(current, user.password_hash))) {
+    throw badRequest('Mot de passe actuel incorrect.');
+  }
+
+  await runTransaction([
+    sql`
+      UPDATE users SET password_hash = ${await hashPassword(next)}
+       WHERE id = ${session.userId}
+    `,
+    sql`
+      UPDATE refresh_tokens SET revoked_at = now()
+       WHERE user_id = ${session.userId} AND revoked_at IS NULL
+    `,
+  ]);
+}
+
 /** Coordonnées de la boutique — elles figurent en tête des factures (§15). */
 export async function updateBusiness(session, body) {
   await getSql()`

@@ -65,6 +65,20 @@ CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx ON refresh_tokens (user_id);
 -- Compteurs de références par boutique : VE-0001, FA-2026-0001, PO-0042…
 -- Incrémentés par un UPDATE … RETURNING atomique, hors transaction métier :
 -- un rollback laisse un trou dans la numérotation, ce qui est sans conséquence.
+-- Tentatives de connexion, pour freiner l'essai systématique de mots de passe.
+--
+-- Le comptage vit en base plutôt qu'en mémoire : sur un hébergement sans état,
+-- chaque instance a la sienne et un compteur local ne freine rien. Les lignes
+-- sont purgées à l'écriture, ce qui évite une tâche planifiée pour si peu.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id          bigserial PRIMARY KEY,
+  scope       text NOT NULL,
+  attempted_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS login_attempts_scope_idx
+  ON login_attempts (scope, attempted_at DESC);
+
 CREATE TABLE IF NOT EXISTS counters (
   business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
   kind        text NOT NULL,
