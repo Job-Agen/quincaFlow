@@ -20,7 +20,7 @@ import { amount, dateTime, money, quantity } from '@/utils/format';
  */
 export default function SalePage({ params }) {
   const { id } = use(params);
-  const { business, currency } = useSession();
+  const { business, currency, isOwner } = useSession();
   const { data: sale, loading, error, setData } = useResource(`/api/sales/${id}`);
   const [cancelling, setCancelling] = useState(false);
   const cancelled = sale?.status === 'CANCELLED';
@@ -188,7 +188,7 @@ export default function SalePage({ params }) {
               </Button>
             </div>
 
-            {sale.status === 'COMPLETED' ? (
+            {sale.status === 'COMPLETED' && isOwner ? (
               <button
                 type="button"
                 className="btn btn--ghost btn--block no-print"

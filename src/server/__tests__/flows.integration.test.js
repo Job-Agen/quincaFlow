@@ -436,6 +436,74 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
 
   // ────────────────────────────── Comptes ──────────────────────────────
 
+  it('crée un vendeur, borne ses droits, et garde ses ventes après son départ', async () => {
+    const members = await import('../members');
+    const vendeur = await members.addSeller(OWNER, {
+      name: 'Ama Doe',
+      email: 'ama@test.tg',
+      password: 'comptoir2026',
+    });
+    expect(vendeur.role).toBe('SELLER');
+
+    // Un compte n'appartient qu'à une boutique : réutiliser une adresse déjà
+    // connue rattacherait quelqu'un à deux quincailleries à son insu.
+    await expect(
+      members.addSeller(OWNER, { name: 'Autre', email: 'ama@test.tg', password: 'comptoir2026' })
+    ).rejects.toThrow(/existe déjà/i);
+
+    const SELLER = { userId: vendeur.id, businessId: OWNER.businessId, role: 'SELLER' };
+    const vitre = await seedVitre();
+    const vente = await sales.createSale(SELLER, {
+      lines: [{ productId: vitre.id, quantity: 2 }],
+    });
+    expect(vente.reference).toBe('VE-0001');
+
+    // Le propriétaire ne peut pas se retirer : la boutique resterait sans chef.
+    const liste = await members.listMembers(OWNER.businessId);
+    const patron = liste.find((row) => row.role === 'OWNER');
+    await expect(members.removeMember(OWNER, patron.id)).rejects.toThrow(
+      /ne peut pas être retiré/i
+    );
+
+    // Partir ferme l'accès, mais l'historique doit continuer de dire qui a
+    // encaissé : seul le lien d'appartenance est rompu.
+    await members.removeMember(OWNER, vendeur.id);
+    await expect(
+      accounts.authenticate({ identifier: 'ama@test.tg', password: 'comptoir2026' })
+    ).rejects.toThrow(/incorrect/i);
+    const { rows } = await pool.query('SELECT user_id FROM sales');
+    expect(rows).toEqual([{ user_id: vendeur.id }]);
+  });
+
+  it('laisse le propriétaire réattribuer le mot de passe d’un vendeur, pas le sien', async () => {
+    const members = await import('../members');
+    const vendeur = await members.addSeller(OWNER, {
+      name: 'Ama Doe',
+      email: 'ama@test.tg',
+      password: 'comptoir2026',
+    });
+
+    expect(vendeur.role).toBe('SELLER');
+
+    const liste = await members.listMembers(OWNER.businessId);
+    expect(liste.map((row) => row.role)).toEqual(['OWNER', 'SELLER']);
+
+    // Un vendeur n'est pas le gardien de son propre mot de passe côté équipe :
+    // seul le propriétaire le réattribue, et jamais le sien par ce chemin.
+    const patron = liste.find((row) => row.role === 'OWNER');
+    await expect(
+      members.resetMemberPassword(OWNER, patron.id, { password: 'contourne2026' })
+    ).rejects.toThrow(/depuis ses paramètres/i);
+
+    await members.resetMemberPassword(OWNER, vendeur.id, { password: 'nouveau-comptoir' });
+    await expect(
+      accounts.authenticate({ identifier: 'ama@test.tg', password: 'comptoir2026' })
+    ).rejects.toThrow(/incorrect/i);
+    await expect(
+      accounts.authenticate({ identifier: 'ama@test.tg', password: 'nouveau-comptoir' })
+    ).resolves.toMatchObject({ role: 'SELLER' });
+  });
+
   it('change le mot de passe et ferme les autres sessions', async () => {
     const auth = await import('../../lib/auth');
     const created = await accounts.register({

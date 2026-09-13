@@ -99,9 +99,29 @@ d'écrire — le frontend n'est jamais la source de vérité financière.
 - **Réinitialisation de mot de passe oublié.** Elle suppose un service d'envoi
   d'e-mails, qui n'est pas encore choisi. En l'état, un mot de passe perdu se
   répare à la main en base.
-- **Comptes vendeurs.** Le rôle `SELLER` existe au schéma et dans
-  `requireOwner`, mais aucune route ne crée un second utilisateur.
 - **Pages légales** (conditions d'utilisation, confidentialité).
+
+## Rôles
+
+Deux rôles (§5), et la frontière passe par l'argent et les prix.
+
+| | Propriétaire | Vendeur |
+| --- | --- | --- |
+| Encaisser, vente hors stock, clients | ✔ | ✔ |
+| Consulter catalogue, historique, tableau de bord | ✔ | ✔ |
+| Créer un produit, changer un prix, ajuster le stock | ✔ | |
+| Commander, réceptionner, fournisseurs | ✔ | |
+| Annuler une vente | ✔ | |
+| Coordonnées de la boutique, équipe | ✔ | |
+
+Le propriétaire crée les comptes vendeurs depuis **Plus → Équipe** et leur
+remet un premier mot de passe de vive voix ; le vendeur le change ensuite
+depuis Paramètres. Retirer un vendeur ferme son accès mais conserve ses
+ventes : l'historique doit continuer de dire qui a encaissé.
+
+Les écrans masquent au vendeur les commandes qu'il ne peut pas exécuter, mais
+c'est `requireOwner`, côté serveur, qui décide — une interface n'est pas une
+autorisation.
 
 ## Supervision
 

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui';
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
+import { useSession } from '@/client/session';
 
 /**
  * Écran de répertoire, partagé par les clients et les fournisseurs (§18, §23).
@@ -24,10 +25,23 @@ import { useResource } from '@/client/useResource';
  * et se comportent à l'identique. Deux écrans jumeaux divergeraient au premier
  * correctif ; un seul, paramétré, ne le peut pas.
  */
-export default function ContactsScreen({ kind, title, addLabel, withWhatsapp, emptyHint }) {
+export default function ContactsScreen({
+  kind,
+  title,
+  addLabel,
+  withWhatsapp,
+  emptyHint,
+  ownerOnly = false,
+}) {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);
   const { data, loading, error, reload } = useResource(`/api/${kind}`, { search });
+  const { isOwner } = useSession();
+
+  // Un vendeur inscrit un client au comptoir, mais ne touche pas au répertoire
+  // fournisseurs : c'est avec eux que l'argent sort. L'écran est le même, le
+  // droit d'écriture non — d'où le réglage porté par l'appelant.
+  const canEdit = !ownerOnly || isOwner;
 
   return (
     <>
@@ -54,6 +68,7 @@ export default function ContactsScreen({ kind, title, addLabel, withWhatsapp, em
                     key={contact.id}
                     type="button"
                     className="list__row"
+                    disabled={!canEdit}
                     onClick={() => setEditing(contact)}
                   >
                     <span className="thumb" style={{ fontWeight: 800, color: 'var(--blue-dark)' }}>
@@ -75,14 +90,16 @@ export default function ContactsScreen({ kind, title, addLabel, withWhatsapp, em
         ) : null}
       </main>
 
-      <button
-        type="button"
-        className="fab"
-        aria-label={addLabel}
-        onClick={() => setEditing({ isNew: true })}
-      >
-        <Plus size={26} />
-      </button>
+      {canEdit ? (
+        <button
+          type="button"
+          className="fab"
+          aria-label={addLabel}
+          onClick={() => setEditing({ isNew: true })}
+        >
+          <Plus size={26} />
+        </button>
+      ) : null}
 
       {editing ? (
         <ContactSheet

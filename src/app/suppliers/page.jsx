@@ -9,6 +9,7 @@ export default function SuppliersPage() {
       title="Fournisseurs"
       addLabel="Nouveau fournisseur"
       withWhatsapp
+      ownerOnly
       emptyHint="Ajoutez vos fournisseurs pour leur passer commande depuis QuincaFlow."
     />
   );

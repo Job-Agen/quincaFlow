@@ -12,7 +12,7 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
   return handle(async () => {
-    const session = await requireAuth();
+    const session = await requireOwner();
     const { id } = await params;
     return json(await updateProduct(session, id, await readBody(request)));
   });

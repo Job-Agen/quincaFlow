@@ -1,5 +1,5 @@
 import { handle, json, readBody } from '../../../../lib/http';
-import { requireAuth } from '../../../../lib/auth';
+import { requireAuth, requireOwner } from '../../../../lib/auth';
 import { getContact, supplierOrders, updateContact } from '../../../../server/contacts';
 
 export async function GET(request, { params }) {
@@ -16,7 +16,7 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
   return handle(async () => {
-    const session = await requireAuth();
+    const session = await requireOwner();
     const { id } = await params;
     return json(await updateContact(session, 'suppliers', id, await readBody(request)));
   });

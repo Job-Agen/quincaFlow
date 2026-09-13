@@ -37,7 +37,7 @@ import { amount, dateTime, money, quantity } from '@/utils/format';
  */
 export default function PurchaseOrderPage({ params }) {
   const { id } = use(params);
-  const { currency } = useSession();
+  const { currency, isOwner } = useSession();
   const { data, loading, error, setData } = useResource(`/api/purchase-orders/${id}`);
   const [receiving, setReceiving] = useState(false);
   const [attaching, setAttaching] = useState(false);
@@ -160,14 +160,16 @@ export default function PurchaseOrderPage({ params }) {
               <CardHead
                 title="Documents"
                 action={
-                  <button
-                    type="button"
-                    className="btn btn--soft btn--sm"
-                    onClick={() => setAttaching(true)}
-                  >
-                    <Paperclip size={15} />
-                    Joindre
-                  </button>
+                  isOwner ? (
+                    <button
+                      type="button"
+                      className="btn btn--soft btn--sm"
+                      onClick={() => setAttaching(true)}
+                    >
+                      <Paperclip size={15} />
+                      Joindre
+                    </button>
+                  ) : null
                 }
               />
               {data.documents.length === 0 ? (
@@ -221,7 +223,7 @@ export default function PurchaseOrderPage({ params }) {
               </Card>
             ) : null}
 
-            {data.status !== 'CANCELLED' ? (
+            {data.status !== 'CANCELLED' && isOwner ? (
               <SelectField
                 label="Statut administratif"
                 hint="La livraison, elle, est déduite des quantités reçues."
@@ -239,7 +241,7 @@ export default function PurchaseOrderPage({ params }) {
               </SelectField>
             ) : null}
 
-            {canReceive(data, data.items) ? (
+            {canReceive(data, data.items) && isOwner ? (
               <Button variant="success" block onClick={() => setReceiving(true)}>
                 <PackageCheck size={18} />
                 Réceptionner une livraison
