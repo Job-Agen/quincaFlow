@@ -193,10 +193,90 @@ Le build tourne sans `DATABASE_URL` ni `JWT_SECRET` : aucun secret ne doit lui
 être nécessaire. Le jour où il en réclame un, c'est qu'une lecture de base a
 glissé dans le rendu statique.
 
+## Déploiement
+
+Hébergement Vercel, base Neon. Le dépôt est connecté au projet : chaque poussée
+sur `master` déclenche un déploiement de production, les autres branches
+produisent des préviews.
+
+### Variables d'environnement
+
+Deux variables suffisent. Elles se renseignent dans le tableau de bord de
+l'hébergeur, jamais dans le dépôt.
+
+| Variable | Portée | Remarque |
+| --- | --- | --- |
+| `DATABASE_URL` | Production, Preview | chaîne Neon, variante *pooled* |
+| `JWT_SECRET` | Production, Preview | `openssl rand -base64 48` |
+
+Donnez à `JWT_SECRET` une valeur **différente** en production et en préview :
+une fuite côté préview ne doit pas permettre de forger une session de
+production.
+
+Prenez la variante *pooled* de la chaîne Neon — les fonctions serverless ouvrent
+et ferment beaucoup de connexions courtes.
+
+### L'ordre compte
+
+1. **Exécuter `schema.sql`** dans l'éditeur SQL de Neon, avant le premier
+   démarrage. Le fichier est idempotent (`CREATE TABLE IF NOT EXISTS`), on peut
+   donc le rejouer pour appliquer les tables ajoutées depuis.
+2. **Créer les deux variables.**
+3. **Redéployer.** Une variable ajoutée n'atteint jamais un déploiement déjà en
+   ligne : sans cette étape, les deux précédentes restent sans effet.
+4. **Vérifier** `GET /api/health`.
+
+Au collage de la chaîne Neon, ne gardez que l'URI. La console la propose sous
+plusieurs formes et deux se collent mal : le format `.env` préfixe
+`DATABASE_URL=` et entoure d'apostrophes, le format `psql` préfixe la commande.
+L'hébergeur enregistre littéralement ce qu'on lui donne, et la connexion échoue
+alors sans autre indice qu'un `degraded`.
+
+### Diagnostiquer un `degraded`
+
+La sonde attrape l'erreur sans la journaliser : elle ne distingue pas une
+variable absente d'une chaîne erronée. Pour obtenir le message réel, tenter une
+connexion sur `/login` puis lire les journaux d'exécution — les routes passent
+par `handle()`, qui journalise toute exception non applicative, et
+`/api/auth/login` interroge la base dès le freinage anti-force-brute, avant
+toute vérification d'identifiants.
+
+`DATABASE_URL non configurée` met en cause le déploiement ou la portée de la
+variable ; tout autre message met en cause la chaîne elle-même.
+
+Un `ok` ne prouve pas le schéma pour autant : `SELECT 1` ne touche aucune table.
+Le contrôle qui vaut est la création d'un compte depuis l'écran d'inscription,
+qui valide d'un geste l'écriture, le hachage du mot de passe et la signature du
+jeton. Côté Neon :
+
+```sql
+SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';
+-- 20
+```
+
+### Protection de déploiement
+
+Le premier déploiement d'un projet Vercel part en production d'office, même sans
+`--prod`. Tant que les variables ne sont pas posées, le site répond donc en
+erreur sur une adresse publique.
+
+La protection par défaut du plan Hobby (`all_except_custom_domains`) ne couvre
+pas le domaine de production. Pour fermer réellement l'accès pendant la mise au
+point, passer l'authentification Vercel sur `all`, puis la relâcher à
+l'ouverture. La protection par mot de passe, elle, suppose un plan payant.
+
+### Connexion du dépôt
+
+Vercel ne voit un dépôt que si son application GitHub l'expose. Installer cette
+application sur le compte propriétaire en sélectionnant le dépôt suffit ; le
+rattachement d'une identité GitHub au compte Vercel, lui, n'est pas nécessaire.
+
 ## Modèle de données
 
-19 tables. Toutes portent `business_id`, à deux exceptions près : `users` et
-`refresh_tokens`.
+20 tables. Toutes portent `business_id`, à trois exceptions près : `users` et
+`businesses`, qui définissent le locataire plutôt qu'ils ne s'y rattachent, et
+`login_attempts`, qui compte les tentatives de connexion par identifiant et par
+adresse — donc avant qu'une boutique soit connue.
 
 ```
 businesses
