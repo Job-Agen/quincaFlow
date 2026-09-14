@@ -62,23 +62,27 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 
 CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx ON refresh_tokens (user_id);
 
--- Compteurs de références par boutique : VE-0001, FA-2026-0001, PO-0042…
--- Incrémentés par un UPDATE … RETURNING atomique, hors transaction métier :
--- un rollback laisse un trou dans la numérotation, ce qui est sans conséquence.
 -- Tentatives de connexion, pour freiner l'essai systématique de mots de passe.
 --
 -- Le comptage vit en base plutôt qu'en mémoire : sur un hébergement sans état,
 -- chaque instance a la sienne et un compteur local ne freine rien. Les lignes
 -- sont purgées à l'écriture, ce qui évite une tâche planifiée pour si peu.
 CREATE TABLE IF NOT EXISTS login_attempts (
-  id          bigserial PRIMARY KEY,
-  scope       text NOT NULL,
+  id           bigserial PRIMARY KEY,
+  scope        text NOT NULL,
   attempted_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS login_attempts_scope_idx
   ON login_attempts (scope, attempted_at DESC);
 
+-- Compteurs de références par boutique : VE-0001, FA-2026-0001, PO-0042…
+--
+-- Le compteur est incrémenté par une CTE, dans l'instruction qui écrit le
+-- document lui-même. Le numéro naît et meurt donc avec sa ligne : une vente
+-- refusée pour stock insuffisant n'en consomme aucun, et la première facture
+-- d'une boutique porte bien le numéro 0001. Une séquence de factures à trous se
+-- lit, lors d'un contrôle, comme des pièces effacées.
 CREATE TABLE IF NOT EXISTS counters (
   business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
   kind        text NOT NULL,
