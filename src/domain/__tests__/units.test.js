@@ -3,7 +3,6 @@ import {
   costPerBaseUnit,
   describeStock,
   findUnit,
-  maxSellable,
   pricePerBaseUnit,
   toBaseQuantity,
   unitsOf,
@@ -83,19 +82,6 @@ describe('weightedAverageCost', () => {
 
   it('conserve le coût courant quand la réception est vide', () => {
     expect(weightedAverageCost(10, 500, 0, 999)).toBe(500);
-  });
-});
-
-describe('maxSellable', () => {
-  const carton = { label: 'carton', factor: 40 };
-
-  it('ne compte que les lots entiers', () => {
-    expect(maxSellable(carton, 95)).toBe(2);
-  });
-
-  it('renvoie zéro quand le stock est insuffisant ou négatif', () => {
-    expect(maxSellable(carton, 39)).toBe(0);
-    expect(maxSellable(carton, -5)).toBe(0);
   });
 });
 

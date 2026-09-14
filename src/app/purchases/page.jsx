@@ -11,7 +11,7 @@ import { PO_STATUS_LABELS, PO_STATUS_TONES } from '@/domain/purchase';
 import { dayLabel, money } from '@/utils/format';
 
 export default function PurchasesPage() {
-  const { currency } = useSession();
+  const { currency, isOwner } = useSession();
   const [search, setSearch] = useState('');
   const { data, loading, error } = useResource('/api/purchase-orders', { search });
 
@@ -58,9 +58,11 @@ export default function PurchasesPage() {
         ) : null}
       </main>
 
-      <Link href="/purchases/new" className="fab" aria-label="Nouvelle commande">
-        <Plus size={26} />
-      </Link>
+      {isOwner ? (
+        <Link href="/purchases/new" className="fab" aria-label="Nouvelle commande">
+          <Plus size={26} />
+        </Link>
+      ) : null}
     </>
   );
 }

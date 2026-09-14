@@ -8,6 +8,7 @@ import {
   LogOut,
   Settings,
   Truck,
+  UserCog,
   Users,
 } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
@@ -26,11 +27,14 @@ const LINKS = [
   { href: '/out-of-stock', label: 'Ventes hors stock', icon: ArrowLeftRight },
   { href: '/customers', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Fournisseurs', icon: Truck },
+  // L'équipe ne concerne que le propriétaire : l'entrée ne s'affiche pas pour
+  // un vendeur, qui n'a rien à y faire.
+  { href: '/team', label: 'Équipe', icon: UserCog, ownerOnly: true },
   { href: '/settings', label: 'Paramètres', icon: Settings },
 ];
 
 export default function MorePage() {
-  const { user, business, role, signOut } = useSession();
+  const { user, business, role, isOwner, signOut } = useSession();
 
   return (
     <>
@@ -64,15 +68,17 @@ export default function MorePage() {
 
         <Card>
           <div className="list">
-            {LINKS.map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href} className="list__row">
-                <Icon size={19} className="muted" />
-                <div className="list__body">
-                  <div className="list__title">{label}</div>
-                </div>
-                <ChevronRight size={18} className="muted" />
-              </Link>
-            ))}
+            {LINKS.filter((link) => !link.ownerOnly || isOwner).map(
+              ({ href, label, icon: Icon }) => (
+                <Link key={href} href={href} className="list__row">
+                  <Icon size={19} className="muted" />
+                  <div className="list__body">
+                    <div className="list__title">{label}</div>
+                  </div>
+                  <ChevronRight size={18} className="muted" />
+                </Link>
+              )
+            )}
           </div>
         </Card>
 

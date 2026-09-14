@@ -1,5 +1,5 @@
 import { handle, json, readBody } from '../../../lib/http';
-import { requireAuth } from '../../../lib/auth';
+import { requireAuth, requireOwner } from '../../../lib/auth';
 import { createContact, listContacts } from '../../../server/contacts';
 
 export async function GET(request) {
@@ -15,6 +15,6 @@ export async function GET(request) {
 
 export async function POST(request) {
   return handle(async () =>
-    json(await createContact(await requireAuth(), 'suppliers', await readBody(request)), 201)
+    json(await createContact(await requireOwner(), 'suppliers', await readBody(request)), 201)
   );
 }

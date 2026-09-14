@@ -54,7 +54,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     // TRUNCATE … CASCADE remet les 19 tables à zéro d'un coup : chaque test part
     // d'une boutique vierge, sans dépendre de l'ordre d'exécution.
     await pool.query(`
-      TRUNCATE users, businesses, business_members, refresh_tokens, counters,
+      TRUNCATE users, businesses, business_members, refresh_tokens, counters, login_attempts,
         products, product_units, customers, suppliers, sales, sale_items, payments,
         out_of_stock_sales, purchase_orders, purchase_order_items,
         purchase_receipts, purchase_receipt_items, stock_movements, documents
@@ -181,6 +181,32 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expect(rows[0].n).toBe(0);
   });
 
+  it('ne consomme aucun numéro de facture quand la vente est refusée', async () => {
+    const vitre = await seedVitre(30);
+    const carton = vitre.units.find((unit) => unit.factor === 40);
+
+    // Trois tentatives impossibles : un carton de 40 pour 30 pièces en stock.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(
+        sales.createSale(OWNER, {
+          lines: [{ productId: vitre.id, unitId: carton.id, quantity: 1 }],
+        })
+      ).rejects.toThrow(/stock insuffisant/i);
+    }
+
+    const first = await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0].id, quantity: 1 }],
+    });
+
+    // Une facture est une pièce comptable : sa séquence ne doit pas commencer
+    // au numéro 4 sous prétexte que trois ventes ont échoué avant elle.
+    expect(first.reference).toBe('VE-0001');
+    expect(first.invoice_reference).toMatch(/^FA-\d{4}-0001$/);
+
+    const { rows } = await pool.query('SELECT kind, value FROM counters ORDER BY kind');
+    expect(rows.every((row) => row.value === 1)).toBe(true);
+  });
+
   it('refuse un produit appartenant à une autre quincaillerie', async () => {
     const vitre = await seedVitre();
     await expect(
@@ -279,7 +305,268 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     ).rejects.toThrow(/plus de .* qu'il n'en reste/i);
   });
 
+  it('cumule les lignes visant la même ligne de commande avant de les vérifier', async () => {
+    const vitre = await products.createProduct(OWNER, {
+      name: 'Vitre 60 cm',
+      baseUnit: 'pièce',
+      purchasePrice: 300,
+      sellingPrice: 450,
+      stockQuantity: 0,
+      units: [],
+    });
+    await pool.query(
+      "INSERT INTO suppliers (id, business_id, name) VALUES ('sup_1', $1, 'Bâtir Plus')",
+      [OWNER.businessId]
+    );
+    const order = await purchases.createPurchaseOrder(OWNER, {
+      supplierId: 'sup_1',
+      items: [{ productId: vitre.id, quantity: 50, unitCost: 320 }],
+    });
+    const itemId = order.items[0].id;
+
+    // 30 et 30 passent chacun isolément : c'est leur somme qui dépasse. Le
+    // message doit rester métier, et non la contrainte remontée telle quelle.
+    await expect(
+      purchases.receivePurchaseOrder(OWNER, order.id, {
+        lines: [
+          { itemId, quantity: 30 },
+          { itemId, quantity: 30 },
+        ],
+      })
+    ).rejects.toThrow(/reste à livrer/i);
+    expect(await stockOf(vitre.id)).toBe(0);
+
+    // Cumulées jusqu'au reliquat exact, les deux mêmes lignes sont acceptées.
+    const received = await purchases.receivePurchaseOrder(OWNER, order.id, {
+      lines: [
+        { itemId, quantity: 30 },
+        { itemId, quantity: 20 },
+      ],
+    });
+    expect(received.status).toBe('RECEIVED');
+    expect(await stockOf(vitre.id)).toBe(50);
+  });
+
+  // ───────────────────────────── Hors stock ────────────────────────────
+
+  it('reprend le nom du client désigné et refuse celui d’une autre boutique', async () => {
+    const outOfStock = await import('../outOfStock');
+    await pool.query(
+      `INSERT INTO customers (id, business_id, name) VALUES
+         ('cus_a', $1, 'Entreprise Sodji BTP'), ('cus_b', $2, 'Client de la rivale')`,
+      [OWNER.businessId, RIVAL.businessId]
+    );
+
+    // Le nom vient du carnet, jamais du navigateur : sans cela l'opération
+    // portait « Client comptoir » et la recherche par client ne la trouvait pas.
+    const designe = await outOfStock.createOutOfStockSale(OWNER, {
+      productName: 'Groupe 3 kVA',
+      customerId: 'cus_a',
+      customerName: 'nom que le navigateur aurait pu inventer',
+      quantity: 1,
+      costPrice: 185000,
+      sellingPrice: 225000,
+    });
+    expect(designe.customer_name).toBe('Entreprise Sodji BTP');
+    await expect(
+      outOfStock.listOutOfStockSales(OWNER.businessId, { search: 'Sodji' })
+    ).resolves.toHaveLength(1);
+
+    // Sans client désigné, le nom libre — puis « Client comptoir ».
+    const libre = await outOfStock.createOutOfStockSale(OWNER, {
+      productName: 'Groupe 3 kVA',
+      customerName: 'Kodjo menuisier',
+      quantity: 1,
+      costPrice: 100,
+      sellingPrice: 200,
+    });
+    expect(libre.customer_name).toBe('Kodjo menuisier');
+
+    // Le client d'une autre quincaillerie est rejeté, comme sur une vente (§29).
+    await expect(
+      outOfStock.createOutOfStockSale(OWNER, {
+        productName: 'Groupe 3 kVA',
+        customerId: 'cus_b',
+        quantity: 1,
+        costPrice: 100,
+        sellingPrice: 200,
+      })
+    ).rejects.toThrow(/client introuvable/i);
+    await expect(
+      sales.createSale(OWNER, {
+        customerId: 'cus_b',
+        lines: [{ productId: (await seedVitre()).id, quantity: 1 }],
+      })
+    ).rejects.toThrow(/client introuvable/i);
+  });
+
+  it('ne touche pas au stock et ne franchit qu’une étape à la fois', async () => {
+    const outOfStock = await import('../outOfStock');
+    const vitre = await seedVitre(0);
+
+    const operation = await outOfStock.createOutOfStockSale(OWNER, {
+      productId: vitre.id,
+      quantity: 3,
+      costPrice: 6800,
+      sellingPrice: 9500,
+      otherSeller: 'Quincaillerie Adjogbé',
+    });
+
+    // 3 × (9 500 − 6 800) = 8 100, et le produit n'entre jamais en stock.
+    expect(operation.gross_margin).toBe(8100);
+    expect(await stockOf(vitre.id)).toBe(0);
+    const { rows } = await pool.query(
+      "SELECT count(*)::int AS n FROM stock_movements WHERE type <> 'ADJUSTMENT'"
+    );
+    expect(rows[0].n).toBe(0);
+
+    await expect(
+      outOfStock.advanceOutOfStockSale(OWNER, operation.id, { status: 'COMPLETED' })
+    ).rejects.toThrow(/ne peut pas suivre/i);
+
+    let current = operation;
+    for (const status of ['SOURCED', 'CUSTOMER_PAID', 'SELLER_PAID', 'COMPLETED']) {
+      current = await outOfStock.advanceOutOfStockSale(OWNER, operation.id, { status });
+      expect(current.status).toBe(status);
+    }
+    await expect(
+      outOfStock.advanceOutOfStockSale(OWNER, operation.id, { status: 'CANCELLED' })
+    ).rejects.toThrow(/ne peut pas suivre/i);
+  });
+
   // ────────────────────────────── Comptes ──────────────────────────────
+
+  it('crée un vendeur, borne ses droits, et garde ses ventes après son départ', async () => {
+    const members = await import('../members');
+    const vendeur = await members.addSeller(OWNER, {
+      name: 'Ama Doe',
+      email: 'ama@test.tg',
+      password: 'comptoir2026',
+    });
+    expect(vendeur.role).toBe('SELLER');
+
+    // Un compte n'appartient qu'à une boutique : réutiliser une adresse déjà
+    // connue rattacherait quelqu'un à deux quincailleries à son insu.
+    await expect(
+      members.addSeller(OWNER, { name: 'Autre', email: 'ama@test.tg', password: 'comptoir2026' })
+    ).rejects.toThrow(/existe déjà/i);
+
+    const SELLER = { userId: vendeur.id, businessId: OWNER.businessId, role: 'SELLER' };
+    const vitre = await seedVitre();
+    const vente = await sales.createSale(SELLER, {
+      lines: [{ productId: vitre.id, quantity: 2 }],
+    });
+    expect(vente.reference).toBe('VE-0001');
+
+    // Le propriétaire ne peut pas se retirer : la boutique resterait sans chef.
+    const liste = await members.listMembers(OWNER.businessId);
+    const patron = liste.find((row) => row.role === 'OWNER');
+    await expect(members.removeMember(OWNER, patron.id)).rejects.toThrow(
+      /ne peut pas être retiré/i
+    );
+
+    // Partir ferme l'accès, mais l'historique doit continuer de dire qui a
+    // encaissé : seul le lien d'appartenance est rompu.
+    await members.removeMember(OWNER, vendeur.id);
+    await expect(
+      accounts.authenticate({ identifier: 'ama@test.tg', password: 'comptoir2026' })
+    ).rejects.toThrow(/incorrect/i);
+    const { rows } = await pool.query('SELECT user_id FROM sales');
+    expect(rows).toEqual([{ user_id: vendeur.id }]);
+  });
+
+  it('laisse le propriétaire réattribuer le mot de passe d’un vendeur, pas le sien', async () => {
+    const members = await import('../members');
+    const vendeur = await members.addSeller(OWNER, {
+      name: 'Ama Doe',
+      email: 'ama@test.tg',
+      password: 'comptoir2026',
+    });
+
+    expect(vendeur.role).toBe('SELLER');
+
+    const liste = await members.listMembers(OWNER.businessId);
+    expect(liste.map((row) => row.role)).toEqual(['OWNER', 'SELLER']);
+
+    // Un vendeur n'est pas le gardien de son propre mot de passe côté équipe :
+    // seul le propriétaire le réattribue, et jamais le sien par ce chemin.
+    const patron = liste.find((row) => row.role === 'OWNER');
+    await expect(
+      members.resetMemberPassword(OWNER, patron.id, { password: 'contourne2026' })
+    ).rejects.toThrow(/depuis ses paramètres/i);
+
+    await members.resetMemberPassword(OWNER, vendeur.id, { password: 'nouveau-comptoir' });
+    await expect(
+      accounts.authenticate({ identifier: 'ama@test.tg', password: 'comptoir2026' })
+    ).rejects.toThrow(/incorrect/i);
+    await expect(
+      accounts.authenticate({ identifier: 'ama@test.tg', password: 'nouveau-comptoir' })
+    ).resolves.toMatchObject({ role: 'SELLER' });
+  });
+
+  it('change le mot de passe et ferme les autres sessions', async () => {
+    const auth = await import('../../lib/auth');
+    const created = await accounts.register({
+      ownerName: 'Kossi',
+      businessName: 'Le Bâtisseur',
+      email: 'change@test.tg',
+      password: 'batisseur2026',
+    });
+    const session = { userId: created.userId, businessId: created.businessId, role: 'OWNER' };
+
+    // Deux sessions ouvertes : le téléphone du comptoir et celui de la maison.
+    const comptoir = await auth.issueRefreshToken(created.userId, created.businessId);
+    const maison = await auth.issueRefreshToken(created.userId, created.businessId);
+
+    await expect(
+      accounts.changePassword(session, { currentPassword: 'faux', newPassword: 'nouveau2026' })
+    ).rejects.toThrow(/actuel incorrect/i);
+    await expect(
+      accounts.changePassword(session, {
+        currentPassword: 'batisseur2026',
+        newPassword: 'court',
+      })
+    ).rejects.toThrow(/8 caractères/i);
+
+    await accounts.changePassword(session, {
+      currentPassword: 'batisseur2026',
+      newPassword: 'nouveau-secret-2026',
+    });
+
+    // Changer son mot de passe, c'est souvent le soupçonner connu : les jetons
+    // déjà distribués ne doivent pas survivre au geste.
+    await expect(auth.rotateRefreshToken(comptoir)).resolves.toBeNull();
+    await expect(auth.rotateRefreshToken(maison)).resolves.toBeNull();
+
+    await expect(
+      accounts.authenticate({ identifier: 'change@test.tg', password: 'batisseur2026' })
+    ).rejects.toThrow(/incorrect/i);
+    await expect(
+      accounts.authenticate({ identifier: 'change@test.tg', password: 'nouveau-secret-2026' })
+    ).resolves.toMatchObject({ businessId: created.businessId });
+  });
+
+  it('freine les essais de mot de passe sans enfermer dehors le commerçant', async () => {
+    const { guardLogin, recordFailedLogin } = await import('../../lib/throttle');
+    const headers = (ip) => ({ headers: { get: () => ip } });
+    const attaquant = headers('203.0.113.7');
+    const boutique = headers('198.51.100.2');
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      await guardLogin('kossi@test.tg', attaquant);
+      await recordFailedLogin('kossi@test.tg', attaquant);
+    }
+
+    await expect(guardLogin('kossi@test.tg', attaquant)).rejects.toThrow(/trop de tentatives/i);
+
+    // Le commerçant, depuis sa propre adresse, n'est pas concerné : verrouiller
+    // un compte à distance reviendrait à pouvoir fermer la boutique.
+    await expect(guardLogin('kossi@test.tg', boutique)).resolves.toBeUndefined();
+
+    // Un autre compte visé depuis l'adresse de l'attaquant reste possible tant
+    // que le quota par adresse n'est pas atteint : c'est une portée distincte.
+    await expect(guardLogin('autre@test.tg', attaquant)).resolves.toBeUndefined();
+  });
 
   it("crée l'utilisateur, sa boutique et le lien OWNER en une transaction", async () => {
     const session = await accounts.register({

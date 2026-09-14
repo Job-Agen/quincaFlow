@@ -1,5 +1,5 @@
 import { handle, json, readBody } from '../../../lib/http';
-import { requireAuth } from '../../../lib/auth';
+import { requireAuth, requireOwner } from '../../../lib/auth';
 import { createPurchaseOrder, listPurchaseOrders } from '../../../server/purchases';
 
 export async function GET(request) {
@@ -15,6 +15,6 @@ export async function GET(request) {
 
 export async function POST(request) {
   return handle(async () =>
-    json(await createPurchaseOrder(await requireAuth(), await readBody(request)), 201)
+    json(await createPurchaseOrder(await requireOwner(), await readBody(request)), 201)
   );
 }

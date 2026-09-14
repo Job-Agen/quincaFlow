@@ -3,8 +3,9 @@ import { newId } from '../lib/ids';
 import { badRequest, notFound, conflict } from '../lib/http';
 import { str, num, list, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
-import { nextReference } from '../lib/references';
+import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
+import { resolveCustomerName } from './contacts';
 import {
   PAYMENT_METHODS,
   baseQuantitiesByProduct,
@@ -60,6 +61,10 @@ async function priceLines(businessId, rawLines) {
  * transaction, le stock réellement obtenu plutôt qu'une valeur calculée à
  * l'avance et déjà périmée. La contrainte `stock_quantity >= 0` fait le reste :
  * une survente fait échouer toute la transaction.
+ *
+ * Faute de `note`, le mouvement reprend le numéro de la vente, relu depuis la
+ * ligne insérée quelques requêtes plus tôt : à la validation, ce numéro n'existe
+ * pas encore côté JavaScript, puisque c'est la transaction qui le tire.
  */
 function stockQueries(sql, session, { productId, delta, type, referenceId, referenceType, note }) {
   return [
@@ -76,7 +81,12 @@ function stockQueries(sql, session, { productId, delta, type, referenceId, refer
         ${newId('mv')}, ${session.businessId}, ${productId}, ${type}, ${delta},
         (SELECT stock_quantity FROM products
           WHERE id = ${productId} AND business_id = ${session.businessId}),
-        ${referenceType}, ${referenceId}, ${session.userId}, ${note ?? null}
+        ${referenceType}, ${referenceId}, ${session.userId},
+        COALESCE(
+          ${note ?? null}::text,
+          (SELECT reference FROM sales
+            WHERE id = ${referenceId} AND business_id = ${session.businessId})
+        )
       )
     `,
   ];
@@ -100,27 +110,40 @@ export async function createSale(session, body) {
   const paymentStatus = paymentStatusOf(totals.total, amountPaid);
 
   const customerId = str(body.customerId, 'client', { required: false });
-  const customerName = customerId
-    ? await customerNameOf(session.businessId, customerId)
-    : str(body.customerName, 'client', { required: false }) || 'Client comptoir';
+  const customerName = await resolveCustomerName(session.businessId, customerId, body.customerName);
 
   const saleId = newId('sal');
-  // Les deux numéros sont réservés en parallèle : ce sont deux allers-retours
-  // vers Neon, et les enchaîner se verrait sur une connexion mobile.
-  const [reference, invoiceReference] = await Promise.all([
-    nextReference(session.businessId, 'SALE'),
-    nextReference(session.businessId, 'INVOICE'),
-  ]);
+  const saleRef = referenceFormat('SALE');
+  const invoiceRef = referenceFormat('INVOICE');
   const sql = getSql();
 
   const queries = [
+    // Les deux numéros sont tirés par des CTE, dans la transaction elle-même :
+    // si le stock manque plus bas, la vente et ses numéros disparaissent
+    // ensemble. La facture d'une boutique commence ainsi toujours à 0001.
     sql`
+      WITH numero_vente AS (
+        INSERT INTO counters (business_id, kind, value)
+        VALUES (${session.businessId}, ${saleRef.counterKey}, 1)
+        ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+        RETURNING value
+      ),
+      numero_facture AS (
+        INSERT INTO counters (business_id, kind, value)
+        VALUES (${session.businessId}, ${invoiceRef.counterKey}, 1)
+        ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+        RETURNING value
+      )
       INSERT INTO sales (
         id, business_id, reference, invoice_reference, customer_id, customer_name, user_id,
         subtotal, discount, total, cost_of_goods,
         payment_method, amount_paid, payment_status, status, note
       ) VALUES (
-        ${saleId}, ${session.businessId}, ${reference}, ${invoiceReference},
+        ${saleId}, ${session.businessId},
+        ${saleRef.prefix}::text
+          || lpad((SELECT value FROM numero_vente)::text, ${saleRef.pad}::int, '0'),
+        ${invoiceRef.prefix}::text
+          || lpad((SELECT value FROM numero_facture)::text, ${invoiceRef.pad}::int, '0'),
         ${customerId}, ${customerName},
         ${session.userId}, ${totals.subtotal}, ${totals.discount}, ${totals.total},
         ${totals.costOfGoods}, ${paymentMethod}, ${amountPaid}, ${paymentStatus},
@@ -159,7 +182,6 @@ export async function createSale(session, body) {
         type: 'SALE',
         referenceType: 'SALE',
         referenceId: saleId,
-        note: reference,
       })
     );
   });
@@ -168,21 +190,11 @@ export async function createSale(session, body) {
   return getSale(session.businessId, saleId);
 }
 
-async function customerNameOf(businessId, customerId) {
-  const row = one(
-    await getSql()`
-      SELECT name FROM customers WHERE id = ${customerId} AND business_id = ${businessId}
-    `
-  );
-  if (!row) throw badRequest('Client introuvable.');
-  return row.name;
-}
-
 const SALE_COLUMNS = `
   id, business_id, reference, invoice_reference, customer_id, customer_name, user_id,
   subtotal::float8 AS subtotal, discount::float8 AS discount, total::float8 AS total,
   cost_of_goods::float8 AS cost_of_goods, amount_paid::float8 AS amount_paid,
-  payment_method, payment_status, status, note, created_at
+  payment_method, payment_status, status, note, created_at, updated_at
 `;
 
 export async function getSale(businessId, saleId) {

@@ -25,7 +25,7 @@ const FILTERS = [
 
 function ProductsView() {
   const params = useSearchParams();
-  const { currency } = useSession();
+  const { currency, isOwner } = useSession();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState(params.get('filter') || 'all');
 
@@ -89,9 +89,11 @@ function ProductsView() {
         ) : null}
       </main>
 
-      <Link href="/products/new" className="fab" aria-label="Nouveau produit">
-        <Plus size={26} />
-      </Link>
+      {isOwner ? (
+        <Link href="/products/new" className="fab" aria-label="Nouveau produit">
+          <Plus size={26} />
+        </Link>
+      ) : null}
     </>
   );
 }

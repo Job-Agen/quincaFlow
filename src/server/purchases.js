@@ -3,7 +3,7 @@ import { newId } from '../lib/ids';
 import { badRequest, conflict, notFound } from '../lib/http';
 import { str, num, list, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
-import { nextReference } from '../lib/references';
+import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
 import { findUnit, weightedAverageCost } from '../domain/units';
 import {
@@ -129,16 +129,26 @@ export async function createPurchaseOrder(session, body) {
   if (!supplierName) throw badRequest('Indiquez le fournisseur.');
 
   const orderId = newId('po');
-  const reference = await nextReference(session.businessId, 'PURCHASE_ORDER');
+  const format = referenceFormat('PURCHASE_ORDER');
   const sql = getSql();
 
   await runTransaction([
+    // Numéro tiré dans la transaction : une commande dont les lignes seraient
+    // rejetées n'emporte pas un PO- avec elle.
     sql`
+      WITH numero AS (
+        INSERT INTO counters (business_id, kind, value)
+        VALUES (${session.businessId}, ${format.counterKey}, 1)
+        ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+        RETURNING value
+      )
       INSERT INTO purchase_orders (
         id, business_id, reference, supplier_id, supplier_name,
         status, total_estimated, notes, user_id
       ) VALUES (
-        ${orderId}, ${session.businessId}, ${reference}, ${supplierId}, ${supplierName},
+        ${orderId}, ${session.businessId},
+        ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
+        ${supplierId}, ${supplierName},
         'DRAFT', ${orderTotal(items)},
         ${str(body.notes, 'notes', { required: false, max: 1000 })}, ${session.userId}
       )
@@ -204,11 +214,22 @@ export async function receivePurchaseOrder(session, orderId, body) {
   const order = await getPurchaseOrder(session.businessId, orderId);
   if (order.status === 'CANCELLED') throw conflict('Cette commande est annulée.');
 
+  // Les quantités sont cumulées par ligne de commande avant d'être vérifiées :
+  // deux entrées visant la même ligne — 30 puis 30 sur un reliquat de 50 —
+  // passent chacune isolément et ne dépassent qu'ensemble. Sans ce regroupement,
+  // seule la contrainte les arrêtait, et l'écran affichait une erreur technique
+  // au lieu d'expliquer ce qui cloche.
   const itemsById = new Map(order.items.map((item) => [item.id, item]));
-  const lines = list(body.lines, 'lignes reçues').map((line, index) => {
+  const quantities = new Map();
+  list(body.lines, 'lignes reçues').forEach((line, index) => {
     const item = itemsById.get(str(line.itemId, `ligne ${index + 1}`));
     if (!item) throw badRequest('Ligne de commande introuvable.');
     const quantity = round3(num(line.quantity, `quantité reçue (ligne ${index + 1})`, { min: 0 }));
+    quantities.set(item.id, round3((quantities.get(item.id) || 0) + quantity));
+  });
+
+  const lines = [...quantities].map(([itemId, quantity]) => {
+    const item = itemsById.get(itemId);
     if (quantity > remainingOf(item)) {
       throw conflict(`Vous recevez plus de ${item.product_name} qu'il n'en reste à livrer.`);
     }
@@ -224,15 +245,24 @@ export async function receivePurchaseOrder(session, orderId, body) {
   );
 
   const receiptId = newId('rcp');
-  const reference = await nextReference(session.businessId, 'RECEIPT');
+  const format = referenceFormat('RECEIPT');
   const sql = getSql();
 
   const queries = [
+    // Une réception qui dépasserait le reste à livrer est rejetée par la
+    // contrainte : son numéro doit disparaître avec elle.
     sql`
+      WITH numero AS (
+        INSERT INTO counters (business_id, kind, value)
+        VALUES (${session.businessId}, ${format.counterKey}, 1)
+        ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+        RETURNING value
+      )
       INSERT INTO purchase_receipts (
         id, business_id, purchase_order_id, reference, notes, user_id
       ) VALUES (
-        ${receiptId}, ${session.businessId}, ${orderId}, ${reference},
+        ${receiptId}, ${session.businessId}, ${orderId},
+        ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
         ${str(body.notes, 'notes', { required: false, max: 500 })}, ${session.userId}
       )
     `,

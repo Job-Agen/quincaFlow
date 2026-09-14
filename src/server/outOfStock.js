@@ -3,7 +3,8 @@ import { newId } from '../lib/ids';
 import { badRequest, conflict, notFound } from '../lib/http';
 import { str, num, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
-import { nextReference } from '../lib/references';
+import { referenceFormat } from '../lib/references';
+import { resolveCustomerName } from './contacts';
 import { OOS_STATUSES, canTransition, marginOf } from '../domain/outOfStock';
 
 /**
@@ -73,16 +74,29 @@ export async function createOutOfStockSale(session, body) {
   if (!productName) throw badRequest('Indiquez le produit demandé par le client.');
 
   const customerId = str(body.customerId, 'client', { required: false });
+  // Même règle que pour une vente : le client désigné impose son nom, relu en
+  // base. Sans cela l'opération portait « Client comptoir » quel que soit le
+  // client choisi, et la recherche par nom ne la retrouvait jamais.
+  const customerName = await resolveCustomerName(session.businessId, customerId, body.customerName);
   const id = newId('oos');
-  const reference = await nextReference(session.businessId, 'OUT_OF_STOCK');
+  const format = referenceFormat('OUT_OF_STOCK');
 
+  // Le numéro est tiré par la CTE, dans la même instruction que l'insertion :
+  // une opération rejetée ne laisse pas un HS- consommé derrière elle.
   await getSql()`
+    WITH numero AS (
+      INSERT INTO counters (business_id, kind, value)
+      VALUES (${session.businessId}, ${format.counterKey}, 1)
+      ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+      RETURNING value
+    )
     INSERT INTO out_of_stock_sales (
       id, business_id, reference, customer_id, customer_name, product_id, product_name,
       other_seller, quantity, cost_price, selling_price, gross_margin, status, note, user_id
     ) VALUES (
-      ${id}, ${session.businessId}, ${reference}, ${customerId},
-      ${str(body.customerName, 'client', { required: false }) || 'Client comptoir'},
+      ${id}, ${session.businessId},
+      ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
+      ${customerId}, ${customerName},
       ${productId}, ${productName},
       ${str(body.otherSeller, 'autre vendeur', { required: false, max: 160 })},
       ${quantity}, ${costPrice}, ${sellingPrice},

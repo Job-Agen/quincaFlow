@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Plus, Search, Trash2 } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import {
@@ -18,8 +19,14 @@ import {
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { buildSaleLine, totalsOf, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/domain/sale';
-import { maxSellable, unitsOf } from '@/domain/units';
+import {
+  baseQuantitiesByProduct,
+  buildSaleLine,
+  totalsOf,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+} from '@/domain/sale';
+import { unitsOf } from '@/domain/units';
 import { money, quantity as fmtQuantity } from '@/utils/format';
 
 /**
@@ -70,6 +77,32 @@ export default function NewSalePage() {
   );
 
   const totals = useMemo(() => totalsOf(priced, discount || 0), [priced, discount]);
+
+  /**
+   * Produits dont le panier demande plus que le stock.
+   *
+   * Le cumul se fait par produit, avec la fonction même qu'emploie le serveur :
+   * deux lignes d'un article — une palette puis un sac — passent chacune
+   * isolément et dépassent ensemble. Le contrôle ne fait que devancer celui de
+   * la base ; c'est la contrainte `stock_quantity >= 0` qui reste l'arbitre.
+   */
+  const shortages = useMemo(() => {
+    const missing = [];
+    baseQuantitiesByProduct(priced).forEach((needed, productId) => {
+      const found = catalog.get(productId);
+      if (!found || needed <= found.product.stock_quantity) return;
+      missing.push({
+        productId,
+        name: found.product.name,
+        needed,
+        stock: found.product.stock_quantity,
+        unit: found.product.base_unit,
+      });
+    });
+    return missing;
+  }, [priced, catalog]);
+
+  const shortageIds = useMemo(() => new Set(shortages.map((item) => item.productId)), [shortages]);
 
   function addProduct(product) {
     const units = unitsOf(product, product.units);
@@ -152,105 +185,87 @@ export default function NewSalePage() {
               hint="Ajoutez les articles demandés par le client."
             />
           ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Produit</th>
-                    <th className="num">Qté</th>
-                    <th className="num">Prix unitaire</th>
-                    <th className="num">Total</th>
-                    <th aria-label="Retirer" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {priced.map((line) => {
-                    const found = catalog.get(line.productId);
-                    const units = found.units;
-                    const available = maxSellable(
-                      units.find((unit) => unit.id === line.entry.unitId) || units[0],
-                      found.product.stock_quantity
-                    );
-                    return (
-                      <tr key={line.key}>
-                        <td>
-                          <div className="strong">{line.productName}</div>
-                          {units.length > 1 ? (
-                            <select
-                              className="input"
-                              style={{ minHeight: 34, fontSize: 13, marginTop: 4 }}
-                              value={line.entry.unitId}
-                              onChange={(event) =>
-                                patchLine(line.key, { unitId: event.target.value })
-                              }
-                              aria-label="Conditionnement"
-                            >
-                              {units.map((unit) => (
-                                <option key={unit.id} value={unit.id}>
-                                  {unit.label} ({fmtQuantity(unit.factor)} {found.product.base_unit}
-                                  )
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="small muted">{line.unitLabel}</div>
-                          )}
-                          {line.entry.quantity > available ? (
-                            <div className="small" style={{ color: 'var(--red)' }}>
-                              Stock disponible : {available}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td>
-                          <input
-                            className="input num"
-                            style={{ width: 68, minHeight: 40, textAlign: 'right' }}
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="any"
-                            value={line.entry.quantity}
-                            aria-label={`Quantité — ${line.productName}`}
-                            onChange={(event) =>
-                              patchLine(line.key, { quantity: event.target.value })
-                            }
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="input num"
-                            style={{ width: 92, minHeight: 40, textAlign: 'right' }}
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="any"
-                            value={
-                              line.entry.unitPrice === '' ? line.unitPrice : line.entry.unitPrice
-                            }
-                            aria-label={`Prix unitaire — ${line.productName}`}
-                            onChange={(event) =>
-                              patchLine(line.key, { unitPrice: event.target.value })
-                            }
-                          />
-                        </td>
-                        <td className="num strong">{line.lineTotal.toLocaleString('fr-FR')}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="appbar__icon"
-                            style={{ color: 'var(--red)' }}
-                            aria-label={`Retirer ${line.productName}`}
-                            onClick={() => removeLine(line.key)}
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ul className="cart">
+              {priced.map((line) => {
+                const found = catalog.get(line.productId);
+                const units = found.units;
+                const short = shortageIds.has(line.productId);
+                return (
+                  <li className="cart__item" key={line.key}>
+                    <div className="cart__head">
+                      <span className="strong">{line.productName}</span>
+                      <button
+                        type="button"
+                        className="appbar__icon"
+                        style={{ color: 'var(--red)' }}
+                        aria-label={`Retirer ${line.productName}`}
+                        onClick={() => removeLine(line.key)}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+
+                    {units.length > 1 ? (
+                      <select
+                        className="input"
+                        style={{ minHeight: 40, fontSize: 14 }}
+                        value={line.entry.unitId}
+                        onChange={(event) => patchLine(line.key, { unitId: event.target.value })}
+                        aria-label="Conditionnement"
+                      >
+                        {units.map((unit) => (
+                          // L'unité de base ne gagne rien à être suivie de
+                          // « (1 sac) » : le rappel du contenu n'a de sens que
+                          // pour les conditionnements qui en regroupent plusieurs.
+                          <option key={unit.id} value={unit.id}>
+                            {unit.factor === 1
+                              ? unit.label
+                              : `${unit.label} (${fmtQuantity(unit.factor)} ${found.product.base_unit})`}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="small muted">{line.unitLabel}</div>
+                    )}
+
+                    <div className="cart__calc">
+                      <input
+                        className="input num"
+                        style={{ minHeight: 40, textAlign: 'right' }}
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        value={line.entry.quantity}
+                        aria-label={`Quantité — ${line.productName}`}
+                        onChange={(event) => patchLine(line.key, { quantity: event.target.value })}
+                      />
+                      <span className="muted">×</span>
+                      <input
+                        className="input num"
+                        style={{ minHeight: 40, textAlign: 'right' }}
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        value={line.entry.unitPrice === '' ? line.unitPrice : line.entry.unitPrice}
+                        aria-label={`Prix unitaire — ${line.productName}`}
+                        onChange={(event) => patchLine(line.key, { unitPrice: event.target.value })}
+                      />
+                      <span className="num strong cart__total">
+                        {line.lineTotal.toLocaleString('fr-FR')}
+                      </span>
+                    </div>
+
+                    {short ? (
+                      <div className="small" style={{ color: 'var(--red)' }}>
+                        Stock insuffisant pour cet article.
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </Card>
 
@@ -289,10 +304,31 @@ export default function NewSalePage() {
           </div>
         </Card>
 
+        {shortages.length > 0 ? (
+          <Notice tone="warn">
+            <strong>Stock insuffisant</strong>
+            <ul className="stack" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+              {shortages.map((item) => (
+                <li key={item.productId}>
+                  {item.name} — {fmtQuantity(item.needed)} {item.unit} demandés,{' '}
+                  {fmtQuantity(item.stock)} en stock.
+                </li>
+              ))}
+            </ul>
+            <p className="small" style={{ margin: '8px 0 0' }}>
+              Réduisez la quantité, ou enregistrez une{' '}
+              <Link href="/out-of-stock/new" className="link">
+                vente hors stock
+              </Link>{' '}
+              si le client veut être livré par un confrère.
+            </p>
+          </Notice>
+        ) : null}
+
         <Button
           variant="success"
           block
-          disabled={priced.length === 0 || busy}
+          disabled={priced.length === 0 || busy || shortages.length > 0}
           onClick={() => setCheckout(true)}
         >
           Valider la vente

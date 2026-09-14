@@ -20,9 +20,10 @@ import { amount, dateTime, money, quantity } from '@/utils/format';
  */
 export default function SalePage({ params }) {
   const { id } = use(params);
-  const { business, currency } = useSession();
+  const { business, currency, isOwner } = useSession();
   const { data: sale, loading, error, setData } = useResource(`/api/sales/${id}`);
   const [cancelling, setCancelling] = useState(false);
+  const cancelled = sale?.status === 'CANCELLED';
 
   async function share() {
     const lines = sale.items
@@ -33,10 +34,21 @@ export default function SalePage({ params }) {
           )} = ${amount(item.line_total)}`
       )
       .join('\n');
-    const text = `${business?.name || 'Facture'}\nFacture ${sale.invoice_reference}\n${lines}\n\nTOTAL : ${money(
-      sale.total,
-      currency
-    )}`;
+
+    // L'annulation ouvre et ferme le message : c'est ce texte que le client
+    // reçoit, et rien d'autre ne l'avertit que la facture ne vaut plus rien.
+    const void_ = cancelled ? '⚠️ FACTURE ANNULÉE — ce document ne vaut pas justificatif.' : '';
+    const text = [
+      void_,
+      business?.name || 'Facture',
+      `Facture ${sale.invoice_reference}`,
+      lines,
+      '',
+      `TOTAL : ${money(sale.total, currency)}`,
+      cancelled ? '\n⚠️ Vente annulée.' : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     // Le partage natif ouvre WhatsApp parmi les autres applications ; le lien
     // wa.me reste le repli sur les navigateurs de bureau qui ne l'implémentent pas.
@@ -67,13 +79,13 @@ export default function SalePage({ params }) {
 
         {sale ? (
           <>
-            {sale.status === 'CANCELLED' ? (
+            {cancelled ? (
               <Notice tone="warn">
                 Vente annulée{sale.note ? ` — ${sale.note}` : ''}. Le stock a été restitué.
               </Notice>
             ) : null}
 
-            <article className="invoice">
+            <article className={`invoice${cancelled ? ' invoice--cancelled' : ''}`}>
               <div className="invoice__brand">
                 <Store size={30} />
                 <span className="invoice__name">{business?.name}</span>
@@ -141,12 +153,28 @@ export default function SalePage({ params }) {
 
               <div className="total-line small">
                 <span className="muted">{PAYMENT_METHOD_LABELS[sale.payment_method]}</span>
-                <Badge tone={sale.payment_status === 'PAID' ? 'green' : 'amber'}>
-                  {PAYMENT_STATUS_LABELS[sale.payment_status]}
-                </Badge>
+                {/*
+                  Sur une vente annulée, « Payée » en vert affirme quelque chose
+                  de faux : l'encaissement a été rendu. Le statut d'origine est
+                  conservé en base, mais la facture n'a plus à s'en prévaloir.
+                */}
+                {cancelled ? (
+                  <Badge tone="red">Annulée</Badge>
+                ) : (
+                  <Badge tone={sale.payment_status === 'PAID' ? 'green' : 'amber'}>
+                    {PAYMENT_STATUS_LABELS[sale.payment_status]}
+                  </Badge>
+                )}
               </div>
 
-              <p className="invoice__thanks">Merci pour votre confiance !</p>
+              {cancelled ? (
+                <p className="invoice__void">
+                  Facture annulée le {dateTime(sale.updated_at || sale.created_at)}
+                  {sale.note ? ` — ${sale.note}` : ''}. Ce document ne vaut pas justificatif.
+                </p>
+              ) : (
+                <p className="invoice__thanks">Merci pour votre confiance !</p>
+              )}
             </article>
 
             <div className="grid-2 no-print">
@@ -160,7 +188,7 @@ export default function SalePage({ params }) {
               </Button>
             </div>
 
-            {sale.status === 'COMPLETED' ? (
+            {sale.status === 'COMPLETED' && isOwner ? (
               <button
                 type="button"
                 className="btn btn--ghost btn--block no-print"

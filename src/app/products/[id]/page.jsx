@@ -53,7 +53,7 @@ export default function ProductPage({ params }) {
         back="/products"
         title={data?.name || 'Produit'}
         right={
-          data ? (
+          data && isOwner ? (
             <button
               type="button"
               className="appbar__icon"
@@ -114,16 +114,18 @@ export default function ProductPage({ params }) {
                 </p>
               ) : null}
 
-              <div className="grid-2">
-                <Button variant="soft" onClick={() => setAdjusting(true)}>
-                  <SlidersHorizontal size={17} />
-                  Ajuster le stock
-                </Button>
-                <Button variant="ghost" onClick={() => setEditing(true)}>
-                  <Pencil size={17} />
-                  Modifier
-                </Button>
-              </div>
+              {isOwner ? (
+                <div className="grid-2">
+                  <Button variant="soft" onClick={() => setAdjusting(true)}>
+                    <SlidersHorizontal size={17} />
+                    Ajuster le stock
+                  </Button>
+                  <Button variant="ghost" onClick={() => setEditing(true)}>
+                    <Pencil size={17} />
+                    Modifier
+                  </Button>
+                </div>
+              ) : null}
             </Card>
 
             {data.units.length > 1 ? (

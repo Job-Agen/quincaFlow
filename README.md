@@ -83,6 +83,52 @@ d'écrire — le frontend n'est jamais la source de vérité financière.
 - Toutes les valeurs interpolées en SQL sont des paramètres liés.
 - Deux contraintes de base portent une règle métier : `stock_quantity >= 0`
   (impossible de survendre) et `quantity_received <= quantity_ordered`.
+- Les essais de connexion sont freinés (table `login_attempts`, fenêtre de
+  15 minutes). Le comptage vit en base et non en mémoire : sur un hébergement
+  sans état, chaque instance garderait le sien. La portée associe l'identifiant
+  à l'adresse d'origine, afin qu'un tiers ne puisse pas verrouiller un compte à
+  distance ; une seconde portée, par adresse seule, arrête le balayage de
+  comptes depuis une même machine.
+- Changer son mot de passe exige l'ancien et révoque toutes les sessions.
+- En-têtes posés sur chaque réponse : `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy` et `Permissions-Policy`.
+  HSTS est laissé à l'hébergeur, qui sait s'il sert déjà en HTTPS.
+
+### Ce qui manque encore avant une ouverture publique
+
+- **Réinitialisation de mot de passe oublié.** Elle suppose un service d'envoi
+  d'e-mails, qui n'est pas encore choisi. En l'état, un mot de passe perdu se
+  répare à la main en base.
+- **Pages légales** (conditions d'utilisation, confidentialité).
+
+## Rôles
+
+Deux rôles (§5), et la frontière passe par l'argent et les prix.
+
+| | Propriétaire | Vendeur |
+| --- | --- | --- |
+| Encaisser, vente hors stock, clients | ✔ | ✔ |
+| Consulter catalogue, historique, tableau de bord | ✔ | ✔ |
+| Créer un produit, changer un prix, ajuster le stock | ✔ | |
+| Commander, réceptionner, fournisseurs | ✔ | |
+| Annuler une vente | ✔ | |
+| Coordonnées de la boutique, équipe | ✔ | |
+
+Le propriétaire crée les comptes vendeurs depuis **Plus → Équipe** et leur
+remet un premier mot de passe de vive voix ; le vendeur le change ensuite
+depuis Paramètres. Retirer un vendeur ferme son accès mais conserve ses
+ventes : l'historique doit continuer de dire qui a encaissé.
+
+Les écrans masquent au vendeur les commandes qu'il ne peut pas exécuter, mais
+c'est `requireOwner`, côté serveur, qui décide — une interface n'est pas une
+autorisation.
+
+## Supervision
+
+`GET /api/health` interroge réellement la base et répond `200 {"status":"ok"}`
+ou `503 {"status":"degraded"}`. C'est l'adresse à surveiller : un service qui
+répond alors que Neon est injoignable est en panne du point de vue du
+commerçant.
 
 ## Démarrage
 
