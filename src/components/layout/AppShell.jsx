@@ -2,16 +2,16 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Home, ShoppingCart, Package, Truck, LayoutGrid, Store } from 'lucide-react';
+import { Home, ShoppingCart, Package, Truck, History, LayoutGrid, Store } from 'lucide-react';
 import { useSession } from '@/client/session';
 
 /**
  * Coque de l'application.
  *
- * Les cinq destinations les plus utilisées restent à portée de pouce en
- * permanence (§6, §32) : Accueil, Vendre, Produits, Achats, Plus. Le reste —
- * clients, fournisseurs, paramètres — vit derrière « Plus », car on n'y va pas
- * pendant qu'un client attend au comptoir.
+ * Les six destinations de la navigation principale restent à portée de pouce en
+ * permanence (§6, §32) : Accueil, Vendre, Produits, Achats, Historique, Plus. Le
+ * reste — clients, fournisseurs, paramètres — vit derrière « Plus », car on n'y
+ * va pas pendant qu'un client attend au comptoir.
  *
  * À partir de 900 px la même liste devient une colonne latérale : une seule
  * définition de navigation, deux présentations.
@@ -24,6 +24,7 @@ const TABS = [
   { href: '/sales/new', label: 'Vendre', icon: ShoppingCart },
   { href: '/products', label: 'Produits', icon: Package },
   { href: '/purchases', label: 'Achats', icon: Truck },
+  { href: '/history', label: 'Historique', icon: History },
   { href: '/more', label: 'Plus', icon: LayoutGrid },
 ];
 

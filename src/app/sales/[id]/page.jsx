@@ -1,29 +1,53 @@
 'use client';
 
-import { use, useState } from 'react';
-import { Printer, Share2, Store, XCircle } from 'lucide-react';
+import { use, useMemo, useState } from 'react';
+import { FileDown, Printer, Share2, Store, XCircle } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Notice, Sheet, Skeleton, TextField } from '@/components/ui';
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS } from '@/domain/sale';
+import { buildInvoiceDocument } from '@/domain/invoice';
+import { downloadInvoicePdf, invoicePdfFile } from '@/lib/invoicePdf';
 import { amount, dateTime, money, quantity } from '@/utils/format';
 
 /**
  * Facture / reçu (maquette 4, §15).
  *
- * Le document est du HTML mis en forme pour l'impression plutôt qu'un PDF
- * généré côté serveur : « Imprimer » propose « Enregistrer au format PDF » sur
- * tous les navigateurs mobiles courants, ce qui couvre les deux besoins sans
- * embarquer de moteur PDF ni faire transiter le document par un serveur.
+ * Trois sorties pour un seul document : l'écran lui-même, mis en forme pour
+ * l'impression ; un PDF ; et le partage natif. Le PDF est produit dans le
+ * navigateur, à la demande — voir `lib/invoicePdf.js` pour la raison.
+ *
+ * Le partage joint le PDF quand la plateforme l'accepte, et retombe sur le texte
+ * sinon : un commerçant qui envoie sa facture par WhatsApp (§19) transmet une
+ * pièce jointe que son client peut garder, pas un pavé de texte recopié.
  */
 export default function SalePage({ params }) {
   const { id } = use(params);
   const { business, currency, isOwner } = useSession();
   const { data: sale, loading, error, setData } = useResource(`/api/sales/${id}`);
   const [cancelling, setCancelling] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(null);
   const cancelled = sale?.status === 'CANCELLED';
+
+  const invoice = useMemo(
+    () => (sale ? buildInvoiceDocument({ sale, business, currency }) : null),
+    [sale, business, currency]
+  );
+
+  /** Le PDF, hors du flux de rendu : le moteur se charge au premier appel. */
+  async function exportPdf() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadInvoicePdf(invoice);
+    } catch {
+      setExportError("Le PDF n'a pas pu être produit. Utilisez « Imprimer » en attendant.");
+    }
+    setExporting(false);
+  }
 
   async function share() {
     const lines = sale.items
@@ -52,11 +76,29 @@ export default function SalePage({ params }) {
 
     // Le partage natif ouvre WhatsApp parmi les autres applications ; le lien
     // wa.me reste le repli sur les navigateurs de bureau qui ne l'implémentent pas.
-    if (navigator.share) {
-      await navigator.share({ title: `Facture ${sale.invoice_reference}`, text }).catch(() => {});
-    } else {
+    if (!navigator.share) {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+      return;
     }
+
+    const title = `Facture ${sale.invoice_reference}`;
+
+    // La pièce jointe d'abord, le texte en repli. `canShare` est interrogé avec
+    // le fichier réel : certaines plateformes annoncent `share` sans accepter de
+    // fichiers, et un partage refusé ne doit pas laisser le commerçant sans rien.
+    try {
+      const file = await invoicePdfFile(invoice);
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title, text, files: [file] });
+        return;
+      }
+    } catch (issue) {
+      // Un abandon volontaire du partage n'est pas une panne : on s'arrête là
+      // plutôt que de rouvrir une seconde feuille de partage dans son dos.
+      if (issue?.name === 'AbortError') return;
+    }
+
+    await navigator.share({ title, text }).catch(() => {});
   }
 
   return (
@@ -177,16 +219,31 @@ export default function SalePage({ params }) {
               )}
             </article>
 
+            {exportError ? (
+              <div className="no-print">
+                <Notice tone="error">{exportError}</Notice>
+              </div>
+            ) : null}
+
             <div className="grid-2 no-print">
               <Button variant="success" onClick={share}>
                 <Share2 size={18} />
                 Partager
               </Button>
-              <Button variant="soft" onClick={() => window.print()}>
-                <Printer size={18} />
-                Imprimer / PDF
+              <Button variant="soft" disabled={exporting} onClick={exportPdf}>
+                <FileDown size={18} />
+                {exporting ? 'PDF…' : 'PDF'}
               </Button>
             </div>
+
+            <button
+              type="button"
+              className="btn btn--ghost btn--block no-print"
+              onClick={() => window.print()}
+            >
+              <Printer size={18} />
+              Imprimer
+            </button>
 
             {sale.status === 'COMPLETED' && isOwner ? (
               <button

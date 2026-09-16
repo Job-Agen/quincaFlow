@@ -21,7 +21,7 @@ SaaS multi-tenant, mobile d'abord, en français, en FCFA.
 | --- | --- |
 | **Tableau de bord** | Ventes, achats, marge brute et nombre de ventes du jour, ventes hors stock, alertes de stock, activité récente. |
 | **Vente rapide** | Recherche instantanée, conditionnements, prix négociable, remise, encaissement avec monnaie à rendre. |
-| **Facture / reçu** | Document numéroté imprimable ou enregistrable en PDF, partageable par WhatsApp. |
+| **Facture / reçu** | Document numéroté, imprimable ou exporté en PDF, partagé par WhatsApp en pièce jointe. |
 | **Produits & stock** | Fiches, conditionnements, seuils d'alerte, ajustement d'inventaire, journal des mouvements. |
 | **Vente hors stock** | Article récupéré chez un confrère pour un client, avec marge et suivi en cinq étapes. |
 | **Achats fournisseurs** | Commandes, réception partielle, coût moyen pondéré, documents joints. |

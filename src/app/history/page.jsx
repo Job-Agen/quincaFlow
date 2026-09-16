@@ -5,7 +5,16 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeftRight, ChevronRight, PackageCheck, Receipt, Truck } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
-import { Badge, Card, Empty, Notice, SearchField, Segmented, Skeleton } from '@/components/ui';
+import {
+  Badge,
+  Card,
+  Empty,
+  Notice,
+  SearchField,
+  Segmented,
+  Skeleton,
+  TextField,
+} from '@/components/ui';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { OOS_STATUS_LABELS } from '@/domain/outOfStock';
@@ -24,6 +33,7 @@ const PERIODS = [
   { value: 'today', label: "Aujourd'hui" },
   { value: '7d', label: '7 jours' },
   { value: '30d', label: '30 jours' },
+  { value: 'custom', label: 'Période' },
   { value: 'all', label: 'Tout' },
 ];
 
@@ -76,11 +86,19 @@ function HistoryView() {
   const params = useSearchParams();
   const { currency } = useSession();
   const [period, setPeriod] = useState('7d');
+  // Bornes de la période personnalisée. Vides tant qu'on ne les a pas saisies :
+  // une borne absente laisse ce côté ouvert plutôt que de vider la liste.
+  const [range, setRange] = useState({ from: '', to: '' });
   // La nature vient de l'URL : /sales redirige ici en pré-filtrant sur les ventes.
   const [kind, setKind] = useState(params.get('kind') || '');
   const [search, setSearch] = useState('');
 
-  const { data, loading, error } = useResource('/api/history', { period, kind, search });
+  const { data, loading, error } = useResource('/api/history', {
+    period,
+    kind,
+    search,
+    ...(period === 'custom' ? { from: range.from, to: range.to } : {}),
+  });
 
   // Le regroupement par jour est fait à l'affichage : le serveur renvoie un flux
   // trié, et découper ici évite une seconde requête par journée affichée.
@@ -94,7 +112,7 @@ function HistoryView() {
 
   return (
     <>
-      <AppBar back="/more" title="Historique" />
+      <AppBar brand title="Historique" />
 
       <main className="page">
         <SearchField
@@ -103,6 +121,26 @@ function HistoryView() {
           placeholder="Référence, client, produit…"
         />
         <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+
+        {period === 'custom' ? (
+          <div className="grid-2">
+            <TextField
+              label="Du"
+              type="date"
+              value={range.from}
+              max={range.to || undefined}
+              onChange={(event) => setRange({ ...range, from: event.target.value })}
+            />
+            <TextField
+              label="Au"
+              type="date"
+              value={range.to}
+              min={range.from || undefined}
+              onChange={(event) => setRange({ ...range, to: event.target.value })}
+            />
+          </div>
+        ) : null}
+
         <Segmented options={KINDS} value={kind} onChange={setKind} />
 
         {error ? <Notice tone="error">{error.message}</Notice> : null}

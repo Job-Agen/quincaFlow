@@ -4,7 +4,6 @@ import Link from 'next/link';
 import {
   ArrowLeftRight,
   ChevronRight,
-  History,
   LogOut,
   Settings,
   Truck,
@@ -23,7 +22,7 @@ import { useSession } from '@/client/session';
  */
 
 const LINKS = [
-  { href: '/history', label: 'Historique', icon: History },
+  // Historique vit dans la barre d'onglets (§6) : le répéter ici n'ajoute rien.
   { href: '/out-of-stock', label: 'Ventes hors stock', icon: ArrowLeftRight },
   { href: '/customers', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Fournisseurs', icon: Truck },

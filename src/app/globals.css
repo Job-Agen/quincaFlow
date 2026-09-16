@@ -181,7 +181,10 @@ a {
   bottom: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* Colonnes déduites du nombre d'onglets : ajouter une destination ne demande
+     pas de retoucher le CSS. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   background: var(--surface);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
@@ -197,6 +200,25 @@ a {
   font-size: 11px;
   font-weight: 600;
   color: var(--faint);
+  /* Sans min-width, une cellule de grille refuse de passer sous la largeur de
+     son contenu : un libellé long pousserait alors toute la barre hors écran. */
+  min-width: 0;
+  padding-inline: 2px;
+}
+
+.tabbar__item span {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* « Historique » ne tient pas à six onglets sur les écrans les plus étroits. */
+@media (max-width: 400px) {
+  .tabbar__item {
+    font-size: 10px;
+    letter-spacing: -0.2px;
+  }
 }
 
 .tabbar__item[data-active='true'] {

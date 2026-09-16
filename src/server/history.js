@@ -72,9 +72,16 @@ export async function listHistory(businessId, { from, to, search = '', kind, lim
 
 /**
  * Traduit un raccourci de période en bornes.
- * `today | 7d | 30d | all`, ou des dates explicites côté appelant.
+ * `today | 7d | 30d | custom | all` (§24).
+ *
+ * `custom` lit `range.from` et `range.to`, deux dates `AAAA-MM-JJ` telles que les
+ * produit un champ de date. Une borne absente ou illisible laisse ce côté
+ * ouvert : « depuis le 1er mars » est une demande légitime, et refuser la
+ * recherche entière pour une seule borne manquante n'aiderait personne.
  */
-export function periodBounds(period) {
+export function periodBounds(period, range = {}) {
+  if (period === 'custom') return customBounds(range.from, range.to);
+
   const end = new Date();
   end.setHours(23, 59, 59, 999);
   const start = new Date();
@@ -85,4 +92,36 @@ export function periodBounds(period) {
   else if (period !== 'today') return { from: null, to: null };
 
   return { from: start.toISOString(), to: end.toISOString() };
+}
+
+/**
+ * Bornes d'une période saisie à la main.
+ *
+ * Les dates sont interprétées dans le fuseau du serveur, comme les autres
+ * raccourcis : une journée va de 00:00:00 à 23:59:59 locales, bornes comprises.
+ * Un `AAAA-MM-JJ` passé à `new Date()` serait lu en UTC et décalerait la journée.
+ */
+function customBounds(rawFrom, rawTo) {
+  let start = parseDay(rawFrom);
+  let end = parseDay(rawTo);
+
+  // Bornes inversées : le commerçant voulait manifestement l'intervalle entre
+  // les deux dates. Les remettre d'aplomb vaut mieux qu'une liste vide.
+  if (start && end && start > end) [start, end] = [end, start];
+
+  if (end) end.setHours(23, 59, 59, 999);
+  return { from: start ? start.toISOString() : null, to: end ? end.toISOString() : null };
+}
+
+/** `AAAA-MM-JJ` en date locale à minuit, ou null si la chaîne n'en est pas une. */
+function parseDay(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+  const [, year, month, day] = match.map(Number);
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+  // Rejette les dates qui débordent — « 2026-02-31 » deviendrait le 3 mars.
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return date;
 }
