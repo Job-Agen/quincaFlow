@@ -4,7 +4,9 @@ import {
   buildSaleLine,
   grossMargin,
   paymentStatusOf,
+  priceFloor,
   totalsOf,
+  underpricedLine,
 } from '../sale';
 import { unitsOf } from '../units';
 
@@ -125,5 +127,59 @@ describe('baseQuantitiesByProduct', () => {
     expect(totals.get('p1')).toBe(85);
     expect(totals.get('p2')).toBe(3);
     expect(totals.size).toBe(2);
+  });
+});
+
+describe('priceFloor / underpricedLine — remise autorisée (§11)', () => {
+  const line = (unitPrice, unitTariff = 450) => ({
+    productName: 'Vitre 60 cm',
+    unitLabel: 'pièce',
+    unitPrice,
+    unitTariff,
+  });
+
+  it('applique le plafond au tarif du conditionnement', () => {
+    expect(priceFloor(450, 10)).toBe(405);
+    expect(priceFloor(17000, 10)).toBe(15300);
+  });
+
+  it('fige le prix quand aucune remise n’est accordée', () => {
+    expect(priceFloor(450, 0)).toBe(450);
+  });
+
+  it('autorise la gratuité si la boutique consent 100 %', () => {
+    expect(priceFloor(450, 100)).toBe(0);
+  });
+
+  it('borne une saisie aberrante plutôt que de produire un plancher négatif', () => {
+    expect(priceFloor(450, 300)).toBe(0);
+    expect(priceFloor(450, -50)).toBe(450);
+  });
+
+  it('laisse passer un prix au-dessus du plancher', () => {
+    expect(underpricedLine([line(420)], 10)).toBeNull();
+  });
+
+  it('accepte un prix posé exactement sur le plancher', () => {
+    expect(underpricedLine([line(405)], 10)).toBeNull();
+  });
+
+  it('signale un prix sous le plancher', () => {
+    expect(underpricedLine([line(400)], 10)).not.toBeNull();
+  });
+
+  it('juge chaque ligne sur son propre tarif, pas sur celui du produit', () => {
+    // 15 300 est le plancher du carton ; ce serait bien au-dessus du tarif pièce.
+    const panier = [line(420, 450), line(15000, 17000)];
+    expect(underpricedLine(panier, 10).unitTariff).toBe(17000);
+  });
+
+  it('rend la première ligne fautive, pas toutes', () => {
+    expect(underpricedLine([line(420), line(100), line(50)], 10).unitPrice).toBe(100);
+  });
+
+  it('refuse toute remise quand le plafond est à zéro', () => {
+    expect(underpricedLine([line(449)], 0)).not.toBeNull();
+    expect(underpricedLine([line(450)], 0)).toBeNull();
   });
 });

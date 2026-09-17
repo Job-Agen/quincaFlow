@@ -1,9 +1,10 @@
 import { getSql, one, runTransaction } from '../lib/db';
 import { newId } from '../lib/ids';
-import { badRequest, notFound, conflict } from '../lib/http';
+import { badRequest, notFound, conflict, forbidden } from '../lib/http';
 import { str, num, list, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
 import { referenceFormat } from '../lib/references';
+import { ROLES } from '../lib/auth';
 import { loadCatalog } from './products';
 import { resolveCustomerName } from './contacts';
 import {
@@ -11,7 +12,9 @@ import {
   baseQuantitiesByProduct,
   buildSaleLine,
   paymentStatusOf,
+  priceFloor,
   totalsOf,
+  underpricedLine,
 } from '../domain/sale';
 
 /**
@@ -92,8 +95,42 @@ function stockQueries(sql, session, { productId, delta, type, referenceId, refer
   ];
 }
 
+/**
+ * Refuse une vente dont un vendeur a poussé le prix sous le plancher (§11).
+ *
+ * Le contrôle est ici et non dans l'écran : le client n'est jamais la source de
+ * vérité financière (§35), et un appel direct à l'API contournerait n'importe
+ * quel champ verrouillé côté interface.
+ *
+ * Le propriétaire n'est pas borné — c'est sa marchandise et sa marge. Le plafond
+ * est relu en base à chaque vente plutôt que porté par le jeton : baisser le
+ * seuil doit prendre effet tout de suite, sans attendre l'expiration des
+ * sessions ouvertes.
+ */
+async function guardSellerDiscount(session, lines) {
+  if (session.role === ROLES.OWNER) return;
+
+  // `one` prend le tableau de lignes, pas la promesse : c'est la requête qu'on
+  // attend, pas elle.
+  const business = one(
+    await getSql()`SELECT max_seller_discount_percent::float8 AS max_discount
+                     FROM businesses WHERE id = ${session.businessId}`
+  );
+  const maxDiscount = business?.max_discount ?? 0;
+
+  const line = underpricedLine(lines, maxDiscount);
+  if (!line) return;
+
+  const floor = priceFloor(line.unitTariff, maxDiscount);
+  throw forbidden(
+    `Prix trop bas sur « ${line.productName} » : ${floor} minimum pour un ${line.unitLabel}. ` +
+      `Au-delà de ${maxDiscount} % de remise, la vente doit être validée par le propriétaire.`
+  );
+}
+
 export async function createSale(session, body) {
   const lines = await priceLines(session.businessId, body.lines);
+  await guardSellerDiscount(session, lines);
   const totals = totalsOf(lines, num(body.discount, 'remise', { min: 0, required: false }));
 
   const paymentMethod = enumValue(

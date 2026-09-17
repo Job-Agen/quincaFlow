@@ -20,11 +20,12 @@ import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import {
-  baseQuantitiesByProduct,
-  buildSaleLine,
-  totalsOf,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
+  baseQuantitiesByProduct,
+  buildSaleLine,
+  priceFloor,
+  totalsOf,
 } from '@/domain/sale';
 import { unitsOf } from '@/domain/units';
 import { money, quantity as fmtQuantity } from '@/utils/format';
@@ -42,7 +43,7 @@ import { money, quantity as fmtQuantity } from '@/utils/format';
  */
 export default function NewSalePage() {
   const router = useRouter();
-  const { currency } = useSession();
+  const { currency, isOwner, business } = useSession();
   const products = useResource('/api/products');
   const customers = useResource('/api/customers');
 
@@ -77,6 +78,23 @@ export default function NewSalePage() {
   );
 
   const totals = useMemo(() => totalsOf(priced, discount || 0), [priced, discount]);
+
+  /**
+   * Lignes bradées au regard du plafond de la boutique (§11).
+   *
+   * Le propriétaire n'est pas borné. Pour un vendeur, l'avertissement est ici
+   * pour éviter un aller-retour inutile ; c'est le serveur qui refuse pour de
+   * bon — un champ verrouillé dans le navigateur n'est pas une autorisation.
+   */
+  const maxDiscount = business?.max_seller_discount_percent ?? 0;
+  const underpriced = useMemo(() => {
+    if (isOwner) return new Set();
+    return new Set(
+      priced
+        .filter((line) => line.unitPrice < priceFloor(line.unitTariff, maxDiscount) - 0.005)
+        .map((line) => line.key)
+    );
+  }, [priced, isOwner, maxDiscount]);
 
   /**
    * Produits dont le panier demande plus que le stock.
@@ -262,6 +280,15 @@ export default function NewSalePage() {
                         Stock insuffisant pour cet article.
                       </div>
                     ) : null}
+
+                    {underpriced.has(line.key) ? (
+                      <div className="small" style={{ color: 'var(--red)' }}>
+                        Prix trop bas :{' '}
+                        {priceFloor(line.unitTariff, maxDiscount).toLocaleString('fr-FR')} minimum
+                        pour un {line.unitLabel}. Au-delà de {maxDiscount} % de remise, la vente
+                        doit être validée par le propriétaire.
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}
@@ -328,7 +355,7 @@ export default function NewSalePage() {
         <Button
           variant="success"
           block
-          disabled={priced.length === 0 || busy || shortages.length > 0}
+          disabled={priced.length === 0 || busy || shortages.length > 0 || underpriced.size > 0}
           onClick={() => setCheckout(true)}
         >
           Valider la vente

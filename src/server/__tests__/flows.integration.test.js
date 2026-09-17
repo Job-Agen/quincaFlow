@@ -90,6 +90,10 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
   }
 
+  /** Id du conditionnement « carton ». `units` est trié par facteur croissant :
+   *  units[0] est l'unité de base, viser un rang serait fragile. */
+  const cartonId = (product) => product.units.find((unit) => unit.label === 'carton').id;
+
   const stockOf = async (id) => {
     const { rows } = await pool.query(
       'SELECT stock_quantity::float8 AS q FROM products WHERE id = $1',
@@ -473,6 +477,54 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     ).rejects.toThrow(/incorrect/i);
     const { rows } = await pool.query('SELECT user_id FROM sales');
     expect(rows).toEqual([{ user_id: vendeur.id }]);
+  });
+
+  it('borne la remise qu’un vendeur peut consentir, jamais celle du propriétaire (§11)', async () => {
+    const members = await import('../members');
+    const vendeur = await members.addSeller(OWNER, {
+      name: 'Ama Doe',
+      email: 'ama@test.tg',
+      password: 'comptoir2026',
+    });
+    const SELLER = { userId: vendeur.id, businessId: OWNER.businessId, role: 'SELLER' };
+    const vitre = await seedVitre();
+
+    // Plafond par défaut : 10 %, soit 405 au plus bas sur une vitre tarifée 450.
+    await expect(
+      sales.createSale(SELLER, { lines: [{ productId: vitre.id, quantity: 1, unitPrice: 300 }] })
+    ).rejects.toThrow(/prix trop bas/i);
+
+    // Le refus est total : aucune vente écrite, aucun stock bougé.
+    expect((await pool.query('SELECT id FROM sales')).rows).toEqual([]);
+    expect(await stockOf(vitre.id)).toBe(80);
+
+    // Au-dessus du plancher, la négociation passe normalement.
+    const negociee = await sales.createSale(SELLER, {
+      lines: [{ productId: vitre.id, quantity: 1, unitPrice: 410 }],
+    });
+    expect(negociee.total).toBe(410);
+
+    // Le plancher suit le tarif du conditionnement vendu, pas celui du produit :
+    // 15 300 sur un carton à 17 000, et non 405.
+    await expect(
+      sales.createSale(SELLER, {
+        lines: [{ productId: vitre.id, quantity: 1, unitId: cartonId(vitre), unitPrice: 15000 }],
+      })
+    ).rejects.toThrow(/prix trop bas/i);
+
+    // Le propriétaire n'est pas borné : c'est sa marchandise et sa marge.
+    const cadeau = await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, quantity: 1, unitPrice: 0 }],
+    });
+    expect(cadeau.total).toBe(0);
+
+    // Le plafond est relu en base à chaque vente : le relever prend effet tout
+    // de suite, sans attendre l'expiration des sessions déjà ouvertes.
+    await accounts.updateBusiness(OWNER, { name: 'Quincaillerie A', maxSellerDiscountPercent: 50 });
+    const bradee = await sales.createSale(SELLER, {
+      lines: [{ productId: vitre.id, quantity: 1, unitPrice: 300 }],
+    });
+    expect(bradee.total).toBe(300);
   });
 
   it('laisse le propriétaire réattribuer le mot de passe d’un vendeur, pas le sien', async () => {

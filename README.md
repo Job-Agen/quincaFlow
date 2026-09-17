@@ -123,6 +123,15 @@ Les écrans masquent au vendeur les commandes qu'il ne peut pas exécuter, mais
 c'est `requireOwner`, côté serveur, qui décide — une interface n'est pas une
 autorisation.
 
+Le prix reste négociable au comptoir, mais borné pour un vendeur : la boutique
+fixe une remise maximale, en pourcentage du tarif du conditionnement vendu
+(Paramètres → *Remise max. d'un vendeur*, 10 % par défaut, 0 fige les tarifs).
+Au-delà, la vente est refusée et doit passer par le propriétaire, lui-même non
+borné. Le contrôle est côté serveur : verrouiller le champ dans le navigateur
+n'empêcherait pas un appel direct à l'API. Le plafond est relu à chaque vente,
+pour que le modifier prenne effet sans attendre l'expiration des sessions
+ouvertes.
+
 ## Supervision
 
 `GET /api/health` interroge réellement la base et répond `200 {"status":"ok"}`

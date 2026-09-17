@@ -1,7 +1,7 @@
 import { getSql, one, runTransaction } from '../lib/db';
 import { newId } from '../lib/ids';
 import { badRequest, conflict, unauthorized, notFound } from '../lib/http';
-import { str, email as emailField } from '../lib/validate';
+import { str, num, email as emailField } from '../lib/validate';
 import { ROLES, hashPassword, verifyPassword } from '../lib/auth';
 
 /**
@@ -100,7 +100,8 @@ export async function profile(session) {
   const sql = getSql();
   const [user, business] = await Promise.all([
     sql`SELECT id, name, email, phone FROM users WHERE id = ${session.userId}`,
-    sql`SELECT id, name, phone, address, tagline, currency
+    sql`SELECT id, name, phone, address, tagline, currency,
+               max_seller_discount_percent::float8 AS max_seller_discount_percent
           FROM businesses WHERE id = ${session.businessId}`,
   ]);
   if (!user.length || !business.length) throw notFound('Compte introuvable.');
@@ -147,6 +148,20 @@ export async function changePassword(session, body) {
   ]);
 }
 
+/**
+ * Remise maximale qu'un vendeur peut consentir, en pourcentage (§11).
+ *
+ * Absente du corps, elle est laissée à sa valeur par défaut plutôt que remise à
+ * zéro : l'écran des paramètres pourrait n'envoyer que les coordonnées, et un
+ * plafond silencieusement tombé à 0 bloquerait toute négociation au comptoir
+ * sans que personne ne comprenne pourquoi.
+ */
+function maxSellerDiscount(body) {
+  const value = body.maxSellerDiscountPercent;
+  if (value === undefined || value === null || value === '') return 10;
+  return num(value, 'remise maximale du vendeur', { min: 0, max: 100 });
+}
+
 /** Coordonnées de la boutique — elles figurent en tête des factures (§15). */
 export async function updateBusiness(session, body) {
   await getSql()`
@@ -156,6 +171,7 @@ export async function updateBusiness(session, body) {
            phone = ${str(body.phone, 'téléphone', { required: false, max: 40 })},
            address = ${str(body.address, 'adresse', { required: false, max: 300 })},
            currency = ${str(body.currency, 'devise', { required: false, max: 10 }) || 'FCFA'},
+           max_seller_discount_percent = ${maxSellerDiscount(body)},
            updated_at = now()
      WHERE id = ${session.businessId}
   `;

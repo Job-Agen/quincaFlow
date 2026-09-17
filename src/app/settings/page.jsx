@@ -23,6 +23,7 @@ export default function SettingsPage() {
     phone: business?.phone || '',
     address: business?.address || '',
     currency: business?.currency || 'FCFA',
+    maxSellerDiscountPercent: business?.max_seller_discount_percent ?? 10,
   }));
   const [state, setState] = useState({ busy: false, error: null, saved: false });
 
@@ -95,6 +96,18 @@ export default function SettingsPage() {
                 hint="Symbole affiché après les montants."
                 value={form.currency}
                 onChange={set('currency')}
+                disabled={!isOwner}
+              />
+              <TextField
+                label="Remise max. d'un vendeur (%)"
+                hint="Au-delà, seul le propriétaire peut valider la vente. 0 fige les tarifs."
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                inputMode="decimal"
+                value={form.maxSellerDiscountPercent}
+                onChange={set('maxSellerDiscountPercent')}
                 disabled={!isOwner}
               />
             </div>

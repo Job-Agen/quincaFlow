@@ -52,6 +52,9 @@ export function buildSaleLine(entry, product, units) {
     unitFactor: unit.factor,
     quantity,
     unitPrice,
+    // Tarif de référence du conditionnement, conservé à côté du prix pratiqué :
+    // sans lui, impossible de dire quelle remise a été consentie.
+    unitTariff: round2(unit.price),
     lineTotal: round2(quantity * unitPrice),
     unitCost,
     baseQuantity,
@@ -109,4 +112,36 @@ export function baseQuantitiesByProduct(lines) {
     totals.set(line.productId, round3((totals.get(line.productId) || 0) + line.baseQuantity));
   });
   return totals;
+}
+
+// ───────────────────────── Remise consentie (§11) ──────────────────────────
+
+/**
+ * Prix le plus bas qu'un vendeur peut consentir sur un conditionnement.
+ *
+ * Le §11 autorise le vendeur à « modifier le prix si autorisé ». L'autorisation
+ * est ce plafond, réglé par le propriétaire : le marchandage reste possible au
+ * comptoir, mais personne ne brade sans que ce soit une décision de la boutique.
+ */
+export function priceFloor(tariff, maxDiscountPercent) {
+  const reference = Math.max(0, toNumber(tariff));
+  const percent = Math.min(100, Math.max(0, toNumber(maxDiscountPercent)));
+  return round2(reference * (1 - percent / 100));
+}
+
+/**
+ * Première ligne dont le prix passe sous le plancher, ou `null` si tout va bien.
+ *
+ * On s'arrête à la première : le vendeur corrige une ligne à la fois, et lui
+ * lister d'un coup tout ce qui cloche ne l'avance pas.
+ *
+ * La tolérance d'un demi-centime absorbe les arrondis de `round2` — un prix
+ * saisi exactement au plancher ne doit pas être refusé pour une poussière.
+ */
+export function underpricedLine(lines, maxDiscountPercent) {
+  return (
+    lines.find(
+      (line) => line.unitPrice < priceFloor(line.unitTariff, maxDiscountPercent) - 0.005
+    ) || null
+  );
 }

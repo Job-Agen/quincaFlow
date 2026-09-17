@@ -34,9 +34,20 @@ CREATE TABLE IF NOT EXISTS businesses (
   address    text,
   tagline    text,
   currency   text NOT NULL DEFAULT 'FCFA',
+  -- Remise maximale qu'un vendeur peut consentir de lui-même, en pourcentage du
+  -- tarif du conditionnement vendu (§11 « modifier le prix si autorisé »). Le
+  -- propriétaire n'est pas borné : c'est sa marge. 10 % laisse le marchandage
+  -- courant possible sans permettre de brader.
+  max_seller_discount_percent numeric(5, 2) NOT NULL DEFAULT 10
+    CHECK (max_seller_discount_percent >= 0 AND max_seller_discount_percent <= 100),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Bases ouvertes avant l'ajout du plafond : `CREATE TABLE IF NOT EXISTS` ne
+-- touche pas une table existante, la colonne doit donc être ajoutée à part.
+ALTER TABLE businesses
+  ADD COLUMN IF NOT EXISTS max_seller_discount_percent numeric(5, 2) NOT NULL DEFAULT 10;
 
 -- Rôles MVP : OWNER, SELLER (§5). Pas de RBAC fin en V1.
 CREATE TABLE IF NOT EXISTS business_members (
