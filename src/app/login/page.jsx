@@ -46,6 +46,25 @@ export default function LoginPage() {
       </div>
 
       <form className="auth__panel" onSubmit={submit}>
+        <Link
+          href="/local"
+          className="btn btn--primary"
+          style={{
+            display: 'block',
+            textAlign: 'center',
+            padding: 14,
+            background: '#0867c9',
+            color: 'white',
+            borderRadius: 8,
+            fontWeight: 700,
+          }}
+        >
+          Ouvrir ma boutique autonome
+        </Link>
+        <p className="small muted" style={{ textAlign: 'center' }}>
+          Sans compte, avec sauvegarde sur cet appareil.
+        </p>
+        <p className="small muted">Ou se connecter à l’espace serveur :</p>
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         <div className="input-icon">

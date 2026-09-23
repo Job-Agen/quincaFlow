@@ -215,10 +215,49 @@ businesses
 Références : `VE-0001` (vente), `FA-2026-0001` (facture, remise à zéro chaque
 année), `HS-0001` (hors stock), `PO-0001` (commande), `RC-0001` (réception).
 
-## Connectivité
+## Boutique autonome — `/local`
 
-QuincaFlow ne promet pas de fonctionner hors ligne. Un vrai mode hors ligne
-transactionnel suppose de résoudre les ventes simultanées et les conflits de
-stock — bien plus qu'un cache PWA. La V1 optimise pour les connexions faibles :
-le catalogue est chargé une fois et filtré en mémoire, les écrans ne rechargent
-que ce qui change.
+L’entrée « Ouvrir ma boutique autonome » sur la connexion ouvre un carnet sans
+compte, sans API et sans base de données. L’ancien espace connecté reste
+accessible ; ses données sont séparées, sans synchronisation automatique.
+
+- Produits : CRUD, catégories commerciales, prix public/gros/coût, inventaire,
+  seuils, recherche et filtres instantanés.
+- Clients : achats à crédit, dette initiale, dépenses cumulées, remboursements
+  partiels/totaux motivés, principaux débiteurs, brouillon WhatsApp.
+- Fournisseurs : répertoire, achats reçus, dettes et règlements.
+- Caisse : entrées/sorties en espèces ou Mobile Money, dépenses classées,
+  justificatifs photo depuis galerie/appareil photo, répartition des dépenses.
+- Rapports : période inclusive, ventes quotidiennes, coût historique des ventes,
+  marge brute et résultat net calculé, rentabilité par produit.
+- Sauvegardes : localStorage versionné, export/import JSON incluant les photos,
+  notifications après écriture réussie, contrôle de concurrence entre onglets.
+
+Les montants sont conservés en centimes entiers et les quantités à trois
+décimales. Les ventes figent prix et coût ; les achats reçus actualisent le coût
+moyen pondéré. Les remboursements alimentent la caisse sans créer une nouvelle
+vente. Le résultat net déduit les charges enregistrées de la marge brute ; les
+achats de stock ne sont pas déduits deux fois. La suppression des fiches conserve
+les historiques, et une dette impayée bloque la suppression du contact.
+
+### Hors ligne et conservation des données
+
+Ouvrir `/local` une première fois en HTTPS (ou localhost) puis attendre
+« Réouverture hors ligne prête ». Le service worker précharge uniquement la
+coque publique et ses ressources statiques ; aucune API ou page privée n’est
+mise en cache. La navigation du carnet utilise des onglets locaux, et les
+opérations ne nécessitent aucune requête réseau. Une coupure n’empêche ni la
+saisie ni le rechargement une fois ce cache prêt. WhatsApp requiert son propre
+accès réseau et ouvre un message prérempli, sans l’envoyer automatiquement.
+
+Le navigateur peut bloquer le stockage, atteindre son quota ou effacer ses
+données. L’application signale tout échec sans annoncer une sauvegarde réussie,
+et conserve une sauvegarde corrompue pour permettre son export. Exporter
+régulièrement dans **Plus → Exporter la sauvegarde**, particulièrement avant un
+changement d’appareil, de navigateur ou de domaine. L’import valide le schéma et
+les soldes puis demande confirmation avant de remplacer le carnet. Les photos
+sont compressées localement (JPEG, PNG ou WebP en entrée ; 12 Mo maximum).
+
+Les tests `src/local/__tests__/ledger.test.js` couvrent stock, crédit,
+remboursements, marges, atomicité, quota, corruption et restauration. Les tests
+PostgreSQL restent destinés à l’espace connecté.

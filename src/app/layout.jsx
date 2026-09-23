@@ -1,7 +1,6 @@
 import './globals.css';
 import './prototype.css';
-import { SessionProvider } from '@/client/session';
-import AppShell from '@/components/layout/AppShell';
+import ClientRoot from '@/components/layout/ClientRoot';
 
 export const metadata = {
   title: 'QuincaFlow — gestion de quincaillerie',
@@ -20,9 +19,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="fr">
       <body>
-        <SessionProvider>
-          <AppShell>{children}</AppShell>
-        </SessionProvider>
+        <ClientRoot>{children}</ClientRoot>
       </body>
     </html>
   );
