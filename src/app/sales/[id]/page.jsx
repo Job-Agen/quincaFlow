@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { Printer, Share2, Store, XCircle } from 'lucide-react';
+import { Printer, Share2, Store, XCircle, FileDown, MessageCircle } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Notice, Sheet, Skeleton, TextField } from '@/components/ui';
 import { api } from '@/client/api';
@@ -25,7 +25,7 @@ export default function SalePage({ params }) {
   const [cancelling, setCancelling] = useState(false);
   const cancelled = sale?.status === 'CANCELLED';
 
-  async function share() {
+  async function share(target = 'native') {
     const lines = sale.items
       .map(
         (item) =>
@@ -52,7 +52,7 @@ export default function SalePage({ params }) {
 
     // Le partage natif ouvre WhatsApp parmi les autres applications ; le lien
     // wa.me reste le repli sur les navigateurs de bureau qui ne l'implémentent pas.
-    if (navigator.share) {
+    if (target !== 'whatsapp' && navigator.share) {
       await navigator.share({ title: `Facture ${sale.invoice_reference}`, text }).catch(() => {});
     } else {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
@@ -73,7 +73,7 @@ export default function SalePage({ params }) {
         }
       />
 
-      <main className="page">
+      <main className="page page--invoice">
         {error ? <Notice tone="error">{error.message}</Notice> : null}
         {loading && !sale ? <Skeleton count={1} height={420} /> : null}
 
@@ -177,21 +177,28 @@ export default function SalePage({ params }) {
               )}
             </article>
 
-            <div className="grid-2 no-print">
-              <Button variant="success" onClick={share}>
-                <Share2 size={18} />
-                Partager
+            <div className="invoice-actions no-print">
+              <Button variant="success" onClick={() => share('whatsapp')}>
+                <MessageCircle size={23} />
+                Partager WhatsApp
+              </Button>
+              <Button
+                onClick={() => window.print()}
+                title="Choisissez Enregistrer au format PDF dans la fenêtre d’impression"
+              >
+                <FileDown size={23} />
+                Enregistrer PDF
               </Button>
               <Button variant="soft" onClick={() => window.print()}>
-                <Printer size={18} />
-                Imprimer / PDF
+                <Printer size={23} />
+                Imprimer
               </Button>
             </div>
 
             {sale.status === 'COMPLETED' && isOwner ? (
               <button
                 type="button"
-                className="btn btn--ghost btn--block no-print"
+                className="secondary-action no-print"
                 style={{ color: 'var(--red)' }}
                 onClick={() => setCancelling(true)}
               >

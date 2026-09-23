@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {
   AlertTriangle,
-  ArrowLeftRight,
+  Bell,
   ChevronRight,
   Coins,
   FileText,
@@ -21,29 +21,15 @@ import { money, quantity, time } from '@/utils/format';
  * Tableau de bord (maquette 2, §8).
  *
  * Il répond à une seule question : « que s'est-il passé dans ma boutique
- * aujourd'hui ? ». Pas de graphique, pas d'analyse — six chiffres, les alertes
+ * aujourd'hui ? ». Pas de graphique, pas d'analyse — quatre chiffres, les alertes
  * de stock, et les dernières opérations.
  */
 
 const TILES = [
   { key: 'revenue', label: 'Ventes du jour', tone: 'green', icon: TrendingUp, money: true },
   { key: 'purchasesToday', label: 'Achats du jour', tone: 'blue', icon: ShoppingCart, money: true },
-  { key: 'margin', label: 'Marge brute estimée', tone: 'amber', icon: Coins, money: true },
+  { key: 'margin', label: 'Marge estimée', tone: 'amber', icon: Coins, money: true },
   { key: 'salesCount', label: 'Nombre de ventes', tone: 'violet', icon: FileText },
-  {
-    key: 'outOfStockCount',
-    label: 'Ventes hors stock',
-    tone: 'blue',
-    icon: ArrowLeftRight,
-    href: '/out-of-stock',
-  },
-  {
-    key: 'lowStockCount',
-    label: 'Produits en stock faible',
-    tone: 'amber',
-    icon: AlertTriangle,
-    href: '/products?filter=low',
-  },
 ];
 
 export default function DashboardPage() {
@@ -54,7 +40,17 @@ export default function DashboardPage() {
     <>
       <AppBar
         brand
-        title={business?.name || 'Ma quincaillerie'}
+        title={business?.name || 'MaQuincaillerie'}
+        right={
+          <Link
+            href="/products?filter=low"
+            className="appbar__icon notification"
+            aria-label="Alertes de stock"
+          >
+            <Bell size={22} />
+            {data?.lowStock.length > 0 ? <i /> : null}
+          </Link>
+        }
         left={
           <span className="appbar__icon" aria-hidden="true">
             <Store size={20} />
@@ -62,7 +58,7 @@ export default function DashboardPage() {
         }
       />
 
-      <main className="page">
+      <main className="page page--dashboard">
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 800 }}>
             Bonjour{user?.name ? ` ${user.name.split(' ')[0]}` : ''} !
@@ -98,7 +94,7 @@ export default function DashboardPage() {
               })}
             </div>
 
-            <Card>
+            <Card className="stock-alerts">
               <CardHead
                 title="Stock faible"
                 action={
@@ -139,44 +135,50 @@ export default function DashboardPage() {
               )}
             </Card>
 
-            <Card>
-              <CardHead
-                title="Activité récente"
-                action={
-                  <Link href="/history" className="link">
-                    Historique
-                  </Link>
-                }
-              />
-              {data.activity.length === 0 ? (
-                <Empty
-                  title="Rien pour le moment"
-                  hint="Vos ventes apparaîtront ici dès la première opération."
-                />
-              ) : (
-                <div className="list">
-                  {data.activity.map((entry) => (
-                    <Link
-                      key={`${entry.kind}-${entry.id}`}
-                      href={
-                        entry.kind === 'SALE' ? `/sales/${entry.id}` : `/out-of-stock/${entry.id}`
-                      }
-                      className="list__row"
-                    >
-                      <span className="muted small num" style={{ width: 44 }}>
-                        {time(entry.created_at)}
-                      </span>
-                      <div className="list__body">
-                        <div className="list__title">
-                          {entry.kind === 'SALE' ? 'Vente' : 'Hors stock'} {entry.reference}
-                        </div>
-                      </div>
-                      <strong className="num">{money(entry.total, currency)}</strong>
+            {data.activity.length > 0 ? (
+              <Card className="recent-activity">
+                <CardHead
+                  title="Activité récente"
+                  action={
+                    <Link href="/history" className="link">
+                      Historique
                     </Link>
-                  ))}
-                </div>
-              )}
-            </Card>
+                  }
+                />
+                {data.activity.length === 0 ? (
+                  <Empty
+                    title="Rien pour le moment"
+                    hint="Vos ventes apparaîtront ici dès la première opération."
+                  />
+                ) : (
+                  <div className="list">
+                    {data.activity.map((entry) => (
+                      <Link
+                        key={`${entry.kind}-${entry.id}`}
+                        href={
+                          entry.kind === 'SALE' ? `/sales/${entry.id}` : `/out-of-stock/${entry.id}`
+                        }
+                        className="list__row"
+                      >
+                        <span className="muted small num" style={{ width: 44 }}>
+                          {time(entry.created_at)}
+                        </span>
+                        <div className="list__body">
+                          <div className="list__title">
+                            {entry.kind === 'SALE' ? 'Vente' : 'Hors stock'} {entry.reference}
+                          </div>
+                        </div>
+                        <strong className="num">{money(entry.total, currency)}</strong>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            ) : (
+              <Link href="/history" className="link dashboard-history">
+                Historique des ventes
+              </Link>
+            )}
           </>
         ) : null}
       </main>

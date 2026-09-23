@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { Check, XCircle } from 'lucide-react';
+import { Check, XCircle, Info } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Card, CardHead, Notice, Skeleton } from '@/components/ui';
 import { api } from '@/client/api';
@@ -41,65 +41,48 @@ export default function OutOfStockDetailPage({ params }) {
 
   return (
     <>
-      <AppBar back="/out-of-stock" title={data?.reference || 'Vente hors stock'} />
+      <AppBar back="/out-of-stock" title="Vente hors stock" />
 
-      <main className="page">
+      <main className="page page--oos">
         {error ? <Notice tone="error">{error.message}</Notice> : null}
         {issue ? <Notice tone="error">{issue}</Notice> : null}
         {loading && !data ? <Skeleton count={3} height={110} /> : null}
 
         {data ? (
           <>
-            <Card pad className="stack">
-              <div className="row row--between">
-                <div>
-                  <div className="strong" style={{ fontSize: 17 }}>
-                    {data.product_name}
-                  </div>
-                  <div className="small muted">{dateTime(data.created_at)}</div>
-                </div>
-                <Badge tone={data.status === 'CANCELLED' ? 'grey' : done ? 'green' : 'amber'}>
-                  {OOS_STATUS_LABELS[data.status]}
-                </Badge>
+            <Notice icon={<Info size={21} style={{ flexShrink: 0 }} />}>
+              Produit non disponible en stock, mais que vous pouvez obtenir chez un autre vendeur.
+            </Notice>
+            <div className="stack oos-summary">
+              <label className="field">
+                <span className="field__label">Produit</span>
+                <input className="input" value={data.product_name} readOnly />
+              </label>
+              <label className="field">
+                <span className="field__label">Autre vendeur</span>
+                <input className="input" value={data.other_seller || '—'} readOnly />
+              </label>
+              <label className="field">
+                <span className="field__label">Coût d’achat</span>
+                <input className="input" value={money(data.cost_price, currency)} readOnly />
+              </label>
+              <div className="total-line">
+                <span className="strong">Prix de vente client</span>
+                <span>{money(data.selling_price, currency)}</span>
               </div>
-
-              <div className="stack" style={{ gap: 0 }}>
-                <div className="total-line">
-                  <span className="muted">Client</span>
-                  <span>{data.customer_name || 'Client comptoir'}</span>
-                </div>
-                <div className="total-line">
-                  <span className="muted">Autre vendeur</span>
-                  <span>{data.other_seller || '—'}</span>
-                </div>
-                <div className="total-line">
-                  <span className="muted">Quantité</span>
-                  <span className="num">{quantity(data.quantity)}</span>
-                </div>
-                <div className="total-line">
-                  <span className="muted">Coût d&apos;achat</span>
-                  <span className="num">{money(data.cost_price, currency)}</span>
-                </div>
-                <div className="total-line">
-                  <span className="muted">Prix client</span>
-                  <span className="num">{money(data.selling_price, currency)}</span>
-                </div>
-                <div className="total-line total-line--grand">
-                  <span>Marge brute</span>
-                  <span className="num" style={{ color: 'var(--green-dark)' }}>
-                    {money(data.gross_margin, currency)}
-                  </span>
-                </div>
+              <div className="total-line oos-margin">
+                <strong>Marge brute</strong>
+                <strong>{money(data.gross_margin, currency)}</strong>
               </div>
-
-              {data.note ? <p className="small muted">{data.note}</p> : null}
-            </Card>
+              {data.status === 'CANCELLED' ? <Badge tone="grey">Annulée</Badge> : null}
+            </div>
 
             <Card>
               <CardHead title="Statut de l'opération" />
               <div className="stack" style={{ padding: '8px 16px 16px' }}>
                 <div className="steps">
                   {OOS_FLOW.map((status, index) => {
+                    if (index === 0 && current > 0) return null;
                     const state =
                       data.status === 'CANCELLED'
                         ? 'todo'
@@ -122,7 +105,7 @@ export default function OutOfStockDetailPage({ params }) {
                 {!done ? (
                   <>
                     <Button
-                      variant="success"
+                      variant="primary"
                       block
                       disabled={busy}
                       onClick={() => moveTo(OOS_FLOW[current + 1])}
@@ -146,10 +129,20 @@ export default function OutOfStockDetailPage({ params }) {
               </div>
             </Card>
 
-            <Notice>
-              Le produit récupéré pour cette commande n&apos;entre pas dans votre stock : il
-              n&apos;a été acheté que pour ce client.
-            </Notice>
+            <details className="additional-details">
+              <summary>Détails de l’opération</summary>
+              <div className="stack">
+                <span>
+                  {data.reference} · {dateTime(data.created_at)}
+                </span>
+                <span>Client : {data.customer_name || 'Client comptoir'}</span>
+                <span>Quantité : {quantity(data.quantity)}</span>
+                {data.note ? <p>{data.note}</p> : null}
+                <p className="small muted">
+                  Le produit récupéré pour ce client ne modifie pas votre stock.
+                </p>
+              </div>
+            </details>
           </>
         ) : null}
       </main>

@@ -1,4 +1,5 @@
 import './globals.css';
+import './prototype.css';
 import { SessionProvider } from '@/client/session';
 import AppShell from '@/components/layout/AppShell';
 
@@ -9,7 +10,7 @@ export const metadata = {
 
 /** Le thème du navigateur suit la barre d'application : pas de bande blanche en haut. */
 export const viewport = {
-  themeColor: '#134e8e',
+  themeColor: '#0b4e86',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',

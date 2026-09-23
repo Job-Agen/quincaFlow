@@ -39,7 +39,7 @@ export default function LoginPage() {
   return (
     <div className="auth">
       <div className="auth__hero">
-        <span className="auth__brand">QuincaFlow</span>
+        <h1 className="auth__brand">MaQuincaillerie</h1>
         <span className="auth__tagline">
           Gérez simplement vos ventes, votre stock et vos fournisseurs
         </span>
@@ -89,10 +89,18 @@ export default function LoginPage() {
           {busy ? 'Connexion…' : 'Se connecter'}
         </Button>
 
+        <details className="auth-help">
+          <summary>Mot de passe oublié ?</summary>
+          <p>
+            Si vous êtes vendeur, demandez au propriétaire de réinitialiser votre accès depuis la
+            page Équipe. Pour un compte propriétaire, contactez l’administrateur de l’application.
+          </p>
+        </details>
+
         <p className="small muted" style={{ textAlign: 'center' }}>
           Pas encore de compte ?{' '}
           <Link href="/register" className="link">
-            Créer ma quincaillerie
+            S&apos;inscrire
           </Link>
         </p>
       </form>

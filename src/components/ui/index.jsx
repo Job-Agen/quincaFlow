@@ -109,6 +109,7 @@ export function SearchField({ value, onChange, placeholder = 'Rechercher…', ch
       <input
         className="input"
         type="search"
+        aria-label={placeholder}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}

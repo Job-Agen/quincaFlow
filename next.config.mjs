@@ -1,3 +1,6 @@
+import { fileURLToPath } from 'node:url';
+import { dirname } from 'node:path';
+
 /**
  * En-têtes de sécurité.
  *
@@ -23,6 +26,7 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  outputFileTracingRoot: dirname(fileURLToPath(import.meta.url)),
   // L'en-tête par défaut annonce la technologie employée sans rien apporter.
   poweredByHeader: false,
   async headers() {

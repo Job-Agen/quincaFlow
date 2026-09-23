@@ -152,7 +152,7 @@ export default function NewSalePage() {
     <>
       <AppBar back="/" title="Nouvelle vente" />
 
-      <main className="page">
+      <main className="page page--sale">
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         <SelectField
@@ -160,7 +160,7 @@ export default function NewSalePage() {
           value={customerId}
           onChange={(event) => setCustomerId(event.target.value)}
         >
-          <option value="">Client comptoir</option>
+          <option value="">Sélectionner un client</option>
           {(customers.data || []).map((customer) => (
             <option key={customer.id} value={customer.id}>
               {customer.name}
@@ -170,7 +170,7 @@ export default function NewSalePage() {
 
         <button
           type="button"
-          className="btn btn--ghost btn--block"
+          className="btn btn--block product-search"
           onClick={() => setPicking(true)}
         >
           <Search size={18} />
@@ -185,87 +185,93 @@ export default function NewSalePage() {
               hint="Ajoutez les articles demandés par le client."
             />
           ) : (
-            <ul className="cart">
-              {priced.map((line) => {
-                const found = catalog.get(line.productId);
-                const units = found.units;
-                const short = shortageIds.has(line.productId);
-                return (
-                  <li className="cart__item" key={line.key}>
-                    <div className="cart__head">
-                      <span className="strong">{line.productName}</span>
-                      <button
-                        type="button"
-                        className="appbar__icon"
-                        style={{ color: 'var(--red)' }}
-                        aria-label={`Retirer ${line.productName}`}
-                        onClick={() => removeLine(line.key)}
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-
-                    {units.length > 1 ? (
-                      <select
-                        className="input"
-                        style={{ minHeight: 40, fontSize: 14 }}
-                        value={line.entry.unitId}
-                        onChange={(event) => patchLine(line.key, { unitId: event.target.value })}
-                        aria-label="Conditionnement"
-                      >
-                        {units.map((unit) => (
-                          // L'unité de base ne gagne rien à être suivie de
-                          // « (1 sac) » : le rappel du contenu n'a de sens que
-                          // pour les conditionnements qui en regroupent plusieurs.
-                          <option key={unit.id} value={unit.id}>
-                            {unit.factor === 1
-                              ? unit.label
-                              : `${unit.label} (${fmtQuantity(unit.factor)} ${found.product.base_unit})`}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="small muted">{line.unitLabel}</div>
-                    )}
-
-                    <div className="cart__calc">
-                      <input
-                        className="input num"
-                        style={{ minHeight: 40, textAlign: 'right' }}
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="any"
-                        value={line.entry.quantity}
-                        aria-label={`Quantité — ${line.productName}`}
-                        onChange={(event) => patchLine(line.key, { quantity: event.target.value })}
-                      />
-                      <span className="muted">×</span>
-                      <input
-                        className="input num"
-                        style={{ minHeight: 40, textAlign: 'right' }}
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="any"
-                        value={line.entry.unitPrice === '' ? line.unitPrice : line.entry.unitPrice}
-                        aria-label={`Prix unitaire — ${line.productName}`}
-                        onChange={(event) => patchLine(line.key, { unitPrice: event.target.value })}
-                      />
-                      <span className="num strong cart__total">
-                        {line.lineTotal.toLocaleString('fr-FR')}
-                      </span>
-                    </div>
-
-                    {short ? (
-                      <div className="small" style={{ color: 'var(--red)' }}>
-                        Stock insuffisant pour cet article.
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <table className="sale-lines">
+              <thead>
+                <tr>
+                  <th>Produit</th>
+                  <th>Qté</th>
+                  <th>Prix unitaire</th>
+                  <th>Total</th>
+                  <th aria-label="Retirer" />
+                </tr>
+              </thead>
+              <tbody>
+                {priced.map((line) => {
+                  const found = catalog.get(line.productId);
+                  return (
+                    <tr key={line.key}>
+                      <td>
+                        <span>{line.productName}</span>
+                        {found.units.length > 1 ? (
+                          <select
+                            className="input unit-select"
+                            value={line.entry.unitId}
+                            onChange={(event) =>
+                              patchLine(line.key, { unitId: event.target.value })
+                            }
+                            aria-label={'Conditionnement — ' + line.productName}
+                          >
+                            {found.units.map((unit) => (
+                              <option key={unit.id} value={unit.id}>
+                                {unit.label} ({fmtQuantity(unit.factor)} {found.product.base_unit})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="small muted">{line.unitLabel}</div>
+                        )}
+                        {shortageIds.has(line.productId) ? (
+                          <span className="small" style={{ color: 'var(--red)' }}>
+                            Stock insuffisant
+                          </span>
+                        ) : null}
+                      </td>
+                      <td>
+                        <input
+                          className="input num"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="any"
+                          value={line.entry.quantity}
+                          aria-label={'Quantité — ' + line.productName}
+                          onChange={(event) =>
+                            patchLine(line.key, { quantity: event.target.value })
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="input num"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="any"
+                          value={
+                            line.entry.unitPrice === '' ? line.unitPrice : line.entry.unitPrice
+                          }
+                          aria-label={'Prix unitaire — ' + line.productName}
+                          onChange={(event) =>
+                            patchLine(line.key, { unitPrice: event.target.value })
+                          }
+                        />
+                      </td>
+                      <td className="num strong">{line.lineTotal.toLocaleString('fr-FR')}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="remove-line"
+                          aria-label={'Retirer ' + line.productName}
+                          onClick={() => removeLine(line.key)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </Card>
 
