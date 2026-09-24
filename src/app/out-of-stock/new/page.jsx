@@ -81,18 +81,17 @@ function NewOutOfStockView() {
     <>
       <AppBar back="/out-of-stock" title="Vente hors stock" />
 
-      <main className="page">
+      <main className="page page--oos">
         <form className="stack" onSubmit={submit}>
           <Notice icon={<Info size={18} style={{ flexShrink: 0 }} />}>
             Produit non disponible en stock, mais que vous pouvez obtenir chez un autre vendeur.
-            Cette opération ne modifie pas votre stock.
           </Notice>
 
           {error ? <Notice tone="error">{error}</Notice> : null}
 
           <Card pad className="stack">
             <SelectField
-              label="Produit du catalogue"
+              label="Produit"
               hint="Laissez vide si l'article n'existe pas encore chez vous."
               value={form.productId}
               onChange={set('productId')}
@@ -115,15 +114,6 @@ function NewOutOfStockView() {
               />
             )}
 
-            <SelectField label="Client" value={form.customerId} onChange={set('customerId')}>
-              <option value="">Client comptoir</option>
-              {(customers.data || []).map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </SelectField>
-
             <TextField
               label="Autre vendeur"
               placeholder="Quincaillerie Centrale"
@@ -133,16 +123,6 @@ function NewOutOfStockView() {
           </Card>
 
           <Card pad className="stack">
-            <TextField
-              label="Quantité"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="any"
-              value={form.quantity}
-              onChange={set('quantity')}
-              required
-            />
             <div className="grid-2">
               <TextField
                 label={`Coût d'achat (${currency})`}
@@ -156,7 +136,7 @@ function NewOutOfStockView() {
                 required
               />
               <TextField
-                label={`Prix client (${currency})`}
+                label={`Prix de vente client (${currency})`}
                 type="number"
                 inputMode="decimal"
                 min="0"
@@ -184,16 +164,40 @@ function NewOutOfStockView() {
               </strong>
             </div>
 
-            <TextAreaField
-              label="Note (optionnelle)"
-              rows={2}
-              value={form.note}
-              onChange={set('note')}
-            />
+            <details className="additional-details">
+              <summary>Client, quantité et note</summary>
+              <div className="stack">
+                {' '}
+                <SelectField label="Client" value={form.customerId} onChange={set('customerId')}>
+                  <option value="">Client comptoir</option>
+                  {(customers.data || []).map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </SelectField>{' '}
+                <TextField
+                  label="Quantité"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  value={form.quantity}
+                  onChange={set('quantity')}
+                  required
+                />
+                <TextAreaField
+                  label="Note (optionnelle)"
+                  rows={2}
+                  value={form.note}
+                  onChange={set('note')}
+                />
+              </div>
+            </details>
           </Card>
 
           <Button block type="submit" disabled={busy}>
-            {busy ? 'Enregistrement…' : "Enregistrer l'opération"}
+            {busy ? 'Enregistrement…' : 'Enregistrer'}
           </Button>
         </form>
       </main>

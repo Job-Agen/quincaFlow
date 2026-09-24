@@ -356,3 +356,18 @@ CREATE TABLE IF NOT EXISTS documents (
 );
 
 CREATE INDEX IF NOT EXISTS documents_ref_idx ON documents (business_id, reference_type, reference_id);
+
+-- Journal de synchronisation : mêmes business_id, aucune donnée inter-boutique.
+CREATE TABLE IF NOT EXISTS commerce_sync_state (
+ business_id text PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
+ state jsonb NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS commerce_sync_operations (
+ business_id text NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+ id text NOT NULL,
+ payload_hash text NOT NULL,
+ user_id text NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(business_id,id)
+);

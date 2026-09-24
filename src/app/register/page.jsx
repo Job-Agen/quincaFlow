@@ -35,7 +35,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       setProfile(await api.post('/api/auth/register', form));
-      router.replace('/');
+      router.replace('/local');
     } catch (issue) {
       setError(issue.message);
       setBusy(false);
@@ -43,9 +43,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="auth">
+    <div className="auth auth--register">
       <div className="auth__hero" style={{ minHeight: 150 }}>
-        <span className="auth__brand">QuincaFlow</span>
+        <h1 className="auth__brand">MaQuincaillerie</h1>
         <span className="auth__tagline">Créez votre quincaillerie en une minute</span>
       </div>
 

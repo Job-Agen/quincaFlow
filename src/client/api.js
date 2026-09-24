@@ -33,6 +33,7 @@ function refreshSession() {
 
 async function send(path, options, retry = true) {
   const response = await fetch(path, {
+    signal: AbortSignal.timeout(25000),
     ...options,
     headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
   });

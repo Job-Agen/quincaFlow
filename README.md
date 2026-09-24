@@ -215,10 +215,70 @@ businesses
 Références : `VE-0001` (vente), `FA-2026-0001` (facture, remise à zéro chaque
 année), `HS-0001` (hors stock), `PO-0001` (commande), `RC-0001` (réception).
 
-## Connectivité
+## Boutique synchronisée et hors ligne — `/local`
 
-QuincaFlow ne promet pas de fonctionner hors ligne. Un vrai mode hors ligne
-transactionnel suppose de résoudre les ventes simultanées et les conflits de
-stock — bien plus qu'un cache PWA. La V1 optimise pour les connexions faibles :
-le catalogue est chargé une fois et filtré en mémoire, les écrans ne rechargent
-que ce qui change.
+Après connexion, l’application ouvre `/local` et charge les données de la boutique
+liée au compte : produits, clients, fournisseurs et ventes. Le catalogue et les
+ventes utilisent les tables relationnelles existantes. Les catégories, tarifs de
+gros, soldes initiaux, crédits, remboursements, dépenses et justificatifs sont
+conservés dans `commerce_sync_state`, isolé par `business_id`. Les anciennes
+commandes restent accessibles avec leurs statuts et documents ; leurs paiements
+n’étant pas chiffrés dans le schéma initial, aucune dette ni dépense n’est inventée.
+
+`GET /api/sync` fournit un instantané privé (`no-store`). `POST /api/sync` reçoit
+une opération identifiée, liée explicitement à sa boutique et à son auteur.
+L’appartenance et le rôle sont relus en base, les prix et stocks revalidés côté
+serveur. Les modifications métier et leur accusé de réception sont enregistrés
+ensemble dans une transaction PostgreSQL sérialisable. `commerce_sync_operations`
+empêche qu’un renvoi après coupure ne crée une deuxième vente ou un double paiement.
+Les nouvelles tables sont additives : créées automatiquement si absentes et
+aussi déclarées dans `schema.sql`. La connexion reprend `DATABASE_URL` ou
+`NEON_DATABASE_URL`, uniquement côté serveur, avec un petit pool `pg` réutilisé.
+
+### Saisie et synchronisation
+
+Le navigateur conserve un cache et une file d’opérations atomique dans
+localStorage, avec une clé distincte par utilisateur et boutique. Les écritures
+locales sont confirmées avant tout envoi ; elles sont synchronisées à la
+reconnexion, à la reprise de l’onglet, toutes les 30 secondes ou par **Actualiser**.
+La bannière distingue le nombre d’opérations en attente du dernier échange réussi.
+Un changement de compte ne transmet jamais la file de l’ancien compte au nouveau.
+
+Un stock insuffisant, un prix modifié ou une fiche concurrente bloque la file sans
+la supprimer. **Résoudre le conflit** permet d’exporter le carnet et sa file puis,
+après confirmation, d’abandonner les opérations refusées et leurs dépendances
+pour repartir de la base. Une requête dont l’issue reste incertaine ne peut pas
+être abandonnée : elle est renvoyée avec le même identifiant jusqu’à confirmation.
+
+Les montants sont stockés en centimes entiers, les quantités à trois décimales.
+Les ventes figent prix et coût ; les achats reçus actualisent le coût moyen pondéré.
+Les remises et conditionnements des anciennes ventes sont conservés. Les
+remboursements alimentent la caisse sans créer de nouveau chiffre d’affaires.
+Le résultat net déduit les charges saisies de la marge brute, sans déduire une
+seconde fois les achats de stock.
+
+### Hors ligne et sauvegardes
+
+Ouvrir `/local` une première fois en HTTPS (ou localhost), se connecter et attendre
+**Réouverture hors ligne prête**. Le service worker précharge la coque publique et
+ses fichiers statiques, jamais les API ni les pages privées. Le cache local de la
+boutique reste consultable et modifiable sans réseau. Une connexion est nécessaire
+pour le premier chargement, une réauthentification ou la synchronisation.
+
+La base de données est le fonctionnement normal de l’application. Le cache sert à
+continuer pendant les coupures réseau. L’ancien carnet sans compte reste conservé
+sur l’appareil, sans être ouvert ni importé automatiquement dans la base. Les sauvegardes synchronisées incluent la file en
+attente. Le remplacement complet par import est désactivé en mode synchronisé,
+pour ne pas écraser la boutique serveur. Le navigateur peut effacer ou refuser le
+stockage : exportez régulièrement les données, notamment avant de changer de
+domaine, navigateur ou appareil. Les échecs de quota sont signalés sans faux
+message de réussite. WhatsApp ouvre un brouillon, sans l’envoyer automatiquement.
+
+### Validation
+
+`src/local/__tests__` couvre les calculs, projections des anciennes données, files
+hors ligne, quotas, reprises, conflits et séparation des comptes. La suite
+`src/server/__tests__/flows.integration.test.js` vérifie sur PostgreSQL les écritures
+réelles, la non-duplication, les ventes concurrentes, les rôles et l’isolation entre
+boutiques. Sans `TEST_DATABASE_URL`, les tests PostgreSQL sont ignorés localement ;
+la CI les exécute obligatoirement avec son service PostgreSQL isolé.

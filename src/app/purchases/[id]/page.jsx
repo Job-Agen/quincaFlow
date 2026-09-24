@@ -26,7 +26,7 @@ import {
   canReceive,
   remainingOf,
 } from '@/domain/purchase';
-import { amount, dateTime, money, quantity } from '@/utils/format';
+import { amount, dateTime, shortDate, money, quantity } from '@/utils/format';
 
 /**
  * Détail d'une commande fournisseur (maquette 8, §20-22).
@@ -84,21 +84,21 @@ export default function PurchaseOrderPage({ params }) {
         }
       />
 
-      <main className="page">
+      <main className="page page--order">
         {error ? <Notice tone="error">{error.message}</Notice> : null}
         {issue ? <Notice tone="error">{issue}</Notice> : null}
         {loading && !data ? <Skeleton count={3} height={120} /> : null}
 
         {data ? (
           <>
-            <Card pad className="stack">
+            <Card pad className="order-meta">
               <div className="total-line">
                 <span className="muted">Fournisseur</span>
                 <strong>{data.supplier_name}</strong>
               </div>
               <div className="total-line">
                 <span className="muted">Date</span>
-                <span>{dateTime(data.created_at)}</span>
+                <span>{shortDate(data.created_at)}</span>
               </div>
               <div className="total-line">
                 <span className="muted">Statut</span>
@@ -107,17 +107,12 @@ export default function PurchaseOrderPage({ params }) {
             </Card>
 
             <Card>
-              <CardHead title="Produits commandés" />
               <div className="table-wrap">
                 <table className="table">
                   <thead>
                     <tr>
                       <th style={{ paddingLeft: 16 }}>Produit</th>
-                      <th className="num">Commandé</th>
-                      <th className="num">Reçu</th>
-                      <th className="num" style={{ paddingRight: 16 }}>
-                        Coût
-                      </th>
+                      <th className="num">Qté</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -125,22 +120,8 @@ export default function PurchaseOrderPage({ params }) {
                       <tr key={item.id}>
                         <td style={{ paddingLeft: 16 }}>
                           <div>{item.product_name}</div>
-                          <div className="small muted">{item.unit_label}</div>
                         </td>
                         <td className="num">{quantity(item.quantity_ordered)}</td>
-                        <td className="num">
-                          <span
-                            style={{
-                              color:
-                                remainingOf(item) === 0 ? 'var(--green-dark)' : 'var(--amber-ink)',
-                            }}
-                          >
-                            {quantity(item.quantity_received)}
-                          </span>
-                        </td>
-                        <td className="num" style={{ paddingRight: 16 }}>
-                          {amount(item.unit_cost)}
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -187,7 +168,6 @@ export default function PurchaseOrderPage({ params }) {
                       </span>
                       <div className="list__body">
                         <div className="list__title">{document.name}</div>
-                        <div className="list__sub">{DOCUMENT_KINDS[document.kind]}</div>
                       </div>
                       {document.url ? (
                         <a
@@ -223,36 +203,67 @@ export default function PurchaseOrderPage({ params }) {
               </Card>
             ) : null}
 
-            {data.status !== 'CANCELLED' && isOwner ? (
-              <SelectField
-                label="Statut administratif"
-                hint="La livraison, elle, est déduite des quantités reçues."
-                value={PO_MANUAL_STATUSES.includes(data.status) ? data.status : ''}
-                onChange={(event) => setStatus(event.target.value)}
-              >
-                {!PO_MANUAL_STATUSES.includes(data.status) ? (
-                  <option value="">{PO_STATUS_LABELS[data.status]}</option>
-                ) : null}
-                {PO_MANUAL_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {PO_STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </SelectField>
-            ) : null}
-
             {canReceive(data, data.items) && isOwner ? (
               <Button variant="success" block onClick={() => setReceiving(true)}>
                 <PackageCheck size={18} />
-                Réceptionner une livraison
+                Marquer comme livrée
               </Button>
             ) : (
               <Notice tone="warn">
                 {data.status === 'CANCELLED'
                   ? 'Commande annulée.'
-                  : 'Toutes les quantités commandées ont été reçues.'}
+                  : canReceive(data, data.items)
+                    ? 'Le propriétaire peut enregistrer la réception de cette commande.'
+                    : 'Toutes les quantités commandées ont été reçues.'}
               </Notice>
             )}
+
+            <details className="additional-details">
+              <summary>Suivi des réceptions et statut administratif</summary>
+              <div className="stack">
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Produit</th>
+                        <th>Reçu</th>
+                        <th>Coût unitaire</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.items.map((item) => (
+                        <tr key={item.id}>
+                          <td>
+                            {item.product_name} ({item.unit_label})
+                          </td>
+                          <td>
+                            {quantity(item.quantity_received)} / {quantity(item.quantity_ordered)}
+                          </td>
+                          <td>{amount(item.unit_cost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {data.status !== 'CANCELLED' && isOwner ? (
+                  <SelectField
+                    label="Statut administratif"
+                    hint="La livraison, elle, est déduite des quantités reçues."
+                    value={PO_MANUAL_STATUSES.includes(data.status) ? data.status : ''}
+                    onChange={(event) => setStatus(event.target.value)}
+                  >
+                    {!PO_MANUAL_STATUSES.includes(data.status) ? (
+                      <option value="">{PO_STATUS_LABELS[data.status]}</option>
+                    ) : null}
+                    {PO_MANUAL_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {PO_STATUS_LABELS[status]}
+                      </option>
+                    ))}
+                  </SelectField>
+                ) : null}
+              </div>
+            </details>
 
             <ReceiveSheet
               open={receiving}

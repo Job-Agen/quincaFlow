@@ -47,6 +47,8 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   });
 
   afterAll(async () => {
+    const sync = await import('../sync');
+    await sync.closeSyncPool();
     await pool?.end();
   });
 
@@ -604,5 +606,183 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     await expect(
       accounts.authenticate({ identifier: 'inconnu@test.tg', password: 'motdepasse123' })
     ).rejects.toThrow(/incorrect/i);
+  });
+  async function syncCommand(session, action, input) {
+    const { syncSnapshot } = await import('../sync');
+    const { expectedFor } = await import('../../local/syncProtocol');
+    const snapshot = await syncSnapshot(session);
+    return {
+      id: crypto.randomUUID(),
+      businessId: session.businessId,
+      userId: session.userId,
+      action,
+      input,
+      expected: expectedFor(snapshot.data, action, input),
+    };
+  }
+  it('sync: charge le catalogue complet et les ventes existantes avec remise', async () => {
+    const { syncSnapshot } = await import('../sync');
+    const product = await seedVitre(80);
+    await sales.createSale(OWNER, {
+      lines: [{ productId: product.id, quantity: 2 }],
+      discount: 50,
+      paymentMethod: 'CASH',
+    });
+    const result = await syncSnapshot(OWNER);
+    expect(result.data.products[0].stock).toBe(78);
+    expect(result.data.sales[0].total).toBe(85000);
+    expect(result.data.sales[0].discount).toBe(5000);
+    expect(result.data.legacyOrders).toEqual([]);
+    expect((await syncSnapshot(RIVAL)).data.products).toHaveLength(0);
+  });
+  it('sync: une vente répétée décrémente une seule fois le stock et apparaît dans les anciennes API', async () => {
+    const { syncSnapshot, syncOperation } = await import('../sync');
+    const product = await seedVitre(10);
+    const op = await syncCommand(OWNER, 'sale', {
+      lines: [{ productId: product.id, quantity: 2 }],
+      method: 'Espèces',
+      paid: '',
+      date: '2026-09-23',
+    });
+    const first = await syncOperation(OWNER, op),
+      second = await syncOperation(OWNER, op);
+    expect(first.ack).toBe(op.id);
+    expect(second.ack).toBe(op.id);
+    expect(await stockOf(product.id)).toBe(8);
+    expect(await sales.listSales(OWNER.businessId, {})).toHaveLength(1);
+    expect((await syncSnapshot(OWNER)).data.sales).toHaveLength(1);
+    await expect(syncOperation(OWNER, { ...op, input: { ...op.input, paid: 0 } })).rejects.toThrow(
+      /identifiant/
+    );
+  });
+  it('sync: deux appareils ne peuvent pas vendre le dernier article deux fois', async () => {
+    const { syncOperation } = await import('../sync');
+    const product = await seedVitre(1);
+    const input = {
+      lines: [{ productId: product.id, quantity: 1 }],
+      method: 'Espèces',
+      paid: '',
+      date: '2026-09-23',
+    };
+    const a = await syncCommand(OWNER, 'sale', input),
+      b = await syncCommand(OWNER, 'sale', input);
+    const results = await Promise.allSettled([syncOperation(OWNER, a), syncOperation(OWNER, b)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(await stockOf(product.id)).toBe(0);
+    expect(
+      (await pool.query('SELECT count(*)::int AS n FROM commerce_sync_operations')).rows[0].n
+    ).toBe(1);
+  });
+  it('sync: refuse un prix périmé sans aucune écriture et revalide le rôle en base', async () => {
+    const { syncOperation } = await import('../sync');
+    const product = await seedVitre(10);
+    const op = await syncCommand(OWNER, 'sale', {
+      lines: [{ productId: product.id, quantity: 1 }],
+      method: 'Espèces',
+      paid: '',
+    });
+    await pool.query('UPDATE products SET selling_price=999 WHERE id=$1', [product.id]);
+    await expect(syncOperation(OWNER, op)).rejects.toThrow(/changé/);
+    expect(await stockOf(product.id)).toBe(10);
+    const expense = await syncCommand(OWNER, 'expense', {
+      amount: 1000,
+      category: 'Divers',
+      reason: 'Transport',
+      method: 'Espèces',
+    });
+    await pool.query("UPDATE business_members SET role='SELLER' WHERE user_id=$1", [OWNER.userId]);
+    await expect(syncOperation(OWNER, expense)).rejects.toThrow(/propriétaire/);
+    expect(
+      (await pool.query('SELECT count(*)::int AS n FROM commerce_sync_operations')).rows[0].n
+    ).toBe(0);
+  });
+  it('sync: conserve crédits, remboursements, dépenses et champs supplémentaires en base', async () => {
+    const { syncSnapshot, syncOperation } = await import('../sync');
+    const product = await seedVitre(10);
+    const contact = await syncCommand(OWNER, 'contact.save', {
+      kind: 'customer',
+      name: 'Client crédit',
+      phone: '+22890123456',
+      openingDebt: 0,
+    });
+    await syncOperation(OWNER, contact);
+    await syncOperation(
+      OWNER,
+      await syncCommand(OWNER, 'sale', {
+        lines: [{ productId: product.id, quantity: 2 }],
+        contactId: contact.id,
+        paid: 100,
+        method: 'Espèces',
+      })
+    );
+    await syncOperation(
+      OWNER,
+      await syncCommand(OWNER, 'payment', {
+        kind: 'customer',
+        contactId: contact.id,
+        amount: 200,
+        method: 'Mobile Money',
+        reason: 'Versement',
+      })
+    );
+    await syncOperation(
+      OWNER,
+      await syncCommand(OWNER, 'expense', {
+        amount: 50,
+        category: 'Divers',
+        method: 'Espèces',
+        reason: 'Transport',
+        receipt: 'data:image/jpeg;base64,YWJj',
+      })
+    );
+    const data = (await syncSnapshot(OWNER)).data;
+    const { customerBalance, report } = await import('../../local/ledger');
+    expect(customerBalance(data, contact.id)).toBe(60000);
+    expect(data.customerPayments).toHaveLength(1);
+    expect(data.expenses[0].receipt).toContain('YWJj');
+    expect(report(data).incoming).toBe(30000);
+  });
+  it('sync: un achat reçu actualise coût et stock sans créer deux commandes', async () => {
+    const { syncSnapshot, syncOperation } = await import('../sync');
+    const product = await seedVitre(10);
+    const contact = await syncCommand(OWNER, 'contact.save', {
+      kind: 'supplier',
+      name: 'Grossiste',
+      phone: '',
+      openingDebt: 0,
+      contact: 'Kossi',
+      sector: 'Matériaux',
+    });
+    await syncOperation(OWNER, contact);
+    const purchase = await syncCommand(OWNER, 'purchase', {
+      lines: [{ productId: product.id, quantity: 10, price: 500 }],
+      contactId: contact.id,
+      paid: 1000,
+      method: 'Espèces',
+    });
+    await syncOperation(OWNER, purchase);
+    await syncOperation(OWNER, purchase);
+    const result = (await syncSnapshot(OWNER)).data;
+    expect(result.products[0].stock).toBe(20);
+    expect(result.products[0].cost).toBe(40938);
+    expect(result.purchases).toHaveLength(1);
+    expect(result.legacyOrders).toHaveLength(0);
+    expect(result.suppliers[0].contact).toBe('Kossi');
+    expect((await purchases.getPurchaseOrder(OWNER.businessId, purchase.id)).status).toBe(
+      'RECEIVED'
+    );
+  });
+  it('sync: rejette les identifiants d’une autre boutique et les membres révoqués', async () => {
+    const { syncSnapshot, syncOperation } = await import('../sync');
+    const product = await seedVitre(10);
+    const op = await syncCommand(OWNER, 'sale', {
+      lines: [{ productId: product.id, quantity: 1 }],
+      method: 'Espèces',
+      paid: '',
+    });
+    await expect(syncOperation(RIVAL, op)).rejects.toThrow();
+    expect(await stockOf(product.id)).toBe(10);
+    await pool.query('DELETE FROM business_members WHERE user_id=$1', [OWNER.userId]);
+    await expect(syncSnapshot(OWNER)).rejects.toThrow(/accès/);
   });
 });

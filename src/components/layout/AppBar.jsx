@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 /**
  * Barre d'application bleu marine.
@@ -24,7 +24,7 @@ export default function AppBar({ title, back, brand, left, right }) {
             aria-label="Retour"
             onClick={() => (typeof back === 'string' ? router.push(back) : router.back())}
           >
-            <ChevronLeft size={24} />
+            <ArrowLeft size={22} />
           </button>
         ) : (
           left

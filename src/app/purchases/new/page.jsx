@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Search, Trash2, MessageCircle } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import {
   Button,
@@ -72,6 +72,31 @@ export default function NewPurchaseOrderPage() {
       current.map((item) => (item.key === key ? { ...item, ...values } : item))
     );
 
+  function shareDraft() {
+    const supplier = (suppliers.data || []).find((row) => row.id === supplierId);
+    const text = [
+      'Projet de commande',
+      'Fournisseur : ' + (supplier?.name || ''),
+      ...items.map((item) => {
+        const product = catalog.get(item.productId);
+        const unit = unitsOf(product, product?.units).find((row) => row.id === item.unitId);
+        return (
+          '• ' +
+          product?.name +
+          ' — ' +
+          fmtQuantity(item.quantity) +
+          ' ' +
+          (unit?.label || product?.base_unit)
+        );
+      }),
+      'Total estimé : ' + money(total, currency),
+      notes,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+  }
+
   async function submit() {
     setBusy(true);
     setError(null);
@@ -97,7 +122,7 @@ export default function NewPurchaseOrderPage() {
     <>
       <AppBar back="/purchases" title="Nouvelle commande" />
 
-      <main className="page">
+      <main className="page page--purchase">
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         <SelectField
@@ -113,6 +138,7 @@ export default function NewPurchaseOrderPage() {
           ))}
         </SelectField>
 
+        <h2 className="section-title">Produits</h2>
         <Card>
           {items.length === 0 ? (
             <Empty
@@ -121,87 +147,75 @@ export default function NewPurchaseOrderPage() {
               hint="Ajoutez les articles à commander chez ce fournisseur."
             />
           ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th style={{ paddingLeft: 16 }}>Produit</th>
-                    <th className="num">Qté</th>
-                    <th className="num">Coût unitaire</th>
-                    <th aria-label="Retirer" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => {
-                    const product = catalog.get(item.productId);
-                    const units = unitsOf(product, product?.units);
-                    return (
-                      <tr key={item.key}>
-                        <td style={{ paddingLeft: 16 }}>
-                          <div className="strong">{product?.name}</div>
-                          {units.length > 1 ? (
-                            <select
-                              className="input"
-                              style={{ minHeight: 34, fontSize: 13, marginTop: 4 }}
-                              value={item.unitId}
-                              aria-label="Conditionnement commandé"
-                              onChange={(event) => patch(item.key, { unitId: event.target.value })}
-                            >
-                              {units.map((unit) => (
-                                <option key={unit.id} value={unit.id}>
-                                  {unit.label} ({fmtQuantity(unit.factor)} {product.base_unit})
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="small muted">{product?.base_unit}</div>
-                          )}
-                        </td>
-                        <td>
+            <ul className="purchase-items">
+              {items.map((item) => {
+                const product = catalog.get(item.productId);
+                const units = unitsOf(product, product?.units);
+                return (
+                  <li key={item.key} className="purchase-item">
+                    <div className="purchase-item__row">
+                      <span>{product?.name}</span>
+                      <input
+                        className="input num"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        value={item.quantity}
+                        aria-label={'Quantité — ' + product?.name}
+                        onChange={(event) => patch(item.key, { quantity: event.target.value })}
+                      />
+                      <button
+                        type="button"
+                        aria-label={'Retirer ' + product?.name}
+                        onClick={() =>
+                          setItems((current) => current.filter((row) => row.key !== item.key))
+                        }
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                    <details>
+                      <summary>
+                        {money(item.unitCost || 0, currency)} /{' '}
+                        {units.find((unit) => unit.id === item.unitId)?.label || product?.base_unit}{' '}
+                        · Modifier le coût
+                      </summary>
+                      <div className="grid-2">
+                        <SelectField
+                          label="Conditionnement"
+                          value={item.unitId}
+                          onChange={(event) => {
+                            const unit = units.find((unit) => unit.id === event.target.value);
+                            patch(item.key, {
+                              unitId: event.target.value,
+                              unitCost: (product?.purchase_price || 0) * (unit?.factor || 1),
+                            });
+                          }}
+                        >
+                          {units.map((unit) => (
+                            <option key={unit.id} value={unit.id}>
+                              {unit.label} ({fmtQuantity(unit.factor)} {product?.base_unit})
+                            </option>
+                          ))}
+                        </SelectField>
+                        <label className="field">
+                          <span className="field__label">Coût unitaire</span>
                           <input
-                            className="input num"
-                            style={{ width: 72, minHeight: 40, textAlign: 'right' }}
+                            className="input"
                             type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="any"
-                            value={item.quantity}
-                            aria-label={`Quantité — ${product?.name}`}
-                            onChange={(event) => patch(item.key, { quantity: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="input num"
-                            style={{ width: 96, minHeight: 40, textAlign: 'right' }}
-                            type="number"
-                            inputMode="decimal"
                             min="0"
                             step="any"
                             value={item.unitCost}
-                            aria-label={`Coût unitaire — ${product?.name}`}
                             onChange={(event) => patch(item.key, { unitCost: event.target.value })}
                           />
-                        </td>
-                        <td style={{ paddingRight: 8 }}>
-                          <button
-                            type="button"
-                            className="appbar__icon"
-                            style={{ color: 'var(--red)' }}
-                            aria-label={`Retirer ${product?.name}`}
-                            onClick={() =>
-                              setItems((current) => current.filter((row) => row.key !== item.key))
-                            }
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </label>
+                      </div>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </Card>
 
@@ -229,13 +243,12 @@ export default function NewPurchaseOrderPage() {
           </div>
         </Card>
 
-        <Notice>
-          Cette commande ne modifie pas votre stock. Il augmentera à la réception, pour les
-          quantités réellement livrées.
-        </Notice>
-
         <Button block disabled={items.length === 0 || !supplierId || busy} onClick={submit}>
           {busy ? 'Enregistrement…' : 'Générer la commande'}
+        </Button>
+        <Button block variant="soft" disabled={!items.length || !supplierId} onClick={shareDraft}>
+          <MessageCircle size={21} style={{ color: 'var(--green)' }} />
+          Partager sur WhatsApp
         </Button>
       </main>
 

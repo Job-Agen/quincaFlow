@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Home, ShoppingCart, Package, Truck, LayoutGrid, Store } from 'lucide-react';
+import { Home, ShoppingCart, Gift, Receipt, Menu, Store } from 'lucide-react';
 import { useSession } from '@/client/session';
 
 /**
@@ -21,10 +21,10 @@ const PUBLIC_ROUTES = ['/login', '/register'];
 
 const TABS = [
   { href: '/', label: 'Accueil', icon: Home },
-  { href: '/sales/new', label: 'Vendre', icon: ShoppingCart },
-  { href: '/products', label: 'Produits', icon: Package },
-  { href: '/purchases', label: 'Achats', icon: Truck },
-  { href: '/more', label: 'Plus', icon: LayoutGrid },
+  { href: '/sales/new', label: 'Vendre', icon: Receipt },
+  { href: '/products', label: 'Produits', icon: Gift },
+  { href: '/purchases', label: 'Achats', icon: ShoppingCart },
+  { href: '/more', label: 'Plus', icon: Menu },
 ];
 
 /** L'onglet actif est le préfixe le plus long : /products/new allume Produits. */
@@ -32,7 +32,7 @@ function activeHref(pathname) {
   const matches = TABS.filter(
     (tab) => pathname === tab.href || (tab.href !== '/' && pathname.startsWith(tab.href))
   );
-  if (matches.length === 0) return null;
+  if (matches.length === 0) return pathname.startsWith('/sales/') ? '/sales/new' : '/more';
   return matches.reduce((best, tab) => (tab.href.length > best.href.length ? tab : best)).href;
 }
 
@@ -50,13 +50,20 @@ export default function AppShell({ children }) {
   if (status !== 'authenticated') return <Splash />;
 
   const active = activeHref(pathname);
+  const primary = ['/', '/purchases', '/more'].includes(pathname);
 
   return (
-    <div className="shell shell--nav">
+    <div className={`shell shell--nav${primary ? '' : ' shell--detail'}`}>
       {children}
       <nav className="tabbar" aria-label="Navigation principale">
         {TABS.map(({ href, label, icon: Icon }) => (
-          <Link key={href} href={href} className="tabbar__item" data-active={href === active}>
+          <Link
+            key={href}
+            href={href}
+            className="tabbar__item"
+            data-active={href === active}
+            aria-current={href === active ? 'page' : undefined}
+          >
             <Icon size={21} strokeWidth={href === active ? 2.4 : 1.9} />
             <span>{label}</span>
           </Link>

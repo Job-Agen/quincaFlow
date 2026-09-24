@@ -3,14 +3,23 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeftRight, ChevronRight, PackageCheck, Receipt, Truck } from 'lucide-react';
+import { ArrowLeftRight, SlidersHorizontal, PackageCheck, Receipt, Truck } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
-import { Badge, Card, Empty, Notice, SearchField, Segmented, Skeleton } from '@/components/ui';
+import {
+  Badge,
+  Card,
+  Empty,
+  Notice,
+  SearchField,
+  Segmented,
+  Sheet,
+  Skeleton,
+} from '@/components/ui';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { OOS_STATUS_LABELS } from '@/domain/outOfStock';
 import { PO_STATUS_LABELS, PO_STATUS_TONES } from '@/domain/purchase';
-import { dayLabel, money, time } from '@/utils/format';
+import { dayLabel, money, dateTime } from '@/utils/format';
 
 /**
  * Historique (maquette 9, §24).
@@ -75,10 +84,11 @@ function statusBadge(entry) {
 function HistoryView() {
   const params = useSearchParams();
   const { currency } = useSession();
-  const [period, setPeriod] = useState('7d');
+  const [period, setPeriod] = useState('all');
   // La nature vient de l'URL : /sales redirige ici en pré-filtrant sur les ventes.
-  const [kind, setKind] = useState(params.get('kind') || '');
+  const [kind, setKind] = useState(params.get('kind') || 'SALE');
   const [search, setSearch] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const { data, loading, error } = useResource('/api/history', { period, kind, search });
 
@@ -94,16 +104,34 @@ function HistoryView() {
 
   return (
     <>
-      <AppBar back="/more" title="Historique" />
+      <AppBar back="/more" title="Historique des ventes" />
 
-      <main className="page">
-        <SearchField
-          value={search}
-          onChange={setSearch}
-          placeholder="Référence, client, produit…"
-        />
-        <Segmented options={PERIODS} value={period} onChange={setPeriod} />
-        <Segmented options={KINDS} value={kind} onChange={setKind} />
+      <main className="page page--history">
+        <div className="filter-row">
+          <SearchField value={search} onChange={setSearch} placeholder="Rechercher une vente…" />
+          <button
+            type="button"
+            className="filter-toggle"
+            aria-label="Filtrer l’historique"
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen(true)}
+          >
+            <SlidersHorizontal size={21} />
+          </button>
+        </div>
+        <Sheet
+          open={filtersOpen}
+          title="Filtrer l’historique"
+          onClose={() => setFiltersOpen(false)}
+        >
+          <span className="field__label">Période</span>
+          <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+          <span className="field__label">Type d’opération</span>
+          <Segmented options={KINDS} value={kind} onChange={setKind} />
+          <button type="button" className="btn" onClick={() => setFiltersOpen(false)}>
+            Afficher les résultats
+          </button>
+        </Sheet>
 
         {error ? <Notice tone="error">{error.message}</Notice> : null}
         {loading && !data ? <Skeleton count={5} height={64} /> : null}
@@ -120,31 +148,25 @@ function HistoryView() {
 
         {days.map((day) => (
           <div key={day.label} className="stack" style={{ gap: 8 }}>
-            <span className="section-title small muted">{day.label}</span>
             <Card>
               <div className="list">
                 {day.entries.map((entry) => {
                   const shape = SHAPES[entry.kind];
-                  const Icon = shape.icon;
                   const href = shape.href?.(entry);
                   const Tag = href ? Link : 'div';
                   return (
                     <Tag key={`${entry.kind}-${entry.id}`} href={href} className="list__row">
-                      <span className="thumb">
-                        <Icon size={19} />
-                      </span>
                       <div className="list__body">
                         <div className="list__title">{entry.reference}</div>
+                        <div className="list__sub">{dateTime(entry.created_at)}</div>
                         <div className="list__sub">
-                          {shape.label} · {time(entry.created_at)}
-                          {entry.party ? ` · ${entry.party}` : ''}
+                          {entry.party || (entry.kind === 'SALE' ? 'Client comptoir' : shape.label)}
                         </div>
                       </div>
                       <div className="list__end">
                         <strong className="num">{money(entry.amount, currency)}</strong>
                         {statusBadge(entry)}
                       </div>
-                      {href ? <ChevronRight size={18} className="muted" /> : null}
                     </Tag>
                   );
                 })}
