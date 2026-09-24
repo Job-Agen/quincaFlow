@@ -282,3 +282,23 @@ hors ligne, quotas, reprises, conflits et séparation des comptes. La suite
 réelles, la non-duplication, les ventes concurrentes, les rôles et l’isolation entre
 boutiques. Sans `TEST_DATABASE_URL`, les tests PostgreSQL sont ignorés localement ;
 la CI les exécute obligatoirement avec son service PostgreSQL isolé.
+
+### Recettes et clôture journalière
+
+Dans Accueil → **Recettes et clôture du jour** (ou Plus → **Recettes du jour**),
+choisissez une date et consultez chaque vente et ses articles. Les ventes à crédit
+sont séparées des encaissements. Les dépenses se saisissent dans le journal existant
+et ne sont déduites qu’une fois. La clôture est manuelle, avec 17 h proposé.
+
+Avant validation, indiquez un retrait et son motif, puis vérifiez le montant net
+restant pour cette journée, tous moyens de paiement confondus (hors soldes antérieurs).
+Une modification du montant calculé exige un motif d’écart. Retraits et écarts
+apparaissent en caisse, sans modifier les ventes ni les charges du rapport de bénéfice.
+
+Une seule clôture par date est conservée dans `commerce_sync_state`, avec copie
+immuable des ventes, articles et mouvements. L’historique se filtre par dates.
+Les écritures tardives ne réécrivent pas une archive : un avertissement les signale.
+La validation est réservée au propriétaire ; elle fonctionne hors ligne après
+chargement et utilise la même file synchronisée que les ventes. Si les mouvements
+ont changé en base avant réception de la clôture, la synchronisation demande de
+vérifier puis ressaisir la clôture. Les anciens caches sans clôtures restent compatibles.

@@ -140,7 +140,7 @@ export function ContactForm({ contact, kind, onSave }) {
     </Form>
   );
 }
-function MethodAndDate() {
+function MethodAndDate({ date } = {}) {
   return (
     <div className="local-grid-two">
       <Select name="method" label="Mode de paiement">
@@ -148,7 +148,14 @@ function MethodAndDate() {
           <option key={m}>{m}</option>
         ))}
       </Select>
-      <Field label="Date" name="date" type="date" defaultValue={today()} max={today()} required />
+      <Field
+        label="Date"
+        name="date"
+        type="date"
+        defaultValue={date || today()}
+        max={today()}
+        required
+      />
     </div>
   );
 }
@@ -335,7 +342,7 @@ export function PaymentForm({ contact, kind, balance, currency, onSave }) {
     </Form>
   );
 }
-export function ExpenseForm({ onSave }) {
+export function ExpenseForm({ onSave, date }) {
   const [receipt, setReceipt] = useState(''),
     [processing, setProcessing] = useState(false),
     [error, setError] = useState('');
@@ -362,7 +369,7 @@ export function ExpenseForm({ onSave }) {
       </Select>
       <Field label="Montant" name="amount" type="number" min="0.01" step="0.01" required />
       <Field label="Motif / description" name="reason" maxLength={300} required />
-      <MethodAndDate />
+      <MethodAndDate date={date} />
       <div className="local-attachment">
         <Field label="Justificatif depuis la galerie">
           <input

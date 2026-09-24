@@ -124,6 +124,34 @@ describe('Persistent synchronization outbox', () => {
     expect(JSON.parse(next.raw()).queue).toHaveLength(0);
     expect(f.received.size).toBe(1);
   });
+  it('persists an offline sale and closure, then retries the closure without duplication', async () => {
+    const f = fixture();
+    f.repo.initialize();
+    await f.repo.sync();
+    f.offline();
+    f.repo.apply('sale', sale, f.repo.read().revision);
+    f.repo.apply(
+      'day.close',
+      {
+        date: sale.date,
+        time: '17:00',
+        withdrawal: 1000,
+        withdrawalReason: 'Retrait',
+        remaining: 12000,
+        method: 'Espèces',
+      },
+      f.repo.read().revision
+    );
+    const next = createSyncRepository(f.options);
+    expect(next.initialize().dailyClosures[0].remaining).toBe(1200000);
+    f.online();
+    f.lose();
+    await next.sync();
+    await next.sync();
+    expect(f.state.dailyClosures).toHaveLength(1);
+    expect(f.state.sales).toHaveLength(1);
+    expect(JSON.parse(next.raw()).queue).toHaveLength(0);
+  });
   it('retries the same id after a lost acknowledgement without duplicating the sale', async () => {
     const f = fixture();
     f.repo.initialize();

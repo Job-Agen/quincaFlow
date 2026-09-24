@@ -1,3 +1,4 @@
+import { daySummary, closureFingerprint } from './ledger';
 // Deterministic preconditions detect price changes and concurrent form edits.
 export function canonical(value) {
   if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
@@ -37,6 +38,11 @@ export function expectedFor(data, action, input) {
       : null;
   if (action === 'archive') return data[input.collection]?.find((c) => c.id === input.id) || null;
   if (action === 'shop') return data.shop;
+  if (action === 'day.close')
+    return {
+      snapshot: closureFingerprint(daySummary(data, input.date)),
+      closed: (data.dailyClosures || []).some((c) => c.date === input.date),
+    };
   return null;
 }
 export function assertAllowed(role, action, input) {

@@ -17,6 +17,7 @@ import {
   X,
   ChevronDown,
 } from 'lucide-react';
+import { DailyReceipts, ClosureForm, ClosureDetail } from './DailyReceipts';
 import { COLLECTIONS } from './ledger';
 import { downloadBackup, localWrite } from './storage';
 import { createSyncRepository, ACTIVE_SYNC } from './syncStorage';
@@ -44,6 +45,7 @@ const NAV = [
   ['suppliers', 'Fournisseurs', Truck],
   ['purchases', 'Achats', ShoppingCart],
   ['cash', 'Caisse', Wallet],
+  ['receipts', 'Recettes du jour', Wallet],
   ['reports', 'Rapports', ChartNoAxesCombined],
   ['settings', 'Plus', Menu],
 ];
@@ -55,6 +57,8 @@ const TITLES = {
   purchase: 'Nouvel achat fournisseur',
   payment: 'Règlement',
   expense: 'Nouvelle dépense',
+  'day-close': 'Valider la journée',
+  'closure-detail': 'Journée clôturée',
   shop: 'Paramètres de la boutique',
   'product-detail': 'Fiche produit',
   'customer-detail': 'Fiche client',
@@ -235,7 +239,9 @@ export default function LocalApp() {
     }
   }
   const shared = { data, open, navigate, notify, synced: syncStatus.connected },
-    count = data ? COLLECTIONS.reduce((n, key) => n + data[key].length, 0) : 0;
+    count = data
+      ? COLLECTIONS.reduce((n, key) => n + data[key].length, 0) + (data.dailyClosures?.length || 0)
+      : 0;
   const screens = data
     ? {
         home: <Dashboard {...shared} />,
@@ -245,6 +251,7 @@ export default function LocalApp() {
         sales: <Trades {...shared} />,
         purchases: <Trades {...shared} purchase />,
         cash: <Cash {...shared} />,
+        receipts: <DailyReceipts {...shared} />,
         reports: <Reports {...shared} />,
         settings: <SettingsView {...shared} backup={backup} />,
       }
@@ -290,8 +297,12 @@ export default function LocalApp() {
         );
       case 'payment':
         return <PaymentForm {...v} currency={data.shop.currency} onSave={save} />;
+      case 'day-close':
+        return <ClosureForm data={data} date={v.date} onSave={save} />;
+      case 'closure-detail':
+        return <ClosureDetail data={data} closure={v} />;
       case 'expense':
-        return <ExpenseForm onSave={save} />;
+        return <ExpenseForm date={v.date} onSave={save} />;
       case 'shop':
         return <ShopForm data={data} onSave={save} />;
       case 'product-detail':
@@ -464,7 +475,7 @@ export default function LocalApp() {
           {page === 'settings' ? (
             <nav className="local-more-nav" aria-label="Autres rubriques">
               {NAV.filter(([id]) =>
-                ['customers', 'suppliers', 'purchases', 'reports'].includes(id)
+                ['receipts', 'customers', 'suppliers', 'purchases', 'reports'].includes(id)
               ).map(([id, label, Icon]) => (
                 <button key={id} onClick={() => navigate(id)}>
                   <Icon size={20} />
