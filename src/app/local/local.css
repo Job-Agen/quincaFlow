@@ -1121,3 +1121,13 @@
     justify-content: flex-start;
   }
 }
+
+.local-day-sale {
+  padding: 14px 0;
+  border-bottom: 1px solid #e5eaf0;
+}
+.local-day-sale summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 0;
+}

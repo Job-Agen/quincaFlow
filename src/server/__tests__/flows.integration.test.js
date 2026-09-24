@@ -772,6 +772,74 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       'RECEIVED'
     );
   });
+  it('sync: archive une clôture en base une seule fois et conserve les chiffres historiques', async () => {
+    const { syncSnapshot, syncOperation } = await import('../sync');
+    const { today } = await import('../../local/ledger');
+    const date = today();
+    const product = await seedVitre(10);
+    await syncOperation(
+      OWNER,
+      await syncCommand(OWNER, 'sale', {
+        date,
+        lines: [{ productId: product.id, quantity: 2 }],
+        method: 'Espèces',
+        paid: '',
+      })
+    );
+    const snapshot = (await syncSnapshot(OWNER)).data;
+    const input = {
+      date,
+      time: '17:00',
+      withdrawal: 100,
+      withdrawalReason: 'Retrait',
+      remaining: snapshot.sales[0].paid / 100 - 100,
+      method: 'Espèces',
+    };
+    const op = await syncCommand(OWNER, 'day.close', input);
+    await syncOperation(OWNER, op);
+    await syncOperation(OWNER, op);
+    const archived = (await syncSnapshot(OWNER)).data.dailyClosures;
+    expect(archived).toHaveLength(1);
+    expect(archived[0].snapshot.sales).toHaveLength(1);
+    const saved = (
+      await pool.query('SELECT state FROM commerce_sync_state WHERE business_id=$1', [
+        OWNER.businessId,
+      ])
+    ).rows[0].state;
+    expect(saved.dailyClosures[0]).toEqual(archived[0]);
+    await expect(
+      syncOperation(OWNER, await syncCommand(OWNER, 'day.close', input))
+    ).rejects.toThrow(/déjà clôturée/);
+    await pool.query('UPDATE products SET name=$1,selling_price=900 WHERE id=$2', [
+      'Nouveau nom',
+      product.id,
+    ]);
+    expect((await syncSnapshot(OWNER)).data.dailyClosures).toEqual(archived);
+  });
+  it('sync: refuse une clôture périmée si une dépense arrive avant sa validation', async () => {
+    const { syncOperation, syncSnapshot } = await import('../sync');
+    const { today } = await import('../../local/ledger');
+    const date = today();
+    const op = await syncCommand(OWNER, 'day.close', {
+      date,
+      time: '17:00',
+      withdrawal: 0,
+      remaining: 0,
+      method: 'Espèces',
+    });
+    await syncOperation(
+      OWNER,
+      await syncCommand(OWNER, 'expense', {
+        date,
+        amount: 50,
+        method: 'Espèces',
+        category: 'Divers',
+        reason: 'Livraison',
+      })
+    );
+    await expect(syncOperation(OWNER, op)).rejects.toThrow(/changé/);
+    expect((await syncSnapshot(OWNER)).data.dailyClosures || []).toHaveLength(0);
+  });
   it('sync: rejette les identifiants d’une autre boutique et les membres révoqués', async () => {
     const { syncSnapshot, syncOperation } = await import('../sync');
     const product = await seedVitre(10);

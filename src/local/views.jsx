@@ -88,6 +88,11 @@ export function Dashboard({ data, open, navigate }) {
           ['Nombre de ventes', r.salesCount, 'purple', true],
         ]}
       />
+      <div className="local-quick">
+        <Button tone="soft" onClick={() => navigate('receipts')}>
+          Recettes et clôture du jour
+        </Button>
+      </div>
       <div className="local-columns">
         <Section
           title="Stock à surveiller"

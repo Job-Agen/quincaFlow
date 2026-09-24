@@ -42,6 +42,7 @@ export function emptyStore() {
   return {
     version: VERSION,
     revision: 0,
+    dailyClosures: [],
     shop: { name: 'MaQuincaillerie', currency: 'FCFA', openingCash: 0, openingMobile: 0 },
     ...Object.fromEntries(COLLECTIONS.map((key) => [key, []])),
   };
@@ -244,6 +245,7 @@ export function validateStore(data) {
         receiptOK(e.receipt),
       'Dépense ou justificatif invalide.'
     );
+  validateClosures(data);
   for (const c of data.customers)
     requireValue(customerBalance(data, c.id) >= 0, 'Remboursement client supérieur à la dette.');
   for (const c of data.suppliers)
@@ -397,6 +399,8 @@ export function transact(source, action, input, id = globalThis.crypto.randomUUI
       method: input.method,
       receipt: input.receipt || '',
     });
+  } else if (action === 'day.close') {
+    closeDay(data, input, stamp);
   } else if (action === 'shop') {
     data.shop = {
       ...data.shop,
@@ -465,6 +469,30 @@ export function cashLedger(data) {
       kind: e.category,
       receipt: e.receipt,
     });
+  for (const c of data.dailyClosures || []) {
+    if (c.withdrawal)
+      entries.push({
+        id: c.id + ':withdrawal',
+        closureId: c.id,
+        date: c.date,
+        direction: -1,
+        amount: c.withdrawal,
+        method: c.method,
+        label: c.withdrawalReason,
+        kind: 'Retrait de clôture',
+      });
+    if (c.adjustment)
+      entries.push({
+        id: c.id + ':adjustment',
+        closureId: c.id,
+        date: c.date,
+        direction: Math.sign(c.adjustment),
+        amount: Math.abs(c.adjustment),
+        method: c.method,
+        label: c.adjustmentReason,
+        kind: 'Écart de clôture',
+      });
+  }
   return entries.sort((a, b) => b.date.localeCompare(a.date));
 }
 export function report(data, from = '', to = '') {
@@ -560,4 +588,180 @@ export function whatsappLink(phone, message) {
   if (digits.length < 8 || digits.length > 15)
     throw Error('Saisissez le téléphone avec son indicatif pays (ex. +228…).');
   return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(message);
+}
+
+// A closure is an immutable snapshot. Late entries remain visible without rewriting history.
+export function daySummary(data, date) {
+  const sales = structuredClone(data.sales.filter((s) => s.date === date)).sort((a, b) =>
+    a.id.localeCompare(b.id)
+  );
+  const entries = cashLedger(data)
+    .filter((e) => e.date === date && !e.closureId)
+    .map(({ receipt, ...e }) => e)
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return {
+    sales,
+    entries,
+    totalSales: sum(sales, (s) => s.total),
+    collectedSales: sum(sales, (s) => s.paid),
+    incoming: sum(
+      entries.filter((e) => e.direction === 1),
+      (e) => e.amount
+    ),
+    outgoing: sum(
+      entries.filter((e) => e.direction === -1),
+      (e) => e.amount
+    ),
+  };
+}
+const signedCents = (n) => Number.isSafeInteger(n) && Math.abs(n) <= 1e12;
+function closeDay(data, input, stamp) {
+  requireValue(
+    dateOK(stamp.date) && stamp.date <= today(),
+    'Choisissez une journée passée ou aujourd’hui.'
+  );
+  requireValue(
+    !(data.dailyClosures || []).some((c) => c.date === stamp.date),
+    'Cette journée est déjà clôturée.'
+  );
+  requireValue(/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time), 'Heure de clôture invalide.');
+  const snapshot = daySummary(data, stamp.date);
+  const withdrawal = money(input.withdrawal || 0);
+  const raw = String(input.remaining ?? '').replace(',', '.');
+  const remaining = Math.round(Number(raw) * 100);
+  requireValue(raw.trim() && signedCents(remaining), 'Montant validé invalide.');
+  const adjustment = remaining - (snapshot.incoming - snapshot.outgoing - withdrawal);
+  requireValue(signedCents(adjustment), 'Écart invalide.');
+  requireValue(METHODS.includes(input.method), 'Moyen de paiement invalide.');
+  const closure = {
+    ...stamp,
+    time: input.time,
+    snapshot,
+    withdrawal,
+    remaining,
+    adjustment,
+    method: input.method,
+    withdrawalReason: text(input.withdrawalReason, 'Motif du retrait', withdrawal > 0),
+    adjustmentReason: text(input.adjustmentReason, 'Motif de l’écart', adjustment !== 0),
+    note: text(input.note, 'Note', false),
+  };
+  data.dailyClosures = [...(data.dailyClosures || []), closure];
+}
+function validateClosures(data) {
+  requireValue(
+    data.dailyClosures === undefined || Array.isArray(data.dailyClosures),
+    'Historique des clôtures invalide.'
+  );
+  const dates = new Set(),
+    ids = new Set();
+  for (const c of data.dailyClosures || []) {
+    requireValue(
+      c &&
+        typeof c.id === 'string' &&
+        c.id.length > 0 &&
+        c.id.length < 100 &&
+        !ids.has(c.id) &&
+        dateOK(c.date) &&
+        !dates.has(c.date),
+      'Clôture dupliquée ou invalide.'
+    );
+    dates.add(c.date);
+    ids.add(c.id);
+    requireValue(
+      /^([01]\d|2[0-3]):[0-5]\d$/.test(c.time) &&
+        METHODS.includes(c.method) &&
+        cents(c.withdrawal) &&
+        signedCents(c.remaining) &&
+        signedCents(c.adjustment),
+      'Montants de clôture invalides.'
+    );
+    for (const k of ['withdrawalReason', 'adjustmentReason', 'note'])
+      requireValue(typeof c[k] === 'string' && c[k].length <= 300, 'Note de clôture invalide.');
+    requireValue(!c.withdrawal || c.withdrawalReason.trim(), 'Motif du retrait requis.');
+    requireValue(!c.adjustment || c.adjustmentReason.trim(), 'Motif de l’écart requis.');
+    const v = c.snapshot;
+    requireValue(
+      v &&
+        Array.isArray(v.sales) &&
+        Array.isArray(v.entries) &&
+        [v.totalSales, v.collectedSales, v.incoming, v.outgoing].every(cents),
+      'Récapitulatif invalide.'
+    );
+    for (const sale of v.sales) {
+      requireValue(
+        sale.date === c.date &&
+          [sale.total, sale.paid].every(cents) &&
+          sale.paid <= sale.total &&
+          cents(sale.discount || 0) &&
+          Array.isArray(sale.items) &&
+          sale.items.length > 0,
+        'Vente archivée invalide.'
+      );
+      for (const i of sale.items)
+        requireValue(
+          typeof i.name === 'string' &&
+            qty(i.quantity) &&
+            i.quantity > 0 &&
+            cents(i.price) &&
+            cents(i.total) &&
+            i.total === Math.round(i.quantity * i.price),
+          'Article archivé invalide.'
+        );
+      requireValue(
+        sale.total === sum(sale.items, (i) => i.total) - (sale.discount || 0),
+        'Total archivé invalide.'
+      );
+    }
+    for (const e of v.entries)
+      requireValue(
+        e.date === c.date &&
+          cents(e.amount) &&
+          [1, -1].includes(e.direction) &&
+          METHODS.includes(e.method),
+        'Mouvement archivé invalide.'
+      );
+    requireValue(
+      v.totalSales === sum(v.sales, (s) => s.total) &&
+        v.collectedSales === sum(v.sales, (s) => s.paid) &&
+        v.incoming ===
+          sum(
+            v.entries.filter((e) => e.direction === 1),
+            (e) => e.amount
+          ) &&
+        v.outgoing ===
+          sum(
+            v.entries.filter((e) => e.direction === -1),
+            (e) => e.amount
+          ) &&
+        c.remaining === v.incoming - v.outgoing - c.withdrawal + c.adjustment,
+      'Totaux de clôture incohérents.'
+    );
+  }
+}
+
+// Ignore presentation-only fields added by SQL projection when replaying an offline queue.
+export function closureFingerprint(snapshot) {
+  return {
+    sales: snapshot.sales.map((s) => ({
+      id: s.id,
+      date: s.date,
+      total: s.total,
+      paid: s.paid,
+      method: s.method,
+      discount: s.discount || 0,
+      items: s.items.map((i) => ({
+        productId: i.productId,
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price,
+        total: i.total,
+      })),
+    })),
+    entries: snapshot.entries.map((e) => ({
+      id: e.id,
+      amount: e.amount,
+      direction: e.direction,
+      method: e.method,
+    })),
+  };
 }
