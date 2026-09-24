@@ -421,19 +421,11 @@ export function ReceiptImage({ src }) {
 }
 export function ShopForm({ data, onSave }) {
   return (
-    <Form onSubmit={(values) => onSave('shop', values)}>
-      <Field
-        label="Nom de la boutique"
-        name="name"
-        defaultValue={data.shop.name}
-        required
-        maxLength={100}
-      />
-      <Select label="Devise" name="currency" defaultValue={data.shop.currency}>
-        {['FCFA', 'XOF', 'XAF'].map((c) => (
-          <option key={c}>{c}</option>
-        ))}
-      </Select>
+    <Form
+      onSubmit={(values) =>
+        onSave('shop', { ...values, name: data.shop.name, currency: data.shop.currency })
+      }
+    >
       <Field
         label="Caisse initiale en espèces"
         name="openingCash"

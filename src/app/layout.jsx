@@ -1,9 +1,11 @@
 import './globals.css';
 import './prototype.css';
+import './local/local.css';
 import ClientRoot from '@/components/layout/ClientRoot';
 
 export const metadata = {
-  title: 'QuincaFlow — gestion de quincaillerie',
+  title: 'MaQuincaillerie — Gestion de la boutique',
+  manifest: '/local.webmanifest',
   description: 'Ventes, stock, ventes hors stock et achats fournisseurs, pour les quincailleries.',
 };
 

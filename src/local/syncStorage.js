@@ -50,6 +50,7 @@ export function createSyncRepository({
     onStatus({
       connected: Boolean(identity),
       identity,
+      role: env?.role,
       pending: env?.queue.length || 0,
       lastSync: env?.lastSync,
       conflict: env?.conflict,

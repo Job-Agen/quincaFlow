@@ -29,7 +29,7 @@ export default function LoginPage() {
     setError(null);
     try {
       setProfile(await api.post('/api/auth/login', form));
-      router.replace('/local');
+      router.replace('/');
     } catch (issue) {
       setError(issue.message);
       setBusy(false);
