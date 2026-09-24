@@ -215,9 +215,9 @@ businesses
 Références : `VE-0001` (vente), `FA-2026-0001` (facture, remise à zéro chaque
 année), `HS-0001` (hors stock), `PO-0001` (commande), `RC-0001` (réception).
 
-## Boutique synchronisée et hors ligne — `/local`
+## Application unifiée et continuité hors ligne
 
-Après connexion, l’application ouvre `/local` et charge les données de la boutique
+Après connexion, l’application ouvre `/` et charge les données de la boutique
 liée au compte : produits, clients, fournisseurs et ventes. Le catalogue et les
 ventes utilisent les tables relationnelles existantes. Les catégories, tarifs de
 gros, soldes initiaux, crédits, remboursements, dépenses et justificatifs sont
@@ -259,7 +259,7 @@ seconde fois les achats de stock.
 
 ### Hors ligne et sauvegardes
 
-Ouvrir `/local` une première fois en HTTPS (ou localhost), se connecter et attendre
+Ouvrir `/` une première fois en HTTPS (ou localhost), se connecter et attendre
 **Réouverture hors ligne prête**. Le service worker précharge la coque publique et
 ses fichiers statiques, jamais les API ni les pages privées. Le cache local de la
 boutique reste consultable et modifiable sans réseau. Une connexion est nécessaire
@@ -302,3 +302,20 @@ La validation est réservée au propriétaire ; elle fonctionne hors ligne aprè
 chargement et utilise la même file synchronisée que les ventes. Si les mouvements
 ont changé en base avant réception de la clôture, la synchronisation demande de
 vérifier puis ressaisir la clôture. Les anciens caches sans clôtures restent compatibles.
+
+### Organisation de l’application
+
+La navigation principale est identique sur mobile et ordinateur : Accueil, Ventes,
+Stock, Caisse et Plus. Caisse regroupe le journal (`/cash`) et les recettes et
+clôtures (`/cash/closing`). Plus regroupe le commerce (clients, fournisseurs,
+achats et ventes hors stock), le suivi (rapports et historique complet), puis
+les paramètres, sauvegardes et accès d’équipe. Les commandes fournisseurs et
+les écrans de détail conservent leurs fonctionnalités et partagent cette navigation.
+
+Le point d’entrée est `/`, y compris après connexion et pour l’application installée.
+Les anciens liens `/local#stock`, `/local#receipts`, etc. ouvrent automatiquement
+leur rubrique à sa nouvelle adresse. Les données et files de synchronisation utilisent
+les mêmes clés de stockage et la même base : aucune importation ni remise à zéro.
+Le service worker prépare la coque commune pour les liens directs et rechargements
+hors ligne des rubriques principales. Les écrans spécialisés nécessitant le serveur
+restent signalés comme indisponibles sans réseau, sans quitter le parcours courant.

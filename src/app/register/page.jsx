@@ -35,7 +35,7 @@ export default function RegisterPage() {
     setError(null);
     try {
       setProfile(await api.post('/api/auth/register', form));
-      router.replace('/local');
+      router.replace('/');
     } catch (issue) {
       setError(issue.message);
       setBusy(false);

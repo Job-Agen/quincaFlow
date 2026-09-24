@@ -1,10 +1,18 @@
 {
   "name": "MaQuincaillerie — Ma boutique",
   "short_name": "Ma boutique",
-  "start_url": "/local",
-  "scope": "/local",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f4f7fb",
   "theme_color": "#0b4e86",
-  "icons": [{ "src": "/local-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+  "icons": [
+    {
+      "src": "/local-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "id": "/local"
 }

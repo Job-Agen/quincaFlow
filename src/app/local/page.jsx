@@ -1,9 +1,4 @@
-import LocalApp from '@/local/LocalApp';
-import './local.css';
-export const metadata = {
-  title: 'MaQuincaillerie — Ma boutique',
-  manifest: '/local.webmanifest',
-};
-export default function LocalPage() {
-  return <LocalApp />;
+// Content is provided by the shared commerce shell in ClientRoot.
+export default function Page() {
+  return null;
 }

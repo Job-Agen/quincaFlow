@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   Plus,
   Search,
@@ -494,7 +495,7 @@ export function ContactDetail({ contact, kind, data, open, notify }) {
     </div>
   );
 }
-export function Trades({ data, purchase = false, open }) {
+export function Trades({ data, purchase = false, open, notify }) {
   const [query, setQuery] = useState('');
   const rows = data[purchase ? 'purchases' : 'sales']
     .slice()
@@ -527,6 +528,24 @@ export function Trades({ data, purchase = false, open }) {
           {purchase ? 'Nouvel achat' : 'Nouvelle vente'}
         </Button>
       </div>
+      {purchase ? (
+        <div className="local-quick">
+          <Link
+            className="local-button soft"
+            href="/purchases/new"
+            prefetch={false}
+            onClick={(event) => {
+              if (!navigator.onLine) {
+                event.preventDefault();
+                event.stopPropagation();
+                notify('La préparation d’une commande nécessite une connexion.', 'error');
+              }
+            }}
+          >
+            Préparer une commande fournisseur
+          </Link>
+        </div>
+      ) : null}
       <SearchBox
         value={query}
         onChange={setQuery}
@@ -852,17 +871,13 @@ export function Reports({ data }) {
     </>
   );
 }
-export function SettingsView({ data, open, backup, synced }) {
+export function SettingsView({ data, open, backup }) {
   return (
     <>
       <div className="local-page-head">
         <div>
-          <h1>Ma boutique</h1>
-          <p>
-            {synced
-              ? 'Vos données sont reliées à votre boutique en base.'
-              : 'Connectez-vous pour charger les données de votre boutique.'}
-          </p>
+          <h1>Sauvegarde et soldes initiaux</h1>
+          <p>Vos données et la continuité de votre activité.</p>
         </div>
       </div>
       <div className="local-columns">
@@ -870,7 +885,7 @@ export function SettingsView({ data, open, backup, synced }) {
           <p>Devise : {data.shop.currency}</p>
           <Button tone="soft" onClick={() => open('shop')}>
             <Settings size={18} />
-            Paramètres et soldes initiaux
+            Modifier les soldes initiaux
           </Button>
         </Section>
         <Section title="Sauvegarde locale">
@@ -896,16 +911,6 @@ export function SettingsView({ data, open, backup, synced }) {
             ou un changement de domaine peuvent le rendre indisponible. WhatsApp nécessite sa propre
             connexion.
           </p>
-        </Section>
-        <Section title="Accès connecté">
-          <p>
-            {synced
-              ? 'Les produits, clients, fournisseurs et ventes utilisent la même base que l’espace connecté. Les crédits, dépenses et champs supplémentaires sont également enregistrés en base.'
-              : 'Connectez-vous pour charger les données existantes de votre boutique.'}
-          </p>
-          <a className="local-button soft" href={synced ? '/' : '/login'}>
-            {synced ? 'Ouvrir les écrans classiques' : 'Se connecter à ma boutique'}
-          </a>
         </Section>
       </div>
     </>

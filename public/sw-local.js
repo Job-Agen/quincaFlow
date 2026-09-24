@@ -1,6 +1,20 @@
 /* Only the public, data-free local application shell is cached. Never cache APIs. */
-const CACHE = 'quincaflow-local-shell-v1';
-const SHELL = '/local';
+const CACHE = 'quincaflow-app-shell-v2';
+const SHELL = '/';
+const PAGES = new Set([
+  '/',
+  '/local',
+  '/sales',
+  '/products',
+  '/customers',
+  '/suppliers',
+  '/purchases',
+  '/cash',
+  '/cash/closing',
+  '/reports',
+  '/more',
+  '/backup',
+]);
 async function prepare(response) {
   if (!response.ok || !response.headers.get('content-type')?.includes('text/html'))
     throw Error('Shell unavailable');
@@ -44,12 +58,16 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/api/')
   )
     return;
-  if (request.mode === 'navigate' && (url.pathname === '/local' || url.pathname === '/local/')) {
+  if (
+    request.mode === 'navigate' &&
+    PAGES.has(url.pathname === '/' ? '/' : url.pathname.replace(/\/$/, ''))
+  ) {
     event.respondWith(
       fetch(request)
         .then(async (response) => {
           try {
-            await prepare(response);
+            if (url.pathname === '/') await prepare(response);
+            else event.waitUntil(prepareRequest().catch(() => {}));
           } catch {
             /* Keep last complete version. */
           }
@@ -60,7 +78,7 @@ self.addEventListener('fetch', (event) => {
           async () =>
             (await (await caches.open(CACHE)).match(SHELL)) ||
             new Response(
-              'Ouvrez une première fois /local avec une connexion pour préparer le mode hors ligne.',
+              'Ouvrez une première fois votre boutique avec une connexion pour préparer le mode hors ligne.',
               { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
             )
         )

@@ -1131,3 +1131,49 @@
   font-weight: 600;
   padding: 8px 0;
 }
+
+/* One navigation shell for the updated modules and specialized workflows. */
+.local-sync-details {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+}
+.local-sync-details > summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.local-sync-details .local-sync-panel {
+  border: 0;
+  margin: 0;
+}
+.local-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.local-embedded .appbar {
+  position: static;
+  border-radius: 12px 12px 0 0;
+  margin-bottom: 16px;
+}
+.local-embedded .page {
+  padding: 0;
+  max-width: none;
+  margin: 0;
+}
+.local-embedded {
+  min-width: 0;
+}
+.local-embedded .shell {
+  padding-bottom: 0;
+}
+.local-row.local-click {
+  color: var(--ink);
+  text-align: left;
+}
+.local-row > svg {
+  flex-shrink: 0;
+  color: var(--blue);
+}

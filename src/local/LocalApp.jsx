@@ -1,14 +1,11 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Store,
   Home,
   ShoppingCart,
   Package,
-  Users,
-  Truck,
   Wallet,
-  ChartNoAxesCombined,
   Menu,
   Wifi,
   WifiOff,
@@ -17,6 +14,9 @@ import {
   X,
   ChevronDown,
 } from 'lucide-react';
+import { MoreMenu } from './MoreMenu';
+import Link from 'next/link';
+import { ROUTES, pageFor, activeSection, subscribeLocation, browserLocation } from './navigation';
 import { DailyReceipts, ClosureForm, ClosureDetail } from './DailyReceipts';
 import { COLLECTIONS } from './ledger';
 import { downloadBackup, localWrite } from './storage';
@@ -41,13 +41,8 @@ const NAV = [
   ['home', 'Accueil', Home],
   ['sales', 'Ventes', ShoppingCart],
   ['stock', 'Stock', Package],
-  ['customers', 'Clients', Users],
-  ['suppliers', 'Fournisseurs', Truck],
-  ['purchases', 'Achats', ShoppingCart],
   ['cash', 'Caisse', Wallet],
-  ['receipts', 'Recettes du jour', Wallet],
-  ['reports', 'Rapports', ChartNoAxesCombined],
-  ['settings', 'Plus', Menu],
+  ['more', 'Plus', Menu],
 ];
 const TITLES = {
   product: 'Produit',
@@ -68,10 +63,9 @@ const TITLES = {
   'sync-conflict': 'Résoudre la synchronisation',
   archive: 'Supprimer cette fiche',
 };
-export default function LocalApp() {
+export default function CommerceApp({ pathname = '/', children }) {
   const [data, setData] = useState(null),
     [failure, setFailure] = useState(''),
-    [page, setPage] = useState('home'),
     [modal, setModal] = useState(null),
     [toasts, setToasts] = useState([]),
     [online, setOnline] = useState(true),
@@ -79,6 +73,9 @@ export default function LocalApp() {
     [compact, setCompact] = useState(false),
     [cacheError, setCacheError] = useState(''),
     [syncStatus, setSyncStatus] = useState({ message: 'Vérification de votre connexion…' });
+  const currentLocation = useSyncExternalStore(subscribeLocation, browserLocation, () => '/');
+  const [currentPath, currentHash = ''] = currentLocation.split('#');
+  const page = pageFor(currentPath, currentHash);
   const repo = useRef(null),
     timers = useRef(new Set());
   const notify = useCallback((message, tone = 'success') => {
@@ -126,7 +123,7 @@ export default function LocalApp() {
         setFailure(e.message);
       }
       setOnline(navigator.onLine);
-      setPage(NAV.some(([id]) => id === location.hash.slice(1)) ? location.hash.slice(1) : 'home');
+      readLocation();
     });
     function connection() {
       setOnline(navigator.onLine);
@@ -154,14 +151,18 @@ export default function LocalApp() {
         notify('Données actualisées depuis un autre onglet.');
       }
     }
-    function hash() {
-      setPage(NAV.some(([id]) => id === location.hash.slice(1)) ? location.hash.slice(1) : 'home');
+    function readLocation() {
+      const next = pageFor(location.pathname, location.hash);
+      if (location.pathname.replace(/\/$/, '') === '/local')
+        window.history.replaceState(null, '', ROUTES[next]);
+      window.dispatchEvent(new Event('commerce:navigate'));
       setModal(null);
     }
     window.addEventListener('online', connection);
     window.addEventListener('offline', connection);
     window.addEventListener('storage', storage);
-    window.addEventListener('hashchange', hash);
+    window.addEventListener('hashchange', readLocation);
+    window.addEventListener('popstate', readLocation);
     const syncInterval = setInterval(() => repo.current?.sync(), 30000);
     const focus = () => repo.current?.sync();
     window.addEventListener('focus', focus);
@@ -205,14 +206,27 @@ export default function LocalApp() {
       window.removeEventListener('online', connection);
       window.removeEventListener('offline', connection);
       window.removeEventListener('storage', storage);
-      window.removeEventListener('hashchange', hash);
+      window.removeEventListener('hashchange', readLocation);
+      window.removeEventListener('popstate', readLocation);
       for (const timer of timeouts) clearTimeout(timer);
     };
   }, [notify]);
+  useEffect(() => {
+    repo.current?.sync();
+  }, [pathname]);
+  const active = activeSection(page, currentPath);
   function navigate(id) {
-    window.history.pushState(null, '', '#' + id);
-    setPage(id);
+    window.history.pushState(null, '', ROUTES[id]);
+    window.dispatchEvent(new Event('commerce:navigate'));
     setModal(null);
+  }
+  async function signOut() {
+    try {
+      await repo.current.signOut();
+      window.location.assign('/login');
+    } catch (e) {
+      notify(e.message, 'error');
+    }
   }
   function open(type, value = {}) {
     setModal({ type, value, revision: data?.revision });
@@ -253,7 +267,8 @@ export default function LocalApp() {
         cash: <Cash {...shared} />,
         receipts: <DailyReceipts {...shared} />,
         reports: <Reports {...shared} />,
-        settings: <SettingsView {...shared} backup={backup} />,
+        more: <MoreMenu {...shared} role={syncStatus.role} signOut={signOut} />,
+        backup: <SettingsView {...shared} backup={backup} />,
       }
     : {};
   function modalContent() {
@@ -340,21 +355,44 @@ export default function LocalApp() {
     }
   }
   return (
-    <div className="local-app">
+    <div
+      className="local-app"
+      onClick={(event) => {
+        const anchor = event.target.closest('a[href]');
+        if (!online && anchor) {
+          const url = new URL(anchor.href, location.href);
+          if (url.origin === location.origin && pageFor(url.pathname) === 'detail') {
+            event.preventDefault();
+            notify(
+              'Cette rubrique nécessite une connexion. Vos ventes, votre caisse et vos données chargées restent disponibles.',
+              'error'
+            );
+          }
+        }
+      }}
+    >
       <aside className="local-sidebar">
-        <a className="local-brand" href="/local">
+        <Link
+          className="local-brand"
+          href="/"
+          prefetch={false}
+          onClick={(event) => {
+            event.preventDefault();
+            navigate('home');
+          }}
+        >
           <Store size={28} />
           <span>
             {data?.shop.name || 'MaQuincaillerie'}
-            <small>{syncStatus.connected ? 'BOUTIQUE SYNCHRONISÉE' : 'MA BOUTIQUE'}</small>
+            <small>GESTION DE VOTRE BOUTIQUE</small>
           </span>
-        </a>
+        </Link>
         <nav aria-label="Navigation principale">
           {NAV.map(([id, label, Icon]) => (
             <button
               key={id}
-              className={page === id ? 'active' : ''}
-              aria-current={page === id ? 'page' : undefined}
+              className={active === id ? 'active' : ''}
+              aria-current={active === id ? 'page' : undefined}
               onClick={() => navigate(id)}
             >
               <Icon size={21} />
@@ -374,7 +412,9 @@ export default function LocalApp() {
         <header className="local-topbar">
           <Store size={25} />
           <strong>{data?.shop.name || 'MaQuincaillerie'}</strong>
-          <span className="local-local-tag">{syncStatus.connected ? 'SYNCHRO' : 'CONNEXION'}</span>
+          <span className="local-local-tag">
+            {syncStatus.pending ? 'En attente' : 'Ma boutique'}
+          </span>
         </header>
         <div className={'local-connectivity ' + (compact ? 'compact' : '')}>
           <div>
@@ -409,79 +449,79 @@ export default function LocalApp() {
           </p>
         ) : null}
         <main className="local-main">
-          <section
-            className="local-sync-panel"
+          <details
+            open={
+              !syncStatus.connected ||
+              Boolean(syncStatus.conflict || syncStatus.requiresLogin || syncStatus.requiresReload)
+            }
+            className="local-sync-details"
             aria-label="Synchronisation de la boutique"
             aria-live="polite"
           >
-            <div>
-              <strong>
-                {syncStatus.connected ? syncStatus.identity.name : 'Retrouver mes données en base'}
-              </strong>
-              <p>
-                {syncStatus.message ||
-                  (syncStatus.pending
-                    ? `${syncStatus.pending} opération(s) en attente`
-                    : `Synchronisé${syncStatus.lastSync ? ' à ' + new Date(syncStatus.lastSync).toLocaleTimeString('fr-FR') : ''}`)}
-              </p>
-              {syncStatus.connected ? (
-                <small>{syncStatus.pending || 0} opération(s) non synchronisée(s)</small>
-              ) : (
-                <small>
-                  Connectez-vous au compte de votre boutique pour charger ses produits et son
-                  historique.
-                </small>
-              )}
+            <summary>
+              {syncStatus.pending
+                ? `${syncStatus.pending} opération(s) à synchroniser`
+                : syncStatus.connected
+                  ? 'Sauvegarde et connexion'
+                  : 'Se connecter à la boutique'}
+            </summary>
+            <div className="local-sync-panel">
+              <div>
+                <strong>
+                  {syncStatus.connected
+                    ? syncStatus.identity.name
+                    : 'Retrouver mes données en base'}
+                </strong>
+                <p>
+                  {syncStatus.message ||
+                    (syncStatus.pending
+                      ? `${syncStatus.pending} opération(s) en attente`
+                      : `Synchronisé${syncStatus.lastSync ? ' à ' + new Date(syncStatus.lastSync).toLocaleTimeString('fr-FR') : ''}`)}
+                </p>
+                {syncStatus.connected ? (
+                  <small>{syncStatus.pending || 0} opération(s) non synchronisée(s)</small>
+                ) : (
+                  <small>
+                    Connectez-vous au compte de votre boutique pour charger ses produits et son
+                    historique.
+                  </small>
+                )}
+              </div>
+              <div className="local-sync-actions">
+                {!syncStatus.connected || syncStatus.requiresLogin ? (
+                  <a className="local-button" href="/login">
+                    Se connecter à ma boutique
+                  </a>
+                ) : null}
+                {syncStatus.requiresReload ? (
+                  <Button onClick={() => window.location.reload()}>
+                    Ouvrir le compte connecté
+                  </Button>
+                ) : (
+                  <Button
+                    tone="soft"
+                    disabled={syncStatus.syncing}
+                    onClick={() => repo.current?.sync()}
+                  >
+                    {syncStatus.syncing ? 'Synchronisation…' : 'Actualiser'}
+                  </Button>
+                )}
+                {syncStatus.conflict?.rejected ? (
+                  <Button tone="danger" onClick={() => open('sync-conflict')}>
+                    Résoudre le conflit
+                  </Button>
+                ) : null}
+              </div>
             </div>
-            <div className="local-sync-actions">
-              {syncStatus.connected ? (
-                <Button
-                  tone="ghost"
-                  onClick={async () => {
-                    try {
-                      await repo.current.signOut();
-                      window.location.reload();
-                    } catch (e) {
-                      notify(e.message, 'error');
-                    }
-                  }}
-                >
-                  Se déconnecter
-                </Button>
-              ) : null}
-              {!syncStatus.connected || syncStatus.requiresLogin ? (
-                <a className="local-button" href="/login">
-                  Se connecter à ma boutique
-                </a>
-              ) : null}
-              {syncStatus.requiresReload ? (
-                <Button onClick={() => window.location.reload()}>Ouvrir le compte connecté</Button>
-              ) : (
-                <Button
-                  tone="soft"
-                  disabled={syncStatus.syncing}
-                  onClick={() => repo.current?.sync()}
-                >
-                  {syncStatus.syncing ? 'Synchronisation…' : 'Actualiser'}
-                </Button>
-              )}
-              {syncStatus.conflict?.rejected ? (
-                <Button tone="danger" onClick={() => open('sync-conflict')}>
-                  Résoudre le conflit
-                </Button>
-              ) : null}
-            </div>
-          </section>
-          {page === 'settings' ? (
-            <nav className="local-more-nav" aria-label="Autres rubriques">
-              {NAV.filter(([id]) =>
-                ['receipts', 'customers', 'suppliers', 'purchases', 'reports'].includes(id)
-              ).map(([id, label, Icon]) => (
-                <button key={id} onClick={() => navigate(id)}>
-                  <Icon size={20} />
-                  {label}
-                </button>
-              ))}
+          </details>
+          {['cash', 'receipts'].includes(page) ? (
+            <nav className="local-section-tabs" aria-label="Rubriques de la caisse">
+              <Button tone={page === 'cash' ? '' : 'soft'} onClick={() => navigate('cash')}>
+                Journal de caisse
+              </Button>
+              <Button tone={page === 'receipts' ? '' : 'soft'} onClick={() => navigate('receipts')}>
+                Recettes et clôtures
+              </Button>
             </nav>
           ) : null}
           {failure ? (
@@ -492,6 +532,8 @@ export default function LocalApp() {
               </p>
               <Button onClick={backup}>Exporter les données conservées</Button>
             </div>
+          ) : page === 'detail' ? (
+            <div className="local-embedded">{children}</div>
           ) : data ? (
             screens[page]
           ) : (
@@ -502,14 +544,12 @@ export default function LocalApp() {
           )}
         </main>
         <nav className="local-bottom-nav" aria-label="Navigation mobile">
-          {NAV.filter(([id]) => ['home', 'sales', 'stock', 'cash', 'settings'].includes(id)).map(
-            ([id, label, Icon]) => (
-              <button key={id} className={page === id ? 'active' : ''} onClick={() => navigate(id)}>
-                <Icon size={21} />
-                <span>{label}</span>
-              </button>
-            )
-          )}
+          {NAV.map(([id, label, Icon]) => (
+            <button key={id} className={active === id ? 'active' : ''} onClick={() => navigate(id)}>
+              <Icon size={21} />
+              <span>{label}</span>
+            </button>
+          ))}
         </nav>
       </div>
       {modal ? (
