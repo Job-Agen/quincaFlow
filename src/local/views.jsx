@@ -528,6 +528,30 @@ export function Trades({ data, purchase = false, open }) {
         onChange={setQuery}
         placeholder="Rechercher par numéro, nom ou date…"
       />
+      {purchase && data.legacyOrders?.length ? (
+        <Section title="Commandes déjà présentes en base">
+          <p className="local-hint">
+            Ces commandes conservent leur statut et leurs documents. Leurs paiements n’étant pas
+            chiffrés dans l’ancien carnet, ils ne sont pas ajoutés automatiquement aux dettes ou à
+            la caisse.
+          </p>
+          {data.legacyOrders.map((o) => (
+            <a
+              key={o.id}
+              className="local-row local-click"
+              href={'/purchases/' + encodeURIComponent(o.id)}
+            >
+              <span className="local-row-main">
+                <strong>{o.reference}</strong>
+                <small>
+                  {o.supplier} · {o.date} · {o.status}
+                </small>
+              </span>
+              <Amount value={o.total} currency={data.shop.currency} />
+            </a>
+          ))}
+        </Section>
+      ) : null}
       <Section title={purchase ? 'Achats enregistrés' : 'Ventes enregistrées'}>
         {rows.length ? (
           rows.map((s) => (
@@ -604,6 +628,9 @@ export function TradeDetail({ trade, purchase, data }) {
         <span>TOTAL</span>
         <Amount value={trade.total} currency={data.shop.currency} />
       </div>
+      {trade.discount > 0 ? (
+        <p>Remise : {formatMoney(trade.discount, data.shop.currency)}</p>
+      ) : null}
       <p>
         Payé à l’achat ({trade.method}) : {formatMoney(trade.paid, data.shop.currency)}
       </p>
@@ -821,13 +848,17 @@ export function Reports({ data }) {
     </>
   );
 }
-export function SettingsView({ data, open, backup, onImport }) {
+export function SettingsView({ data, open, backup, onImport, synced }) {
   return (
     <>
       <div className="local-page-head">
         <div>
           <h1>Ma boutique</h1>
-          <p>Vos données restent sur cet appareil.</p>
+          <p>
+            {synced
+              ? 'Vos données sont reliées à votre boutique en base.'
+              : 'Vos données restent sur cet appareil.'}
+          </p>
         </div>
       </div>
       <div className="local-columns">
@@ -848,7 +879,7 @@ export function SettingsView({ data, open, backup, onImport }) {
               <Download size={18} />
               Exporter la sauvegarde
             </Button>
-            <label className="local-button soft">
+            <label className="local-button soft" style={synced ? { display: 'none' } : undefined}>
               <Upload size={18} />
               Importer une sauvegarde
               <input
@@ -863,8 +894,9 @@ export function SettingsView({ data, open, backup, onImport }) {
         </Section>
         <Section title="Mode autonome">
           <p>
-            Stock, ventes, crédits et dépenses fonctionnent sans compte ni serveur. Après
-            préparation du mode hors ligne, cette page peut être rouverte sans réseau.
+            Après un premier chargement de la boutique et la préparation hors ligne, vos données
+            restent accessibles sans réseau. Les nouvelles opérations sont envoyées en base au
+            retour de la connexion. Un carnet sans compte reste disponible séparément.
           </p>
           <p className="local-hint">
             Le stockage appartient à ce navigateur. La navigation privée, le nettoyage des données
@@ -874,11 +906,12 @@ export function SettingsView({ data, open, backup, onImport }) {
         </Section>
         <Section title="Accès connecté">
           <p>
-            Votre ancien espace connecté reste disponible. Ses données sont séparées de ce carnet
-            local ; aucune synchronisation automatique n’est effectuée.
+            {synced
+              ? 'Les produits, clients, fournisseurs et ventes utilisent la même base que l’espace connecté. Les crédits, dépenses et champs supplémentaires sont également enregistrés en base.'
+              : 'Connectez-vous pour charger les données existantes de votre boutique. Votre carnet autonome précédent est conservé séparément.'}
           </p>
-          <a className="local-button soft" href="/login">
-            Ouvrir l’espace connecté
+          <a className="local-button soft" href={synced ? '/' : '/login'}>
+            {synced ? 'Ouvrir les écrans classiques' : 'Se connecter à ma boutique'}
           </a>
         </Section>
       </div>

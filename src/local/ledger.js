@@ -19,7 +19,7 @@ export const EXPENSES = [
   'Transport tricycle / taxi-bagages',
   'Divers',
 ];
-export const METHODS = ['Espèces', 'Mobile Money'];
+export const METHODS = ['Espèces', 'Mobile Money', 'Virement / banque', 'Autre'];
 export const COLLECTIONS = [
   'products',
   'customers',
@@ -120,7 +120,7 @@ export function validateStore(data) {
     data.shop &&
       typeof data.shop.name === 'string' &&
       data.shop.name.trim().length > 0 &&
-      data.shop.name.length <= 100 &&
+      data.shop.name.length <= 160 &&
       ['FCFA', 'XOF', 'XAF'].includes(data.shop.currency) &&
       cents(data.shop.openingCash) &&
       cents(data.shop.openingMobile),
@@ -210,7 +210,8 @@ export function validateStore(data) {
           'Ligne de vente ou achat invalide.'
         );
       requireValue(
-        sale.total === sum(sale.items, (row) => row.total) &&
+        cents(sale.discount || 0) &&
+          sale.total === sum(sale.items, (row) => row.total) - (sale.discount || 0) &&
           sale.cost === sum(sale.items, (row) => row.cost),
         'Totaux incohérents.'
       );
@@ -477,8 +478,9 @@ export function report(data, from = '', to = '') {
     (row) => row.amount
   );
   const profitability = new Map();
-  for (const sale of sales)
-    for (const item of sale.items) {
+  for (const sale of sales) {
+    let allocated = 0;
+    for (const [index, item] of sale.items.entries()) {
       const row = profitability.get(item.productId) || {
         id: item.productId,
         name: item.name,
@@ -486,17 +488,29 @@ export function report(data, from = '', to = '') {
         revenue: 0,
         cost: 0,
       };
-      row.quantity = roundQty(row.quantity + item.quantity);
-      row.revenue += item.total;
+      row.quantity = roundQty(row.quantity + item.quantity * (item.unitFactor || 1));
+      const discount =
+        index === sale.items.length - 1
+          ? (sale.discount || 0) - allocated
+          : Math.round(
+              ((sale.discount || 0) * item.total) / (sale.total + (sale.discount || 0) || 1)
+            );
+      allocated += discount;
+      row.revenue += item.total - discount;
       row.cost += item.cost;
       profitability.set(item.productId, row);
     }
+  }
   const days = new Map();
   for (const sale of sales) days.set(sale.date, (days.get(sale.date) || 0) + sale.total);
   const ledger = cashLedger(data),
     periodLedger = ledger.filter(within);
   const opening = (method) =>
-    method === 'Espèces' ? data.shop.openingCash : data.shop.openingMobile;
+    method === 'Espèces'
+      ? data.shop.openingCash
+      : method === 'Mobile Money'
+        ? data.shop.openingMobile
+        : 0;
   return {
     revenue,
     cost,

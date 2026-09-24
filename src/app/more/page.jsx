@@ -18,7 +18,7 @@ import AppBar from '@/components/layout/AppBar';
 import { useSession } from '@/client/session';
 
 const LINKS = [
-  { href: '/local', label: 'Boutique autonome · hors ligne', icon: Store },
+  { href: '/local', label: 'Boutique synchronisée · hors ligne', icon: Store },
   { href: '/customers', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Fournisseurs', icon: Truck },
   { href: '/reports', label: 'Rapports', icon: ChartNoAxesCombined },

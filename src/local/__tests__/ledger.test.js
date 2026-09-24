@@ -194,7 +194,7 @@ describe('Autonomous commerce ledger', () => {
     });
     expect(customerBalance(d, 'c1')).toBe(500000);
     expect(report(d).revenue).toBe(0);
-    expect(report(d).balances.map((b) => b.value)).toEqual([2000000, 1000000]);
+    expect(report(d).balances.map((b) => b.value)).toEqual([2000000, 1000000, 0, 0]);
   });
   it('archives products without deleting historical receipts and protects outstanding debts', () => {
     let d = transact(base(), 'sale', sale());

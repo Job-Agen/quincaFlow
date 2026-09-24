@@ -215,49 +215,69 @@ businesses
 Références : `VE-0001` (vente), `FA-2026-0001` (facture, remise à zéro chaque
 année), `HS-0001` (hors stock), `PO-0001` (commande), `RC-0001` (réception).
 
-## Boutique autonome — `/local`
+## Boutique synchronisée et hors ligne — `/local`
 
-L’entrée « Ouvrir ma boutique autonome » sur la connexion ouvre un carnet sans
-compte, sans API et sans base de données. L’ancien espace connecté reste
-accessible ; ses données sont séparées, sans synchronisation automatique.
+Après connexion, l’application ouvre `/local` et charge les données de la boutique
+liée au compte : produits, clients, fournisseurs et ventes. Le catalogue et les
+ventes utilisent les tables relationnelles existantes. Les catégories, tarifs de
+gros, soldes initiaux, crédits, remboursements, dépenses et justificatifs sont
+conservés dans `commerce_sync_state`, isolé par `business_id`. Les anciennes
+commandes restent accessibles avec leurs statuts et documents ; leurs paiements
+n’étant pas chiffrés dans le schéma initial, aucune dette ni dépense n’est inventée.
 
-- Produits : CRUD, catégories commerciales, prix public/gros/coût, inventaire,
-  seuils, recherche et filtres instantanés.
-- Clients : achats à crédit, dette initiale, dépenses cumulées, remboursements
-  partiels/totaux motivés, principaux débiteurs, brouillon WhatsApp.
-- Fournisseurs : répertoire, achats reçus, dettes et règlements.
-- Caisse : entrées/sorties en espèces ou Mobile Money, dépenses classées,
-  justificatifs photo depuis galerie/appareil photo, répartition des dépenses.
-- Rapports : période inclusive, ventes quotidiennes, coût historique des ventes,
-  marge brute et résultat net calculé, rentabilité par produit.
-- Sauvegardes : localStorage versionné, export/import JSON incluant les photos,
-  notifications après écriture réussie, contrôle de concurrence entre onglets.
+`GET /api/sync` fournit un instantané privé (`no-store`). `POST /api/sync` reçoit
+une opération identifiée, liée explicitement à sa boutique et à son auteur.
+L’appartenance et le rôle sont relus en base, les prix et stocks revalidés côté
+serveur. Les modifications métier et leur accusé de réception sont enregistrés
+ensemble dans une transaction PostgreSQL sérialisable. `commerce_sync_operations`
+empêche qu’un renvoi après coupure ne crée une deuxième vente ou un double paiement.
+Les nouvelles tables sont additives : créées automatiquement si absentes et
+aussi déclarées dans `schema.sql`. La connexion reprend `DATABASE_URL` ou
+`NEON_DATABASE_URL`, uniquement côté serveur, avec un petit pool `pg` réutilisé.
 
-Les montants sont conservés en centimes entiers et les quantités à trois
-décimales. Les ventes figent prix et coût ; les achats reçus actualisent le coût
-moyen pondéré. Les remboursements alimentent la caisse sans créer une nouvelle
-vente. Le résultat net déduit les charges enregistrées de la marge brute ; les
-achats de stock ne sont pas déduits deux fois. La suppression des fiches conserve
-les historiques, et une dette impayée bloque la suppression du contact.
+### Saisie et synchronisation
 
-### Hors ligne et conservation des données
+Le navigateur conserve un cache et une file d’opérations atomique dans
+localStorage, avec une clé distincte par utilisateur et boutique. Les écritures
+locales sont confirmées avant tout envoi ; elles sont synchronisées à la
+reconnexion, à la reprise de l’onglet, toutes les 30 secondes ou par **Actualiser**.
+La bannière distingue le nombre d’opérations en attente du dernier échange réussi.
+Un changement de compte ne transmet jamais la file de l’ancien compte au nouveau.
 
-Ouvrir `/local` une première fois en HTTPS (ou localhost) puis attendre
-« Réouverture hors ligne prête ». Le service worker précharge uniquement la
-coque publique et ses ressources statiques ; aucune API ou page privée n’est
-mise en cache. La navigation du carnet utilise des onglets locaux, et les
-opérations ne nécessitent aucune requête réseau. Une coupure n’empêche ni la
-saisie ni le rechargement une fois ce cache prêt. WhatsApp requiert son propre
-accès réseau et ouvre un message prérempli, sans l’envoyer automatiquement.
+Un stock insuffisant, un prix modifié ou une fiche concurrente bloque la file sans
+la supprimer. **Résoudre le conflit** permet d’exporter le carnet et sa file puis,
+après confirmation, d’abandonner les opérations refusées et leurs dépendances
+pour repartir de la base. Une requête dont l’issue reste incertaine ne peut pas
+être abandonnée : elle est renvoyée avec le même identifiant jusqu’à confirmation.
 
-Le navigateur peut bloquer le stockage, atteindre son quota ou effacer ses
-données. L’application signale tout échec sans annoncer une sauvegarde réussie,
-et conserve une sauvegarde corrompue pour permettre son export. Exporter
-régulièrement dans **Plus → Exporter la sauvegarde**, particulièrement avant un
-changement d’appareil, de navigateur ou de domaine. L’import valide le schéma et
-les soldes puis demande confirmation avant de remplacer le carnet. Les photos
-sont compressées localement (JPEG, PNG ou WebP en entrée ; 12 Mo maximum).
+Les montants sont stockés en centimes entiers, les quantités à trois décimales.
+Les ventes figent prix et coût ; les achats reçus actualisent le coût moyen pondéré.
+Les remises et conditionnements des anciennes ventes sont conservés. Les
+remboursements alimentent la caisse sans créer de nouveau chiffre d’affaires.
+Le résultat net déduit les charges saisies de la marge brute, sans déduire une
+seconde fois les achats de stock.
 
-Les tests `src/local/__tests__/ledger.test.js` couvrent stock, crédit,
-remboursements, marges, atomicité, quota, corruption et restauration. Les tests
-PostgreSQL restent destinés à l’espace connecté.
+### Hors ligne et sauvegardes
+
+Ouvrir `/local` une première fois en HTTPS (ou localhost), se connecter et attendre
+**Réouverture hors ligne prête**. Le service worker précharge la coque publique et
+ses fichiers statiques, jamais les API ni les pages privées. Le cache local de la
+boutique reste consultable et modifiable sans réseau. Une connexion est nécessaire
+pour le premier chargement, une réauthentification ou la synchronisation.
+
+Le carnet autonome sans compte reste disponible et n’est jamais écrasé ou importé
+automatiquement dans la base. Les sauvegardes synchronisées incluent la file en
+attente. Le remplacement complet par import est désactivé en mode synchronisé,
+pour ne pas écraser la boutique serveur. Le navigateur peut effacer ou refuser le
+stockage : exportez régulièrement les données, notamment avant de changer de
+domaine, navigateur ou appareil. Les échecs de quota sont signalés sans faux
+message de réussite. WhatsApp ouvre un brouillon, sans l’envoyer automatiquement.
+
+### Validation
+
+`src/local/__tests__` couvre les calculs, projections des anciennes données, files
+hors ligne, quotas, reprises, conflits et séparation des comptes. La suite
+`src/server/__tests__/flows.integration.test.js` vérifie sur PostgreSQL les écritures
+réelles, la non-duplication, les ventes concurrentes, les rôles et l’isolation entre
+boutiques. Sans `TEST_DATABASE_URL`, les tests PostgreSQL sont ignorés localement ;
+la CI les exécute obligatoirement avec son service PostgreSQL isolé.

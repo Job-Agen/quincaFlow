@@ -45,7 +45,7 @@ export function SessionProvider({ children }) {
     if (state.status === 'loading') return;
     const isPublic = PUBLIC_ROUTES.includes(pathname);
     if (state.status === 'anonymous' && !isPublic) router.replace('/login');
-    if (state.status === 'authenticated' && isPublic) router.replace('/');
+    if (state.status === 'authenticated' && isPublic) router.replace('/local');
   }, [state.status, pathname, router]);
 
   const value = useMemo(

@@ -19,7 +19,9 @@ import {
   Download,
 } from 'lucide-react';
 import { COLLECTIONS, validateStore } from './ledger';
-import { createRepository, downloadBackup, localWrite, STORAGE_KEY } from './storage';
+import { downloadBackup, localWrite } from './storage';
+import { createSyncRepository, ACTIVE_SYNC } from './syncStorage';
+import { api } from '@/client/api';
 import { Button, Empty, Form, Modal } from './ui';
 import { ContactForm, ExpenseForm, PaymentForm, ProductForm, ShopForm, TradeForm } from './forms';
 import {
@@ -60,6 +62,7 @@ const TITLES = {
   'supplier-detail': 'Fiche fournisseur',
   'trade-detail': 'Reçu / détail',
   receipt: 'Justificatif',
+  'sync-conflict': 'Résoudre la synchronisation',
   archive: 'Supprimer cette fiche',
   restore: 'Restaurer une sauvegarde',
 };
@@ -72,7 +75,8 @@ export default function LocalApp() {
     [online, setOnline] = useState(true),
     [offlineReady, setOfflineReady] = useState(false),
     [compact, setCompact] = useState(false),
-    [cacheError, setCacheError] = useState('');
+    [cacheError, setCacheError] = useState(''),
+    [syncStatus, setSyncStatus] = useState({ message: 'Vérification de votre connexion…' });
   const repo = useRef(null),
     timers = useRef(new Set());
   const notify = useCallback((message, tone = 'success') => {
@@ -101,8 +105,21 @@ export default function LocalApp() {
     Promise.resolve().then(() => {
       if (cancelled) return;
       try {
-        repo.current = createRepository(window.localStorage);
-        refresh();
+        repo.current = createSyncRepository({
+          storage: window.localStorage,
+          api,
+          onChange: (next) => {
+            if (!cancelled) {
+              setData(next);
+              setFailure('');
+            }
+          },
+          onStatus: (next) => {
+            if (!cancelled) setSyncStatus(next);
+          },
+        });
+        setData(repo.current.initialize());
+        repo.current.sync();
       } catch (e) {
         setFailure(e.message);
       }
@@ -111,11 +128,27 @@ export default function LocalApp() {
     });
     function connection() {
       setOnline(navigator.onLine);
+      if (navigator.onLine) repo.current?.sync();
     }
     function storage(event) {
-      if (event.key === STORAGE_KEY || event.key === null) {
+      if (event.key === ACTIVE_SYNC) {
+        window.location.reload();
+        return;
+      }
+      if (event.key === repo.current?.key || event.key === null) {
+        try {
+          const before = JSON.parse(event.oldValue || 'null'),
+            after = JSON.parse(event.newValue || 'null');
+          if (
+            before &&
+            after &&
+            (before.data?.revision ?? before.revision) === (after.data?.revision ?? after.revision)
+          )
+            return;
+        } catch {
+          /* Refresh will display a readable cache error. */
+        }
         refresh();
-        setModal(null);
         notify('Données actualisées depuis un autre onglet.');
       }
     }
@@ -127,6 +160,9 @@ export default function LocalApp() {
     window.addEventListener('offline', connection);
     window.addEventListener('storage', storage);
     window.addEventListener('hashchange', hash);
+    const syncInterval = setInterval(() => repo.current?.sync(), 30000);
+    const focus = () => repo.current?.sync();
+    window.addEventListener('focus', focus);
     async function prepare() {
       try {
         if (!('serviceWorker' in navigator))
@@ -161,6 +197,9 @@ export default function LocalApp() {
     prepare();
     return () => {
       cancelled = true;
+      clearInterval(syncInterval);
+      window.removeEventListener('focus', focus);
+      repo.current?.dispose();
       window.removeEventListener('online', connection);
       window.removeEventListener('offline', connection);
       window.removeEventListener('storage', storage);
@@ -181,7 +220,11 @@ export default function LocalApp() {
     setData(next);
     setModal(null);
     setFailure('');
-    notify('Enregistré sur cet appareil. Vos données sont sauvegardées localement.');
+    notify(
+      syncStatus.connected
+        ? 'Enregistré sur cet appareil. Synchronisation avec la base en cours ou en attente de réseau.'
+        : 'Enregistré sur cet appareil.'
+    );
   }
   function backup() {
     try {
@@ -213,7 +256,7 @@ export default function LocalApp() {
     setModal(null);
     notify('Sauvegarde restaurée sur cet appareil.');
   }
-  const shared = { data, open, navigate, notify },
+  const shared = { data, open, navigate, notify, synced: syncStatus.connected },
     count = data ? COLLECTIONS.reduce((n, key) => n + data[key].length, 0) : 0;
   const screens = data
     ? {
@@ -231,6 +274,26 @@ export default function LocalApp() {
   function modalContent() {
     const v = modal.value;
     switch (modal.type) {
+      case 'sync-conflict':
+        return (
+          <Form
+            label="Abandonner les opérations en attente et recharger la base"
+            onSubmit={async () => {
+              await repo.current.discardRejected();
+              setModal(null);
+              notify('Données serveur rechargées.');
+            }}
+          >
+            <p className="local-error">{syncStatus.conflict?.message}</p>
+            <p>
+              La première opération a été refusée par le serveur. Les {syncStatus.pending}{' '}
+              opérations en attente de ce carnet seront retirées de cet appareil. Exportez-les pour
+              les vérifier et les ressaisir. Les données déjà enregistrées en base seront
+              conservées.
+            </p>
+            <Button onClick={backup}>Exporter le carnet et les opérations en attente</Button>
+          </Form>
+        );
       case 'product':
         return <ProductForm product={v.id ? v : null} onSave={save} />;
       case 'customer':
@@ -310,7 +373,7 @@ export default function LocalApp() {
           <Store size={28} />
           <span>
             {data?.shop.name || 'MaQuincaillerie'}
-            <small>MON CARNET LOCAL</small>
+            <small>{syncStatus.connected ? 'BOUTIQUE SYNCHRONISÉE' : 'MON CARNET LOCAL'}</small>
           </span>
         </a>
         <nav aria-label="Navigation principale">
@@ -329,7 +392,8 @@ export default function LocalApp() {
         <div className="local-sidebar-note">
           <CheckCircle2 size={20} />
           <span>
-            Autonome et sans compte<small>Vos données sur cet appareil</small>
+            {syncStatus.connected ? 'Base de données connectée' : 'Carnet sur cet appareil'}
+            <small>Disponible hors ligne après chargement</small>
           </span>
         </div>
       </aside>
@@ -337,7 +401,7 @@ export default function LocalApp() {
         <header className="local-topbar">
           <Store size={25} />
           <strong>{data?.shop.name || 'MaQuincaillerie'}</strong>
-          <span className="local-local-tag">LOCAL</span>
+          <span className="local-local-tag">{syncStatus.connected ? 'SYNCHRO' : 'LOCAL'}</span>
         </header>
         <div className={'local-connectivity ' + (compact ? 'compact' : '')}>
           <div>
@@ -372,6 +436,69 @@ export default function LocalApp() {
           </p>
         ) : null}
         <main className="local-main">
+          <section
+            className="local-sync-panel"
+            aria-label="Synchronisation de la boutique"
+            aria-live="polite"
+          >
+            <div>
+              <strong>
+                {syncStatus.connected ? syncStatus.identity.name : 'Retrouver mes données en base'}
+              </strong>
+              <p>
+                {syncStatus.message ||
+                  (syncStatus.pending
+                    ? `${syncStatus.pending} opération(s) en attente`
+                    : `Synchronisé${syncStatus.lastSync ? ' à ' + new Date(syncStatus.lastSync).toLocaleTimeString('fr-FR') : ''}`)}
+              </p>
+              {syncStatus.connected ? (
+                <small>{syncStatus.pending || 0} opération(s) non synchronisée(s)</small>
+              ) : (
+                <small>
+                  Connectez-vous au compte de votre boutique pour charger ses produits et son
+                  historique. Le carnet autonome précédent reste conservé.
+                </small>
+              )}
+            </div>
+            <div className="local-sync-actions">
+              {syncStatus.connected ? (
+                <Button
+                  tone="ghost"
+                  onClick={async () => {
+                    try {
+                      await repo.current.signOut();
+                      window.location.reload();
+                    } catch (e) {
+                      notify(e.message, 'error');
+                    }
+                  }}
+                >
+                  Se déconnecter
+                </Button>
+              ) : null}
+              {!syncStatus.connected || syncStatus.requiresLogin ? (
+                <a className="local-button" href="/login">
+                  Se connecter à ma boutique
+                </a>
+              ) : null}
+              {syncStatus.requiresReload ? (
+                <Button onClick={() => window.location.reload()}>Ouvrir le compte connecté</Button>
+              ) : (
+                <Button
+                  tone="soft"
+                  disabled={syncStatus.syncing}
+                  onClick={() => repo.current?.sync()}
+                >
+                  {syncStatus.syncing ? 'Synchronisation…' : 'Actualiser'}
+                </Button>
+              )}
+              {syncStatus.conflict?.rejected ? (
+                <Button tone="danger" onClick={() => open('sync-conflict')}>
+                  Résoudre le conflit
+                </Button>
+              ) : null}
+            </div>
+          </section>
           {page === 'settings' ? (
             <nav className="local-more-nav" aria-label="Autres rubriques">
               {NAV.filter(([id]) =>
