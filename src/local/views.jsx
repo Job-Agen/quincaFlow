@@ -10,7 +10,6 @@ import {
   MessageCircle,
   Receipt,
   Download,
-  Upload,
   Settings,
   ArrowUpRight,
   ArrowDownLeft,
@@ -848,7 +847,7 @@ export function Reports({ data }) {
     </>
   );
 }
-export function SettingsView({ data, open, backup, onImport, synced }) {
+export function SettingsView({ data, open, backup, synced }) {
   return (
     <>
       <div className="local-page-head">
@@ -857,7 +856,7 @@ export function SettingsView({ data, open, backup, onImport, synced }) {
           <p>
             {synced
               ? 'Vos données sont reliées à votre boutique en base.'
-              : 'Vos données restent sur cet appareil.'}
+              : 'Connectez-vous pour charger les données de votre boutique.'}
           </p>
         </div>
       </div>
@@ -879,24 +878,13 @@ export function SettingsView({ data, open, backup, onImport, synced }) {
               <Download size={18} />
               Exporter la sauvegarde
             </Button>
-            <label className="local-button soft" style={synced ? { display: 'none' } : undefined}>
-              <Upload size={18} />
-              Importer une sauvegarde
-              <input
-                aria-label="Importer une sauvegarde"
-                className="local-file-hidden"
-                type="file"
-                accept=".json,application/json"
-                onChange={onImport}
-              />
-            </label>
           </div>
         </Section>
-        <Section title="Mode autonome">
+        <Section title="Continuité hors ligne">
           <p>
             Après un premier chargement de la boutique et la préparation hors ligne, vos données
             restent accessibles sans réseau. Les nouvelles opérations sont envoyées en base au
-            retour de la connexion. Un carnet sans compte reste disponible séparément.
+            retour de la connexion.
           </p>
           <p className="local-hint">
             Le stockage appartient à ce navigateur. La navigation privée, le nettoyage des données
@@ -908,7 +896,7 @@ export function SettingsView({ data, open, backup, onImport, synced }) {
           <p>
             {synced
               ? 'Les produits, clients, fournisseurs et ventes utilisent la même base que l’espace connecté. Les crédits, dépenses et champs supplémentaires sont également enregistrés en base.'
-              : 'Connectez-vous pour charger les données existantes de votre boutique. Votre carnet autonome précédent est conservé séparément.'}
+              : 'Connectez-vous pour charger les données existantes de votre boutique.'}
           </p>
           <a className="local-button soft" href={synced ? '/' : '/login'}>
             {synced ? 'Ouvrir les écrans classiques' : 'Se connecter à ma boutique'}

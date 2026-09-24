@@ -96,6 +96,18 @@ describe('Persistent synchronization outbox', () => {
     expect(f.storage.getItem(STORAGE_KEY)).toBe(local);
     expect(f.storage.getItem(ACTIVE_SYNC)).toContain('b1');
   });
+  it('requires an initial account connection even when a legacy local store exists', async () => {
+    const f = fixture();
+    const old = JSON.stringify(f.state);
+    f.storage.setItem(STORAGE_KEY, old);
+    f.offline();
+    expect(f.repo.initialize()).toBeNull();
+    await f.repo.sync();
+    expect(f.repo.read()).toBeNull();
+    expect(() => f.repo.apply('product.save', product, 0)).toThrow(/Connectez-vous/);
+    expect(f.storage.getItem(STORAGE_KEY)).toBe(old);
+    expect(f.api.get).not.toHaveBeenCalled();
+  });
   it('keeps offline operations through a restart and sends them in order', async () => {
     const f = fixture();
     f.repo.initialize();

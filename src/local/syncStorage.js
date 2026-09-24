@@ -1,4 +1,4 @@
-import { createRepository, localWrite, STORAGE_KEY } from './storage';
+import { localWrite, STORAGE_KEY } from './storage';
 import { today, transact, validateStore } from './ledger';
 import { expectedFor, assertAllowed, canonical } from './syncProtocol';
 export const ACTIVE_SYNC = 'quincaflow.sync.active.v1';
@@ -14,7 +14,6 @@ export function createSyncRepository({
   onStatus = () => {},
   online = () => navigator.onLine,
 }) {
-  const standalone = createRepository(storage);
   let identity = null,
     key = STORAGE_KEY,
     busy = false,
@@ -185,7 +184,7 @@ export function createSyncRepository({
       }
       const data = identity ? cached()?.data : null;
       status();
-      return data || standalone.read();
+      return data || null;
     },
     read() {
       if (identity) {
@@ -196,14 +195,14 @@ export function createSyncRepository({
           );
         return env.data;
       }
-      return standalone.read();
+      return null;
     },
     raw() {
-      return identity ? storage.getItem(key) : standalone.raw();
+      return identity ? storage.getItem(key) : storage.getItem(STORAGE_KEY);
     },
     sync,
     apply(action, input, revision) {
-      if (!identity) return standalone.apply(action, input, revision);
+      if (!identity) throw Error('Connectez-vous une première fois pour charger votre boutique.');
       const env = cached();
       if (!env) throw Error('Attendez le chargement de la boutique avant de saisir.');
       if (env.conflict)
@@ -227,12 +226,10 @@ export function createSyncRepository({
       setTimeout(() => sync(), 0);
       return data;
     },
-    restore(raw, revision) {
-      if (identity)
-        throw Error(
-          'L’import d’un carnet complet est désactivé dans une boutique synchronisée pour ne pas remplacer les données serveur. Votre ancien carnet autonome reste conservé séparément.'
-        );
-      return standalone.restore(raw, revision);
+    restore() {
+      throw Error(
+        'L’import d’un carnet complet est désactivé pour ne pas remplacer les données serveur.'
+      );
     },
     async discardRejected() {
       await localWrite(async () => {

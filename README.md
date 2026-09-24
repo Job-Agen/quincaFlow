@@ -265,8 +265,9 @@ ses fichiers statiques, jamais les API ni les pages privées. Le cache local de 
 boutique reste consultable et modifiable sans réseau. Une connexion est nécessaire
 pour le premier chargement, une réauthentification ou la synchronisation.
 
-Le carnet autonome sans compte reste disponible et n’est jamais écrasé ou importé
-automatiquement dans la base. Les sauvegardes synchronisées incluent la file en
+La base de données est le fonctionnement normal de l’application. Le cache sert à
+continuer pendant les coupures réseau. L’ancien carnet sans compte reste conservé
+sur l’appareil, sans être ouvert ni importé automatiquement dans la base. Les sauvegardes synchronisées incluent la file en
 attente. Le remplacement complet par import est désactivé en mode synchronisé,
 pour ne pas écraser la boutique serveur. Le navigateur peut effacer ou refuser le
 stockage : exportez régulièrement les données, notamment avant de changer de

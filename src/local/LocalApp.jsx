@@ -16,9 +16,8 @@ import {
   AlertCircle,
   X,
   ChevronDown,
-  Download,
 } from 'lucide-react';
-import { COLLECTIONS, validateStore } from './ledger';
+import { COLLECTIONS } from './ledger';
 import { downloadBackup, localWrite } from './storage';
 import { createSyncRepository, ACTIVE_SYNC } from './syncStorage';
 import { api } from '@/client/api';
@@ -64,7 +63,6 @@ const TITLES = {
   receipt: 'Justificatif',
   'sync-conflict': 'Résoudre la synchronisation',
   archive: 'Supprimer cette fiche',
-  restore: 'Restaurer une sauvegarde',
 };
 export default function LocalApp() {
   const [data, setData] = useState(null),
@@ -236,26 +234,6 @@ export default function LocalApp() {
       notify(e.message, 'error');
     }
   }
-  async function importFile(event) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    try {
-      if (file.size > 20 * 1024 * 1024) throw Error('Fichier trop volumineux (20 Mo maximum).');
-      const raw = await file.text();
-      const parsed = validateStore(JSON.parse(raw));
-      setModal({ type: 'restore', value: { raw, parsed }, revision: data?.revision });
-    } catch (e) {
-      notify('Import impossible : ' + e.message, 'error');
-    }
-  }
-  async function restore() {
-    const next = await localWrite(() => repo.current.restore(modal.value.raw, modal.revision));
-    setData(next);
-    setFailure('');
-    setModal(null);
-    notify('Sauvegarde restaurée sur cet appareil.');
-  }
   const shared = { data, open, navigate, notify, synced: syncStatus.connected },
     count = data ? COLLECTIONS.reduce((n, key) => n + data[key].length, 0) : 0;
   const screens = data
@@ -268,7 +246,7 @@ export default function LocalApp() {
         purchases: <Trades {...shared} purchase />,
         cash: <Cash {...shared} />,
         reports: <Reports {...shared} />,
-        settings: <SettingsView {...shared} backup={backup} onImport={importFile} />,
+        settings: <SettingsView {...shared} backup={backup} />,
       }
     : {};
   function modalContent() {
@@ -346,22 +324,6 @@ export default function LocalApp() {
             </p>
           </Form>
         );
-      case 'restore':
-        return (
-          <Form label="Remplacer mes données locales" onSubmit={restore}>
-            <p>
-              Importer la boutique <strong>{v.parsed.shop.name}</strong> avec{' '}
-              {COLLECTIONS.reduce((n, k) => n + v.parsed[k].length, 0)} enregistrements ?
-            </p>
-            <p className="local-error">
-              Cette opération remplace le carnet actuellement enregistré dans ce navigateur.
-            </p>
-            <Button tone="soft" onClick={backup}>
-              <Download size={18} />
-              Exporter le carnet actuel avant remplacement
-            </Button>
-          </Form>
-        );
       default:
         return null;
     }
@@ -373,7 +335,7 @@ export default function LocalApp() {
           <Store size={28} />
           <span>
             {data?.shop.name || 'MaQuincaillerie'}
-            <small>{syncStatus.connected ? 'BOUTIQUE SYNCHRONISÉE' : 'MON CARNET LOCAL'}</small>
+            <small>{syncStatus.connected ? 'BOUTIQUE SYNCHRONISÉE' : 'MA BOUTIQUE'}</small>
           </span>
         </a>
         <nav aria-label="Navigation principale">
@@ -392,7 +354,7 @@ export default function LocalApp() {
         <div className="local-sidebar-note">
           <CheckCircle2 size={20} />
           <span>
-            {syncStatus.connected ? 'Base de données connectée' : 'Carnet sur cet appareil'}
+            {syncStatus.connected ? 'Boutique reliée à la base' : 'Connexion à votre boutique'}
             <small>Disponible hors ligne après chargement</small>
           </span>
         </div>
@@ -401,7 +363,7 @@ export default function LocalApp() {
         <header className="local-topbar">
           <Store size={25} />
           <strong>{data?.shop.name || 'MaQuincaillerie'}</strong>
-          <span className="local-local-tag">{syncStatus.connected ? 'SYNCHRO' : 'LOCAL'}</span>
+          <span className="local-local-tag">{syncStatus.connected ? 'SYNCHRO' : 'CONNEXION'}</span>
         </header>
         <div className={'local-connectivity ' + (compact ? 'compact' : '')}>
           <div>
@@ -456,7 +418,7 @@ export default function LocalApp() {
               ) : (
                 <small>
                   Connectez-vous au compte de votre boutique pour charger ses produits et son
-                  historique. Le carnet autonome précédent reste conservé.
+                  historique.
                 </small>
               )}
             </div>
@@ -518,21 +480,14 @@ export default function LocalApp() {
                 {failure}
               </p>
               <Button onClick={backup}>Exporter les données conservées</Button>
-              <label className="local-button soft">
-                Restaurer une sauvegarde
-                <input
-                  className="local-file-hidden"
-                  aria-label="Restaurer une sauvegarde"
-                  type="file"
-                  accept=".json"
-                  onChange={importFile}
-                />
-              </label>
             </div>
           ) : data ? (
             screens[page]
           ) : (
-            <Empty>Ouverture de votre carnet local…</Empty>
+            <Empty>
+              Une première connexion est nécessaire pour charger votre boutique. Ensuite, les
+              données chargées restent accessibles en cas de coupure Internet.
+            </Empty>
           )}
         </main>
         <nav className="local-bottom-nav" aria-label="Navigation mobile">
