@@ -1,11 +1,13 @@
 'use client';
 import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { CATEGORIES, EXPENSES, METHODS, today } from './ledger';
+import { CATEGORIES, EXPENSES, METHODS, today, stockDisplay } from './ledger';
 import { readReceipt } from './storage';
 import { Field, Select, Form, Button, Amount, Empty, formatMoney } from './ui';
 
 export function ProductForm({ product, onSave }) {
+  const initialFactor = product?.packageFactor || 1;
+  const [factor, setFactor] = useState(initialFactor);
   return (
     <Form onSubmit={(values) => onSave('product.save', { ...values, id: product?.id })}>
       <Field
@@ -21,15 +23,15 @@ export function ProductForm({ product, onSave }) {
         ))}
       </Select>
       <Field
-        label="Unité (pièce, sac, kg…)"
-        name="unit"
-        defaultValue={product?.unit || 'pièce'}
+        label="Unité de stock (pièce, sac, kg…)"
+        name="baseUnit"
+        defaultValue={product?.baseUnit || String(product?.unit || 'pièce').split(' · ')[0]}
         required
         maxLength={30}
       />
       <div className="local-grid-two">
         <Field
-          label="Prix public"
+          label="Prix public par unité"
           name="retail"
           type="number"
           min="0"
@@ -38,7 +40,7 @@ export function ProductForm({ product, onSave }) {
           required
         />
         <Field
-          label="Prix de gros"
+          label="Prix de gros par unité"
           name="wholesale"
           type="number"
           min="0"
@@ -58,7 +60,7 @@ export function ProductForm({ product, onSave }) {
       />
       <div className="local-grid-two">
         <Field
-          label="Stock actuel"
+          label="Stock actuel (unité de base)"
           name="stock"
           type="number"
           min="0"
@@ -76,15 +78,51 @@ export function ProductForm({ product, onSave }) {
           required
         />
       </div>
+      <div className="local-card" style={{ padding: 16 }}>
+        <strong>Conditionnement / vente en gros</strong>
+        <p className="local-hint">
+          Exemple : 1 carton = 40 pièces. Le stock reste toujours enregistré en pièces.
+        </p>
+        <div className="local-grid-two">
+          <Field
+            label="Nom du conditionnement"
+            name="packageUnit"
+            defaultValue={product?.packageUnit || 'carton'}
+            maxLength={30}
+          />
+          <Field
+            label="Nombre d’unités dans 1 conditionnement"
+            name="packageFactor"
+            type="number"
+            min="1"
+            step="0.001"
+            value={factor}
+            onChange={(e) => setFactor(e.target.value)}
+            required
+          />
+        </div>
+        {Number(factor) > 1 ? (
+          <Field
+            label="Prix de vente du conditionnement"
+            name="packagePrice"
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue={product?.packagePrice ? product.packagePrice / 100 : ''}
+            required
+          />
+        ) : null}
+      </div>
       {product ? (
         <p className="local-hint">
-          Modifier le stock corrige l’inventaire. Pour un réapprovisionnement payé ou à crédit,
-          utilisez Achats fournisseurs.
+          Stock affiché : <strong>{stockDisplay(product)}</strong>. Modifier le stock corrige
+          l’inventaire. Pour un réapprovisionnement, utilisez Achats fournisseurs.
         </p>
       ) : null}
     </Form>
   );
 }
+
 export function ContactForm({ contact, kind, onSave }) {
   const supplier = kind === 'supplier';
   return (
@@ -159,24 +197,57 @@ function MethodAndDate({ date } = {}) {
     </div>
   );
 }
+
+function defaultSaleLine(product, priceMode) {
+  if (!product) return { productId: '', quantity: 1, unitFactor: 1, price: '' };
+  return {
+    productId: product.id,
+    quantity: 1,
+    unitFactor: 1,
+    price: (priceMode === 'wholesale' ? product.wholesale : product.retail) / 100,
+  };
+}
 export function TradeForm({ data, purchase = false, contactId = '', credit = false, onSave }) {
   const products = data.products.filter((p) => !p.archived),
     contacts = data[purchase ? 'suppliers' : 'customers'].filter((c) => !c.archived);
-  const [lines, setLines] = useState([{ productId: '', quantity: 1, price: '' }]);
+  const [lines, setLines] = useState([{ productId: '', quantity: 1, unitFactor: 1, price: '' }]);
   const [priceMode, setPriceMode] = useState('retail'),
     [paid, setPaid] = useState(credit ? '0' : '');
   const change = (index, patch) =>
     setLines((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  const total = lines.reduce((n, line) => {
-    const p = products.find((p) => p.id === line.productId);
-    return (
-      n +
-      Math.round(
-        (purchase ? (Number(line.price) || 0) * 100 : p?.[priceMode] || 0) *
-          (Number(line.quantity) || 0)
-      )
+  const selectProduct = (index, id) => {
+    const p = products.find((x) => x.id === id);
+    change(
+      index,
+      purchase
+        ? { productId: id, price: (p?.cost || 0) / 100, unitFactor: 1 }
+        : defaultSaleLine(p, priceMode)
     );
-  }, 0);
+  };
+  const selectFactor = (index, value) => {
+    const line = lines[index],
+      p = products.find((x) => x.id === line.productId),
+      factor = Number(value);
+    const cents =
+      factor > 1
+        ? p?.packagePrice || (p?.wholesale || 0) * factor
+        : (priceMode === 'wholesale' ? p?.wholesale : p?.retail) || 0;
+    change(index, { unitFactor: factor, price: cents / 100 });
+  };
+  const switchPriceMode = (mode) => {
+    setPriceMode(mode);
+    setLines((rows) =>
+      rows.map((line) => {
+        const p = products.find((x) => x.id === line.productId);
+        if (!p || Number(line.unitFactor) > 1) return line;
+        return { ...line, price: (mode === 'wholesale' ? p.wholesale : p.retail) / 100 };
+      })
+    );
+  };
+  const total = lines.reduce(
+    (n, line) => n + Math.round((Number(line.price) || 0) * 100 * (Number(line.quantity) || 0)),
+    0
+  );
   if (!products.length)
     return (
       <div className="local-form">
@@ -204,9 +275,9 @@ export function TradeForm({ data, purchase = false, contactId = '', credit = fal
       </Select>
       {!purchase ? (
         <Select
-          label="Tarif de vente"
+          label="Tarif par défaut"
           value={priceMode}
-          onChange={(e) => setPriceMode(e.target.value)}
+          onChange={(e) => switchPriceMode(e.target.value)}
         >
           <option value="retail">Prix public</option>
           <option value="wholesale">Prix de gros</option>
@@ -214,27 +285,37 @@ export function TradeForm({ data, purchase = false, contactId = '', credit = fal
       ) : null}
       <div className="local-trade-lines">
         {lines.map((line, index) => {
-          const product = products.find((p) => p.id === line.productId);
+          const p = products.find((x) => x.id === line.productId),
+            factor = Number(line.unitFactor || 1),
+            baseQty = (Number(line.quantity) || 0) * factor;
           return (
             <div className="local-trade-line" key={index}>
               <Select
                 label={'Produit ' + (index + 1)}
                 value={line.productId}
                 required
-                onChange={(e) =>
-                  change(index, {
-                    productId: e.target.value,
-                    price: (products.find((p) => p.id === e.target.value)?.cost || 0) / 100,
-                  })
-                }
+                onChange={(e) => selectProduct(index, e.target.value)}
               >
                 <option value="">Choisir un produit</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} · {p.stock} {p.unit}
+                    {p.name} · {stockDisplay(p)}
                   </option>
                 ))}
               </Select>
+              {!purchase && p && Number(p.packageFactor || 1) > 1 ? (
+                <Select
+                  label="Conditionnement"
+                  value={factor}
+                  onChange={(e) => selectFactor(index, e.target.value)}
+                >
+                  <option value="1">{p.baseUnit || String(p.unit).split(' · ')[0]}</option>
+                  <option value={p.packageFactor}>
+                    {p.packageUnit} ({p.packageFactor}{' '}
+                    {p.baseUnit || String(p.unit).split(' · ')[0]})
+                  </option>
+                </Select>
+              ) : null}
               <div className="local-line-values">
                 <Field
                   label={'Quantité ' + (index + 1)}
@@ -245,22 +326,15 @@ export function TradeForm({ data, purchase = false, contactId = '', credit = fal
                   required
                   onChange={(e) => change(index, { quantity: e.target.value })}
                 />
-                {purchase ? (
-                  <Field
-                    label={'Coût unitaire ' + (index + 1)}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={line.price}
-                    required
-                    onChange={(e) => change(index, { price: e.target.value })}
-                  />
-                ) : (
-                  <div>
-                    <span className="local-hint">Prix unitaire</span>
-                    <p>{formatMoney(product?.[priceMode] || 0, data.shop.currency)}</p>
-                  </div>
-                )}
+                <Field
+                  label={purchase ? 'Coût unitaire' : 'Prix unitaire modifiable'}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={line.price}
+                  required
+                  onChange={(e) => change(index, { price: e.target.value })}
+                />
                 <button
                   type="button"
                   className="local-icon danger"
@@ -271,13 +345,21 @@ export function TradeForm({ data, purchase = false, contactId = '', credit = fal
                   <Trash2 size={18} />
                 </button>
               </div>
+              {!purchase && p ? (
+                <p className="local-hint">
+                  Sortie de stock : {baseQty} {p.baseUnit || String(p.unit).split(' · ')[0]} ·
+                  Disponible : {stockDisplay(p)}
+                </p>
+              ) : null}
             </div>
           );
         })}
       </div>
       <Button
         tone="soft"
-        onClick={() => setLines((rows) => [...rows, { productId: '', quantity: 1, price: '' }])}
+        onClick={() =>
+          setLines((rows) => [...rows, { productId: '', quantity: 1, unitFactor: 1, price: '' }])
+        }
       >
         <Plus size={19} />
         Ajouter un produit
@@ -311,6 +393,7 @@ export function TradeForm({ data, purchase = false, contactId = '', credit = fal
     </Form>
   );
 }
+
 export function PaymentForm({ contact, kind, balance, currency, onSave }) {
   return (
     <Form
@@ -415,8 +498,6 @@ export function ExpenseForm({ onSave, date }) {
   );
 }
 export function ReceiptImage({ src }) {
-  // A local data URL must remain available without an image server.
-  // eslint-disable-next-line @next/next/no-img-element
   return <img className="local-receipt" src={src} alt="Justificatif de paiement" />;
 }
 export function ShopForm({ data, onSave }) {

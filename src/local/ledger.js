@@ -30,6 +30,7 @@ export const COLLECTIONS = [
   'supplierPayments',
   'expenses',
 ];
+
 export function today() {
   const d = new Date();
   return [
@@ -54,6 +55,7 @@ export function money(value) {
   return Math.round(n * 100);
 }
 const cents = (n) => Number.isSafeInteger(n) && n >= 0 && n <= 1e12;
+const signedCents = (n) => Number.isSafeInteger(n) && Math.abs(n) <= 1e12;
 const qty = (n) =>
   typeof n === 'number' &&
   Number.isFinite(n) &&
@@ -84,35 +86,66 @@ const receiptOK = (v) =>
   typeof v === 'string' &&
   (v === '' ||
     (v.length < 600000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v)));
+const baseUnit = (p) => p.baseUnit || String(p.unit || 'pièce').split(' · ')[0];
+const packFactor = (p) => Number(p.packageFactor || 1);
+const packUnit = (p) => p.packageUnit || 'carton';
+const plural = (name, count) => (count > 1 && !name.endsWith('s') ? name + 's' : name);
+export function stockDisplay(product) {
+  const unit = baseUnit(product),
+    factor = packFactor(product),
+    stock = Number(product.stock || 0);
+  if (!(factor > 1)) return `${stock} ${unit}`;
+  const packs = Math.floor(stock / factor),
+    rest = roundQty(stock - packs * factor);
+  if (!packs) return `${stock} ${unit}`;
+  return `${stock} ${unit} · ${packs} ${plural(packUnit(product), packs)}${rest ? ` + ${rest} ${unit}` : ''}`;
+}
+function displayUnit(product) {
+  const label = stockDisplay(product),
+    prefix = String(product.stock) + ' ';
+  return label.startsWith(prefix) ? label.slice(prefix.length) : baseUnit(product);
+}
+function normalized(data) {
+  const copy = structuredClone(data);
+  for (const p of copy.products || []) p.unit = baseUnit(p);
+  return copy;
+}
+function decorate(data) {
+  for (const p of data.products || []) p.unit = displayUnit(p);
+  return data;
+}
+
 export function customerBalance(data, id) {
-  const contact = data.customers.find((row) => row.id === id);
+  const c = data.customers.find((row) => row.id === id);
   return (
-    (contact?.openingDebt || 0) +
+    (c?.openingDebt || 0) +
     sum(
-      data.sales.filter((row) => row.customerId === id),
-      (row) => row.total - row.paid
+      data.sales.filter((r) => r.customerId === id),
+      (r) => r.total - r.paid
     ) -
     sum(
-      data.customerPayments.filter((row) => row.contactId === id),
-      (row) => row.amount
+      data.customerPayments.filter((r) => r.contactId === id),
+      (r) => r.amount
     )
   );
 }
 export function supplierBalance(data, id) {
-  const contact = data.suppliers.find((row) => row.id === id);
+  const c = data.suppliers.find((row) => row.id === id);
   return (
-    (contact?.openingDebt || 0) +
+    (c?.openingDebt || 0) +
     sum(
-      data.purchases.filter((row) => row.supplierId === id),
-      (row) => row.total - row.paid
+      data.purchases.filter((r) => r.supplierId === id),
+      (r) => r.total - r.paid
     ) -
     sum(
-      data.supplierPayments.filter((row) => row.contactId === id),
-      (row) => row.amount
+      data.supplierPayments.filter((r) => r.contactId === id),
+      (r) => r.amount
     )
   );
 }
-export function validateStore(data) {
+
+export function validateStore(source) {
+  const data = normalized(source);
   requireValue(
     data && data.version === VERSION && Number.isSafeInteger(data.revision) && data.revision >= 0,
     'Sauvegarde incompatible.'
@@ -120,8 +153,7 @@ export function validateStore(data) {
   requireValue(
     data.shop &&
       typeof data.shop.name === 'string' &&
-      data.shop.name.trim().length > 0 &&
-      data.shop.name.length <= 160 &&
+      data.shop.name.trim() &&
       ['FCFA', 'XOF', 'XAF'].includes(data.shop.currency) &&
       cents(data.shop.openingCash) &&
       cents(data.shop.openingMobile),
@@ -137,15 +169,15 @@ export function validateStore(data) {
       requireValue(
         row &&
           typeof row.id === 'string' &&
-          row.id.length < 100 &&
           row.id.length > 0 &&
+          row.id.length < 100 &&
           !ids.has(row.id),
         'Identifiant invalide ou dupliqué.'
       );
       ids.add(row.id);
     }
   }
-  for (const p of data.products)
+  for (const p of data.products) {
     requireValue(
       typeof p.name === 'string' &&
         p.name.trim() &&
@@ -159,18 +191,30 @@ export function validateStore(data) {
         typeof p.archived === 'boolean',
       'Produit invalide.'
     );
+    requireValue(
+      typeof baseUnit(p) === 'string' &&
+        baseUnit(p).length <= 30 &&
+        packFactor(p) >= 1 &&
+        qty(packFactor(p)),
+      'Conditionnement invalide.'
+    );
+    if (packFactor(p) > 1)
+      requireValue(
+        typeof p.packageUnit === 'string' &&
+          p.packageUnit.trim() &&
+          p.packageUnit.length <= 30 &&
+          cents(p.packagePrice || p.wholesale),
+        'Conditionnement invalide.'
+      );
+  }
   for (const key of ['customers', 'suppliers'])
     for (const c of data[key])
       requireValue(
         typeof c.name === 'string' &&
           c.name.trim() &&
-          c.name.length <= 300 &&
           typeof c.phone === 'string' &&
-          c.phone.length <= 40 &&
           typeof c.contact === 'string' &&
-          c.contact.length <= 300 &&
           typeof c.sector === 'string' &&
-          c.sector.length <= 300 &&
           cents(c.openingDebt) &&
           typeof c.archived === 'boolean',
         'Contact invalide.'
@@ -198,38 +242,39 @@ export function validateStore(data) {
         sale.paid === sale.total || contactId,
         'Une dette doit être rattachée à un contact.'
       );
-      for (const item of sale.items)
+      for (const item of sale.items) {
+        const factor = Number(item.unitFactor || 1),
+          baseQuantity = Number(item.baseQuantity || item.quantity * factor);
         requireValue(
           data.products.some((p) => p.id === item.productId) &&
             typeof item.name === 'string' &&
-            item.name.length <= 300 &&
             qty(item.quantity) &&
             item.quantity > 0 &&
+            qty(baseQuantity) &&
+            baseQuantity > 0 &&
+            factor >= 1 &&
             [item.price, item.unitCost, item.total, item.cost].every(cents) &&
             item.total === Math.round(item.quantity * item.price) &&
             item.cost === Math.round(item.quantity * item.unitCost),
           'Ligne de vente ou achat invalide.'
         );
+      }
       requireValue(
         cents(sale.discount || 0) &&
-          sale.total === sum(sale.items, (row) => row.total) - (sale.discount || 0) &&
-          sale.cost === sum(sale.items, (row) => row.cost),
+          sale.total === sum(sale.items, (r) => r.total) - (sale.discount || 0) &&
+          sale.cost === sum(sale.items, (r) => r.cost),
         'Totaux incohérents.'
       );
     }
   for (const key of ['customerPayments', 'supplierPayments'])
-    for (const payment of data[key])
+    for (const p of data[key])
       requireValue(
-        data[key === 'customerPayments' ? 'customers' : 'suppliers'].some(
-          (c) => c.id === payment.contactId
-        ) &&
-          cents(payment.amount) &&
-          payment.amount > 0 &&
-          dateOK(payment.date) &&
-          METHODS.includes(payment.method) &&
-          typeof payment.reason === 'string' &&
-          payment.reason.trim() &&
-          payment.reason.length <= 300,
+        cents(p.amount) &&
+          p.amount > 0 &&
+          dateOK(p.date) &&
+          METHODS.includes(p.method) &&
+          typeof p.reason === 'string' &&
+          p.reason.trim(),
         'Remboursement invalide.'
       );
   for (const e of data.expenses)
@@ -241,7 +286,6 @@ export function validateStore(data) {
         EXPENSES.includes(e.category) &&
         typeof e.reason === 'string' &&
         e.reason.trim() &&
-        e.reason.length <= 300 &&
         receiptOK(e.receipt),
       'Dépense ou justificatif invalide.'
     );
@@ -250,36 +294,44 @@ export function validateStore(data) {
     requireValue(customerBalance(data, c.id) >= 0, 'Remboursement client supérieur à la dette.');
   for (const c of data.suppliers)
     requireValue(supplierBalance(data, c.id) >= 0, 'Paiement fournisseur supérieur à la dette.');
-  return data;
+  return source;
 }
 
 export function transact(source, action, input, id = globalThis.crypto.randomUUID()) {
   validateStore(source);
-  const data = JSON.parse(JSON.stringify(source));
-  const stamp = { id, date: input.date || today() };
+  const data = normalized(source),
+    stamp = { id, date: input.date || today() };
   if (action === 'product.save') {
     const current = input.id ? find(data, 'products', input.id) : null;
+    const factor = Number(input.packageFactor || 1);
     const product = {
       id: current?.id || id,
       archived: false,
       name: text(input.name, 'Nom'),
       category: input.category,
-      unit: text(input.unit || 'pièce', 'Unité'),
+      baseUnit: text(input.baseUnit || input.unit || current?.baseUnit || 'pièce', 'Unité'),
+      unit: text(input.baseUnit || input.unit || current?.baseUnit || 'pièce', 'Unité'),
       retail: money(input.retail),
       wholesale: money(input.wholesale),
       cost: money(input.cost),
       stock: Number(input.stock),
       minStock: Number(input.minStock),
+      packageUnit:
+        factor > 1
+          ? text(input.packageUnit || current?.packageUnit || 'carton', 'Conditionnement')
+          : '',
+      packageFactor: factor,
+      packagePrice: factor > 1 ? money(input.packagePrice ?? input.wholesale) : 0,
     };
     requireValue(
-      qty(product.stock) && qty(product.minStock),
-      'Stock et seuil : quantités positives, 3 décimales maximum.'
+      qty(product.stock) && qty(product.minStock) && qty(factor) && factor >= 1,
+      'Stock, seuil ou conditionnement invalide.'
     );
     if (current) Object.assign(current, product);
     else data.products.push(product);
   } else if (action === 'contact.save') {
-    const collection = input.kind === 'customer' ? 'customers' : 'suppliers';
-    const current = input.id ? find(data, collection, input.id) : null;
+    const collection = input.kind === 'customer' ? 'customers' : 'suppliers',
+      current = input.id ? find(data, collection, input.id) : null;
     const contact = {
       id: current?.id || id,
       archived: false,
@@ -316,25 +368,32 @@ export function transact(source, action, input, id = globalThis.crypto.randomUUI
     );
     const used = new Set();
     const items = input.lines.map((line) => {
+      const product = find(data, 'products', line.productId),
+        quantity = Number(line.quantity);
+      const factor = purchase ? 1 : Number(line.unitFactor || 1),
+        baseQuantity = roundQty(quantity * factor);
+      const unitKey = `${line.productId}:${factor}`;
       requireValue(
-        !used.has(line.productId),
-        'Regroupez les quantités du même produit sur une seule ligne.'
+        !used.has(unitKey),
+        'Regroupez les quantités du même produit et conditionnement sur une seule ligne.'
       );
-      used.add(line.productId);
-      const product = find(data, 'products', line.productId);
-      const quantity = Number(line.quantity);
-      requireValue(qty(quantity) && quantity > 0, 'Quantité invalide.');
-      if (!purchase) requireValue(product.stock >= quantity, 'Stock insuffisant : ' + product.name);
-      const price = purchase
-        ? money(line.price)
-        : input.priceMode === 'wholesale'
-          ? product.wholesale
-          : product.retail;
-      const unitCost = purchase ? price : product.cost;
+      used.add(unitKey);
+      requireValue(qty(quantity) && quantity > 0 && qty(baseQuantity), 'Quantité invalide.');
+      if (!purchase)
+        requireValue(product.stock >= baseQuantity, 'Stock insuffisant : ' + product.name);
+      let price;
+      if (purchase) price = money(line.price);
+      else if (line.price !== '' && line.price !== undefined) price = money(line.price);
+      else if (factor > 1) price = product.packagePrice || product.wholesale * factor;
+      else price = input.priceMode === 'wholesale' ? product.wholesale : product.retail;
+      const unitCost = purchase ? price : Math.round(product.cost * factor);
       const item = {
         productId: product.id,
         name: product.name,
         quantity,
+        unitName: factor > 1 ? packUnit(product) : baseUnit(product),
+        unitFactor: factor,
+        baseQuantity,
         price,
         unitCost,
         total: Math.round(price * quantity),
@@ -345,11 +404,11 @@ export function transact(source, action, input, id = globalThis.crypto.randomUUI
           (product.stock * product.cost + quantity * price) / (product.stock + quantity)
         );
         product.stock = roundQty(product.stock + quantity);
-      } else product.stock = roundQty(product.stock - quantity);
+      } else product.stock = roundQty(product.stock - baseQuantity);
       return item;
     });
-    const total = sum(items, (row) => row.total);
-    const paid = input.paid === '' || input.paid === undefined ? total : money(input.paid);
+    const total = sum(items, (r) => r.total),
+      paid = input.paid === '' || input.paid === undefined ? total : money(input.paid);
     requireValue(paid <= total, 'Le paiement ne peut pas dépasser le total.');
     const contactId = input.contactId || '';
     if (contactId) find(data, purchase ? 'suppliers' : 'customers', contactId);
@@ -357,26 +416,26 @@ export function transact(source, action, input, id = globalThis.crypto.randomUUI
       paid === total || contactId,
       'Choisissez un ' + (purchase ? 'fournisseur' : 'client') + ' pour enregistrer une dette.'
     );
-    const collection = purchase ? 'purchases' : 'sales';
-    const number = Math.max(0, ...data[collection].map((row) => row.number)) + 1;
+    const collection = purchase ? 'purchases' : 'sales',
+      number = Math.max(0, ...data[collection].map((r) => r.number)) + 1;
     data[collection].push({
       ...stamp,
       number,
       items,
       total,
-      cost: sum(items, (row) => row.cost),
+      cost: sum(items, (r) => r.cost),
       paid,
       method: input.method,
       [purchase ? 'supplierId' : 'customerId']: contactId,
     });
   } else if (action === 'payment') {
-    const customer = input.kind === 'customer';
-    const collection = customer ? 'customers' : 'suppliers';
+    const customer = input.kind === 'customer',
+      collection = customer ? 'customers' : 'suppliers';
     find(data, collection, input.contactId);
-    const amount = money(input.amount);
-    const balance = customer
-      ? customerBalance(data, input.contactId)
-      : supplierBalance(data, input.contactId);
+    const amount = money(input.amount),
+      balance = customer
+        ? customerBalance(data, input.contactId)
+        : supplierBalance(data, input.contactId);
     requireValue(
       amount > 0 && amount <= balance,
       'Le remboursement doit être positif et ne pas dépasser le solde dû.'
@@ -399,9 +458,8 @@ export function transact(source, action, input, id = globalThis.crypto.randomUUI
       method: input.method,
       receipt: input.receipt || '',
     });
-  } else if (action === 'day.close') {
-    closeDay(data, input, stamp);
-  } else if (action === 'shop') {
+  } else if (action === 'day.close') closeDay(data, input, stamp);
+  else if (action === 'shop')
     data.shop = {
       ...data.shop,
       name: text(input.name, 'Nom de boutique'),
@@ -409,22 +467,24 @@ export function transact(source, action, input, id = globalThis.crypto.randomUUI
       openingCash: money(input.openingCash),
       openingMobile: money(input.openingMobile),
     };
-  } else throw Error('Opération inconnue.');
+  else throw Error('Opération inconnue.');
   data.revision++;
-  return validateStore(data);
+  decorate(data);
+  validateStore(data);
+  return data;
 }
 
 export function cashLedger(data) {
   const entries = [];
-  for (const sale of data.sales)
-    if (sale.paid > 0)
+  for (const s of data.sales)
+    if (s.paid > 0)
       entries.push({
-        id: sale.id,
-        date: sale.date,
+        id: s.id,
+        date: s.date,
         direction: 1,
-        amount: sale.paid,
-        method: sale.method,
-        label: 'Vente n° ' + sale.number,
+        amount: s.paid,
+        method: s.method,
+        label: 'Vente n° ' + s.number,
         kind: 'Vente',
       });
   for (const p of data.customerPayments)
@@ -496,16 +556,16 @@ export function cashLedger(data) {
   return entries.sort((a, b) => b.date.localeCompare(a.date));
 }
 export function report(data, from = '', to = '') {
-  const within = (row) => (!from || row.date >= from) && (!to || row.date <= to);
-  const sales = data.sales.filter(within),
+  const within = (r) => (!from || r.date >= from) && (!to || r.date <= to),
+    sales = data.sales.filter(within),
     expenses = data.expenses.filter(within);
-  const revenue = sum(sales, (row) => row.total),
-    cost = sum(sales, (row) => row.cost);
-  const operating = sum(
-    expenses.filter((row) => row.category !== 'Achat de stock'),
-    (row) => row.amount
-  );
-  const profitability = new Map();
+  const revenue = sum(sales, (r) => r.total),
+    cost = sum(sales, (r) => r.cost),
+    operating = sum(
+      expenses.filter((r) => r.category !== 'Achat de stock'),
+      (r) => r.amount
+    ),
+    profitability = new Map();
   for (const sale of sales) {
     let allocated = 0;
     for (const [index, item] of sale.items.entries()) {
@@ -516,7 +576,9 @@ export function report(data, from = '', to = '') {
         revenue: 0,
         cost: 0,
       };
-      row.quantity = roundQty(row.quantity + item.quantity * (item.unitFactor || 1));
+      row.quantity = roundQty(
+        row.quantity + (item.baseQuantity || item.quantity * (item.unitFactor || 1))
+      );
       const discount =
         index === sale.items.length - 1
           ? (sale.discount || 0) - allocated
@@ -532,13 +594,9 @@ export function report(data, from = '', to = '') {
   const days = new Map();
   for (const sale of sales) days.set(sale.date, (days.get(sale.date) || 0) + sale.total);
   const ledger = cashLedger(data),
-    periodLedger = ledger.filter(within);
-  const opening = (method) =>
-    method === 'Espèces'
-      ? data.shop.openingCash
-      : method === 'Mobile Money'
-        ? data.shop.openingMobile
-        : 0;
+    periodLedger = ledger.filter(within),
+    opening = (m) =>
+      m === 'Espèces' ? data.shop.openingCash : m === 'Mobile Money' ? data.shop.openingMobile : 0;
   return {
     revenue,
     cost,
@@ -552,7 +610,7 @@ export function report(data, from = '', to = '') {
         expenses.filter((e) => e.category === name),
         (e) => e.amount
       ),
-    })).filter((row) => row.value > 0),
+    })).filter((r) => r.value > 0),
     products: [...profitability.values()].sort((a, b) => b.revenue - b.cost - (a.revenue - a.cost)),
     days: [...days]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -589,8 +647,6 @@ export function whatsappLink(phone, message) {
     throw Error('Saisissez le téléphone avec son indicatif pays (ex. +228…).');
   return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(message);
 }
-
-// A closure is an immutable snapshot. Late entries remain visible without rewriting history.
 export function daySummary(data, date) {
   const sales = structuredClone(data.sales.filter((s) => s.date === date)).sort((a, b) =>
     a.id.localeCompare(b.id)
@@ -614,7 +670,6 @@ export function daySummary(data, date) {
     ),
   };
 }
-const signedCents = (n) => Number.isSafeInteger(n) && Math.abs(n) <= 1e12;
 function closeDay(data, input, stamp) {
   requireValue(
     dateOK(stamp.date) && stamp.date <= today(),
@@ -625,27 +680,29 @@ function closeDay(data, input, stamp) {
     'Cette journée est déjà clôturée.'
   );
   requireValue(/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time), 'Heure de clôture invalide.');
-  const snapshot = daySummary(data, stamp.date);
-  const withdrawal = money(input.withdrawal || 0);
-  const raw = String(input.remaining ?? '').replace(',', '.');
-  const remaining = Math.round(Number(raw) * 100);
+  const snapshot = daySummary(data, stamp.date),
+    withdrawal = money(input.withdrawal || 0),
+    raw = String(input.remaining ?? '').replace(',', '.'),
+    remaining = Math.round(Number(raw) * 100);
   requireValue(raw.trim() && signedCents(remaining), 'Montant validé invalide.');
   const adjustment = remaining - (snapshot.incoming - snapshot.outgoing - withdrawal);
   requireValue(signedCents(adjustment), 'Écart invalide.');
   requireValue(METHODS.includes(input.method), 'Moyen de paiement invalide.');
-  const closure = {
-    ...stamp,
-    time: input.time,
-    snapshot,
-    withdrawal,
-    remaining,
-    adjustment,
-    method: input.method,
-    withdrawalReason: text(input.withdrawalReason, 'Motif du retrait', withdrawal > 0),
-    adjustmentReason: text(input.adjustmentReason, 'Motif de l’écart', adjustment !== 0),
-    note: text(input.note, 'Note', false),
-  };
-  data.dailyClosures = [...(data.dailyClosures || []), closure];
+  data.dailyClosures = [
+    ...(data.dailyClosures || []),
+    {
+      ...stamp,
+      time: input.time,
+      snapshot,
+      withdrawal,
+      remaining,
+      adjustment,
+      method: input.method,
+      withdrawalReason: text(input.withdrawalReason, 'Motif du retrait', withdrawal > 0),
+      adjustmentReason: text(input.adjustmentReason, 'Motif de l’écart', adjustment !== 0),
+      note: text(input.note, 'Note', false),
+    },
+  ];
 }
 function validateClosures(data) {
   requireValue(
@@ -739,7 +796,6 @@ function validateClosures(data) {
   }
 }
 
-// Ignore presentation-only fields added by SQL projection when replaying an offline queue.
 export function closureFingerprint(snapshot) {
   return {
     sales: snapshot.sales.map((s) => ({
@@ -753,6 +809,9 @@ export function closureFingerprint(snapshot) {
         productId: i.productId,
         name: i.name,
         quantity: i.quantity,
+        unitName: i.unitName,
+        unitFactor: i.unitFactor || 1,
+        baseQuantity: i.baseQuantity || i.quantity,
         price: i.price,
         total: i.total,
       })),
