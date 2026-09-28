@@ -181,7 +181,9 @@ a {
   bottom: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  /* Six destinations (§6) : la grille se partage en parts égales, et chaque
+     libellé se rétrécit plutôt que de faire passer un onglet à la ligne. */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   background: var(--surface);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);

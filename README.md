@@ -13,7 +13,9 @@ en dépend.
 vente créée → stock −5 → CA +2 250 → marge calculée → historique → tableau de bord
 ```
 
-SaaS multi-tenant, mobile d'abord, en français, en FCFA.
+SaaS multi-tenant, mobile d'abord, en français, en FCFA. Le cahier des charges
+complet est versionné dans [`docs/prd.md`](docs/prd.md) ; les commentaires du code
+y renvoient par numéro de section.
 
 ## Périmètre du MVP
 
@@ -51,10 +53,11 @@ est-il passé de 50 à 37 ? ».
 ## Architecture
 
 ```
-Next.js 15 (App Router)
+Next.js 15 (App Router) + TypeScript strict
    ↓  src/app/api/*      routes minces : garde d'authentification, validation, réponse
    ↓  src/server/*       logique métier et accès aux données, toujours filtrés par businessId
    ↓  src/domain/*       calculs purs, partagés avec le client (unités, totaux, marges, workflows)
+   ↓  src/types/*        vocabulaire commun : lignes de base en snake_case, objets métier en camelCase
    ↓  Neon Serverless Postgres
 ```
 
@@ -195,8 +198,9 @@ glissé dans le rendu statique.
 
 ## Modèle de données
 
-19 tables. Toutes portent `business_id`, à deux exceptions près : `users` et
-`refresh_tokens`.
+20 tables : les 18 du §28, plus `counters` (numérotation) et `login_attempts`
+(freinage des essais de mot de passe). Toutes portent `business_id` à trois
+exceptions près : `users`, `refresh_tokens` et `login_attempts`.
 
 ```
 businesses
@@ -215,107 +219,26 @@ businesses
 Références : `VE-0001` (vente), `FA-2026-0001` (facture, remise à zéro chaque
 année), `HS-0001` (hors stock), `PO-0001` (commande), `RC-0001` (réception).
 
-## Application unifiée et continuité hors ligne
+## Navigation (§6)
 
-Après connexion, l’application ouvre `/` et charge les données de la boutique
-liée au compte : produits, clients, fournisseurs et ventes. Le catalogue et les
-ventes utilisent les tables relationnelles existantes. Les catégories, tarifs de
-gros, soldes initiaux, crédits, remboursements, dépenses et justificatifs sont
-conservés dans `commerce_sync_state`, isolé par `business_id`. Les anciennes
-commandes restent accessibles avec leurs statuts et documents ; leurs paiements
-n’étant pas chiffrés dans le schéma initial, aucune dette ni dépense n’est inventée.
+```
+Accueil | Vendre | Produits | Achats | Historique | Plus
+```
 
-`GET /api/sync` fournit un instantané privé (`no-store`). `POST /api/sync` reçoit
-une opération identifiée, liée explicitement à sa boutique et à son auteur.
-L’appartenance et le rôle sont relus en base, les prix et stocks revalidés côté
-serveur. Les modifications métier et leur accusé de réception sont enregistrés
-ensemble dans une transaction PostgreSQL sérialisable. `commerce_sync_operations`
-empêche qu’un renvoi après coupure ne crée une deuxième vente ou un double paiement.
-Les nouvelles tables sont additives : créées automatiquement si absentes et
-aussi déclarées dans `schema.sql`. La connexion reprend `DATABASE_URL` ou
-`NEON_DATABASE_URL`, uniquement côté serveur, avec un petit pool `pg` réutilisé.
+L'accueil vit à `/dashboard` ; `/` y redirige, parce que c'est l'adresse qu'un
+gérant tape ou met en favori. « Plus » regroupe Clients, Fournisseurs et
+Paramètres, auxquels s'ajoutent deux entrées que le PRD décrit sans les
+rattacher à une navigation : Ventes hors stock (§16) et Équipe, sans laquelle le
+rôle SELLER du §5 ne pourrait être attribué à personne.
 
-### Saisie et synchronisation
+## Connectivité (§33)
 
-Le navigateur conserve un cache et une file d’opérations atomique dans
-localStorage, avec une clé distincte par utilisateur et boutique. Les écritures
-locales sont confirmées avant tout envoi ; elles sont synchronisées à la
-reconnexion, à la reprise de l’onglet, toutes les 30 secondes ou par **Actualiser**.
-La bannière distingue le nombre d’opérations en attente du dernier échange réussi.
-Un changement de compte ne transmet jamais la file de l’ancien compte au nouveau.
+QuincaFlow ne promet pas de fonctionner hors ligne. Le PRD écarte l'offline
+transactionnel de la V1 : ventes simultanées et conflits de stock demandent une
+architecture de synchronisation que le terrain n'a pas encore justifiée.
 
-Un stock insuffisant, un prix modifié ou une fiche concurrente bloque la file sans
-la supprimer. **Résoudre le conflit** permet d’exporter le carnet et sa file puis,
-après confirmation, d’abandonner les opérations refusées et leurs dépendances
-pour repartir de la base. Une requête dont l’issue reste incertaine ne peut pas
-être abandonnée : elle est renvoyée avec le même identifiant jusqu’à confirmation.
-
-Les montants sont stockés en centimes entiers, les quantités à trois décimales.
-Les ventes figent prix et coût ; les achats reçus actualisent le coût moyen pondéré.
-Les remises et conditionnements des anciennes ventes sont conservés. Les
-remboursements alimentent la caisse sans créer de nouveau chiffre d’affaires.
-Le résultat net déduit les charges saisies de la marge brute, sans déduire une
-seconde fois les achats de stock.
-
-### Hors ligne et sauvegardes
-
-Ouvrir `/` une première fois en HTTPS (ou localhost), se connecter et attendre
-**Réouverture hors ligne prête**. Le service worker précharge la coque publique et
-ses fichiers statiques, jamais les API ni les pages privées. Le cache local de la
-boutique reste consultable et modifiable sans réseau. Une connexion est nécessaire
-pour le premier chargement, une réauthentification ou la synchronisation.
-
-La base de données est le fonctionnement normal de l’application. Le cache sert à
-continuer pendant les coupures réseau. L’ancien carnet sans compte reste conservé
-sur l’appareil, sans être ouvert ni importé automatiquement dans la base. Les sauvegardes synchronisées incluent la file en
-attente. Le remplacement complet par import est désactivé en mode synchronisé,
-pour ne pas écraser la boutique serveur. Le navigateur peut effacer ou refuser le
-stockage : exportez régulièrement les données, notamment avant de changer de
-domaine, navigateur ou appareil. Les échecs de quota sont signalés sans faux
-message de réussite. WhatsApp ouvre un brouillon, sans l’envoyer automatiquement.
-
-### Validation
-
-`src/local/__tests__` couvre les calculs, projections des anciennes données, files
-hors ligne, quotas, reprises, conflits et séparation des comptes. La suite
-`src/server/__tests__/flows.integration.test.js` vérifie sur PostgreSQL les écritures
-réelles, la non-duplication, les ventes concurrentes, les rôles et l’isolation entre
-boutiques. Sans `TEST_DATABASE_URL`, les tests PostgreSQL sont ignorés localement ;
-la CI les exécute obligatoirement avec son service PostgreSQL isolé.
-
-### Recettes et clôture journalière
-
-Dans Accueil → **Recettes et clôture du jour** (ou Plus → **Recettes du jour**),
-choisissez une date et consultez chaque vente et ses articles. Les ventes à crédit
-sont séparées des encaissements. Les dépenses se saisissent dans le journal existant
-et ne sont déduites qu’une fois. La clôture est manuelle, avec 17 h proposé.
-
-Avant validation, indiquez un retrait et son motif, puis vérifiez le montant net
-restant pour cette journée, tous moyens de paiement confondus (hors soldes antérieurs).
-Une modification du montant calculé exige un motif d’écart. Retraits et écarts
-apparaissent en caisse, sans modifier les ventes ni les charges du rapport de bénéfice.
-
-Une seule clôture par date est conservée dans `commerce_sync_state`, avec copie
-immuable des ventes, articles et mouvements. L’historique se filtre par dates.
-Les écritures tardives ne réécrivent pas une archive : un avertissement les signale.
-La validation est réservée au propriétaire ; elle fonctionne hors ligne après
-chargement et utilise la même file synchronisée que les ventes. Si les mouvements
-ont changé en base avant réception de la clôture, la synchronisation demande de
-vérifier puis ressaisir la clôture. Les anciens caches sans clôtures restent compatibles.
-
-### Organisation de l’application
-
-La navigation principale est identique sur mobile et ordinateur : Accueil, Ventes,
-Stock, Caisse et Plus. Caisse regroupe le journal (`/cash`) et les recettes et
-clôtures (`/cash/closing`). Plus regroupe le commerce (clients, fournisseurs,
-achats et ventes hors stock), le suivi (rapports et historique complet), puis
-les paramètres, sauvegardes et accès d’équipe. Les commandes fournisseurs et
-les écrans de détail conservent leurs fonctionnalités et partagent cette navigation.
-
-Le point d’entrée est `/`, y compris après connexion et pour l’application installée.
-Les anciens liens `/local#stock`, `/local#receipts`, etc. ouvrent automatiquement
-leur rubrique à sa nouvelle adresse. Les données et files de synchronisation utilisent
-les mêmes clés de stockage et la même base : aucune importation ni remise à zéro.
-Le service worker prépare la coque commune pour les liens directs et rechargements
-hors ligne des rubriques principales. Les écrans spécialisés nécessitant le serveur
-restent signalés comme indisponibles sans réseau, sans quitter le parcours courant.
+L'application est en revanche installable sur Android et iOS (manifeste, icônes,
+service worker). Ce service worker met en cache la coque et les fichiers
+statiques — **jamais `/api`**. Un stock servi depuis le disque du téléphone, ce
+serait une vente encaissée sur un article déjà parti : en cas de coupure, l'écran
+affiche une erreur plutôt qu'un chiffre périmé.

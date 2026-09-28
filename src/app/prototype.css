@@ -126,8 +126,24 @@ body {
 }
 .tabbar__item {
   color: #66717e;
-  font-size: 10px;
+  /* Six onglets sur 390 px : « Historique » doit tenir sans rogner ses voisins. */
+  font-size: 9.5px;
   font-weight: 500;
+  min-width: 0;
+  padding: 0 2px;
+  text-align: center;
+}
+.tabbar__item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* La cinquième tuile du tableau de bord occupe seule sa ligne : elle la prend
+   toute, plutôt que de laisser un vide à côté d'elle. */
+.page--dashboard .tiles > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  min-height: 0;
 }
 .tabbar__item[data-active='true'] {
   font-weight: 700;
