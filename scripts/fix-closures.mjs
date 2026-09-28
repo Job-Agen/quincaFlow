@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-// Temporary repair script for PR #7.
+// Temporary repair script for PR #7. Source repair already applied; keep this for traceability.
 const path = 'src/local/ledger.js';
 let source = fs.readFileSync(path, 'utf8');
 const start = source.indexOf('function validateClosures(data) {');
