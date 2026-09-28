@@ -1,0 +1,34 @@
+name: Repair units PR
+
+on:
+  pull_request:
+    branches: [master]
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.head_ref == 'fix/restore-product-units-wholesale'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/fix-closures.mjs
+      - run: npx prettier --write src/local/ledger.js src/local/forms.jsx scripts/fix-closures.mjs
+      - run: npm test -- --runInBand || npm test
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/local/ledger.js src/local/forms.jsx scripts/fix-closures.mjs
+          git diff --cached --quiet || git commit -m "fix: restore closure validation with product units"
+          git push origin HEAD:${{ github.head_ref }}
