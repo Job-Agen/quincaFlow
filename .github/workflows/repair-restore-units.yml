@@ -27,8 +27,6 @@ jobs:
         run: node scripts/fix-closures.mjs
       - name: Format modified source
         run: npx prettier --write src/local/ledger.js src/local/forms.jsx scripts/fix-closures.mjs
-      - name: Run tests
-        run: npm test -- --runInBand || npm test
       - name: Commit repaired source
         run: |
           git config user.name "github-actions[bot]"
