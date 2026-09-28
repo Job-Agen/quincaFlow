@@ -20,7 +20,7 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { orderTotal } from '@/domain/purchase';
 import { unitsOf } from '@/domain/units';
-import { money, quantity as fmtQuantity } from '@/utils/format';
+import { money, quantity as fmtQuantity, withUnit } from '@/utils/format';
 
 /**
  * Nouvelle commande fournisseur (maquette 7, §20).
@@ -195,7 +195,7 @@ export default function NewPurchaseOrderPage() {
                         >
                           {units.map((unit) => (
                             <option key={unit.id} value={unit.id}>
-                              {unit.label} ({fmtQuantity(unit.factor)} {product?.base_unit})
+                              {unit.label} ({withUnit(unit.factor, product?.base_unit)})
                             </option>
                           ))}
                         </SelectField>
@@ -294,7 +294,7 @@ function PickerBody({ products, loading, currency, onPick }) {
             <div className="list__body">
               <div className="list__title">{product.name}</div>
               <div className="list__sub">
-                Stock : {fmtQuantity(product.stock_quantity)} {product.base_unit}
+                Stock : {withUnit(product.stock_quantity, product.base_unit)}
               </div>
             </div>
             <span className="small muted num">{money(product.purchase_price, currency)}</span>

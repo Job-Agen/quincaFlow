@@ -58,11 +58,13 @@ const SHAPES = {
 /** Badge adapté à la nature de l'opération : chaque flux a ses propres statuts. */
 function statusBadge(entry) {
   if (entry.kind === 'SALE') {
-    return entry.status === 'CANCELLED' ? (
-      <Badge tone="red">Annulée</Badge>
-    ) : (
-      <Badge tone="green">Validée</Badge>
-    );
+    if (entry.status === 'CANCELLED') return <Badge tone="red">Annulée</Badge>;
+    // Le commerçant lit d'abord « est-ce que j'ai été payé ». Une vente réglée
+    // porte donc « Payée », comme sur la maquette ; un reste dû reste visible
+    // plutôt que masqué derrière un « Validée » rassurant mais muet.
+    if (entry.payment_status === 'PAID') return <Badge tone="green">Payée</Badge>;
+    if (entry.payment_status === 'PARTIAL') return <Badge tone="amber">Partielle</Badge>;
+    return <Badge tone="amber">Impayée</Badge>;
   }
   if (entry.kind === 'OUT_OF_STOCK') {
     return (
@@ -157,7 +159,7 @@ function HistoryView() {
                   return (
                     <Tag key={`${entry.kind}-${entry.id}`} href={href} className="list__row">
                       <div className="list__body">
-                        <div className="list__title">{entry.reference}</div>
+                        <div className="list__title">#{entry.reference}</div>
                         <div className="list__sub">{dateTime(entry.created_at)}</div>
                         <div className="list__sub">
                           {entry.party || (entry.kind === 'SALE' ? 'Client comptoir' : shape.label)}

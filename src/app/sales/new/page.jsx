@@ -27,7 +27,8 @@ import {
   PAYMENT_METHOD_LABELS,
 } from '@/domain/sale';
 import { unitsOf } from '@/domain/units';
-import { money, quantity as fmtQuantity } from '@/utils/format';
+import { money, quantity as fmtQuantity, withUnit } from '@/utils/format';
+import BarcodeScanner from '@/components/products/BarcodeScanner';
 
 /**
  * Vente rapide (maquette 3, §11).
@@ -104,6 +105,27 @@ export default function NewSalePage() {
 
   const shortageIds = useMemo(() => new Set(shortages.map((item) => item.productId)), [shortages]);
 
+  /**
+   * Code-barres lu : le produit part directement au panier.
+   *
+   * La correspondance est cherchée sur la référence puis sur le nom, sans
+   * distinction de casse — les étiquettes fabricant et les codes saisis à la
+   * création de la fiche ne suivent pas la même convention.
+   */
+  function addScanned(code) {
+    const needle = code.trim().toLowerCase();
+    const match = (products.data || []).find(
+      (product) =>
+        String(product.sku || '').toLowerCase() === needle || product.name.toLowerCase() === needle
+    );
+    if (!match) {
+      setError(`Aucun produit ne porte la référence « ${code} ».`);
+      return;
+    }
+    setError(null);
+    addProduct(match);
+  }
+
   function addProduct(product) {
     const units = unitsOf(product, product.units);
     const unit = units[0];
@@ -168,14 +190,17 @@ export default function NewSalePage() {
           ))}
         </SelectField>
 
-        <button
-          type="button"
-          className="btn btn--block product-search"
-          onClick={() => setPicking(true)}
-        >
-          <Search size={18} />
-          Rechercher un produit…
-        </button>
+        <div className="search-row">
+          <button
+            type="button"
+            className="btn btn--block product-search"
+            onClick={() => setPicking(true)}
+          >
+            <Search size={18} />
+            Rechercher un produit…
+          </button>
+          <BarcodeScanner onScan={addScanned} label="Scanner un code-barres" />
+        </div>
 
         <Card>
           {priced.length === 0 ? (
@@ -213,7 +238,7 @@ export default function NewSalePage() {
                           >
                             {found.units.map((unit) => (
                               <option key={unit.id} value={unit.id}>
-                                {unit.label} ({fmtQuantity(unit.factor)} {found.product.base_unit})
+                                {unit.label} ({withUnit(unit.factor, found.product.base_unit)})
                               </option>
                             ))}
                           </select>
@@ -316,7 +341,7 @@ export default function NewSalePage() {
             <ul className="stack" style={{ margin: '6px 0 0', paddingLeft: 18 }}>
               {shortages.map((item) => (
                 <li key={item.productId}>
-                  {item.name} — {fmtQuantity(item.needed)} {item.unit} demandés,{' '}
+                  {item.name} — {withUnit(item.needed, item.unit)} demandés,{' '}
                   {fmtQuantity(item.stock)} en stock.
                 </li>
               ))}
@@ -398,7 +423,7 @@ function ProductPicker({ open, onClose, products, loading, currency, onPick }) {
               <div className="list__title">{product.name}</div>
               <div className="list__sub">
                 {product.sku ? `${product.sku} · ` : ''}
-                Stock : {fmtQuantity(product.stock_quantity)} {product.base_unit}
+                Stock : {withUnit(product.stock_quantity, product.base_unit)}
               </div>
             </div>
             <div className="list__end">

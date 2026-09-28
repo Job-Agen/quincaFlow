@@ -187,7 +187,7 @@ export default function SalePage({ params }) {
                 title="Choisissez Enregistrer au format PDF dans la fenêtre d’impression"
               >
                 <FileDown size={23} />
-                Enregistrer PDF
+                Télécharger PDF
               </Button>
               <Button variant="soft" onClick={() => window.print()}>
                 <Printer size={23} />

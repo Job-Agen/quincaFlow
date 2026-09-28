@@ -22,7 +22,8 @@ export async function listHistory(businessId, { from, to, search = '', kind, lim
   return sql`
     WITH feed AS (
       SELECT 'SALE' AS kind, s.id, s.reference, s.created_at,
-             s.total::float8 AS amount, s.customer_name AS party, s.status
+             s.total::float8 AS amount, s.customer_name AS party, s.status,
+             s.payment_status
         FROM sales s
        WHERE s.business_id = ${businessId}
          AND (${term}::text IS NULL
@@ -32,7 +33,7 @@ export async function listHistory(businessId, { from, to, search = '', kind, lim
 
       UNION ALL
       SELECT 'OUT_OF_STOCK', o.id, o.reference, o.created_at,
-             (o.selling_price * o.quantity)::float8, o.customer_name, o.status
+             (o.selling_price * o.quantity)::float8, o.customer_name, o.status, NULL
         FROM out_of_stock_sales o
        WHERE o.business_id = ${businessId}
          AND (${term}::text IS NULL
@@ -41,7 +42,7 @@ export async function listHistory(businessId, { from, to, search = '', kind, lim
 
       UNION ALL
       SELECT 'PURCHASE_ORDER', p.id, p.reference, p.created_at,
-             p.total_estimated::float8, p.supplier_name, p.status
+             p.total_estimated::float8, p.supplier_name, p.status, NULL
         FROM purchase_orders p
        WHERE p.business_id = ${businessId}
          AND (${term}::text IS NULL
@@ -54,7 +55,7 @@ export async function listHistory(businessId, { from, to, search = '', kind, lim
              (SELECT COALESCE(SUM(ri.quantity * ri.unit_cost), 0)::float8
                 FROM purchase_receipt_items ri
                WHERE ri.purchase_receipt_id = r.id),
-             o.supplier_name, 'RECEIVED'
+             o.supplier_name, 'RECEIVED', NULL
         FROM purchase_receipts r
         JOIN purchase_orders o ON o.id = r.purchase_order_id
        WHERE r.business_id = ${businessId}

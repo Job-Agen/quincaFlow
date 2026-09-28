@@ -22,7 +22,7 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { ADJUSTMENT_REASONS, MOVEMENT_LABELS } from '@/domain/stock';
 import { describeStock } from '@/domain/units';
-import { dateTime, money, quantity } from '@/utils/format';
+import { dateTime, money, quantity, withUnit } from '@/utils/format';
 
 /**
  * Fiche produit : état du stock, conditionnements, et journal des mouvements.
@@ -146,9 +146,7 @@ export default function ProductPage({ params }) {
                       {data.units.map((unit) => (
                         <tr key={unit.id}>
                           <td style={{ paddingLeft: 16 }}>{unit.label}</td>
-                          <td className="num">
-                            {quantity(unit.factor)} {data.base_unit}
-                          </td>
+                          <td className="num">{withUnit(unit.factor, data.base_unit)}</td>
                           <td className="num" style={{ paddingRight: 16 }}>
                             {money(unit.price, currency)}
                           </td>
@@ -264,7 +262,7 @@ function AdjustSheet({ open, product, onClose, onConfirm }) {
     <Sheet open={open} title="Ajuster le stock" onClose={onClose}>
       {error ? <Notice tone="error">{error}</Notice> : null}
       <p className="small muted">
-        Stock enregistré : {quantity(product.stock_quantity)} {product.base_unit}
+        Stock enregistré : {withUnit(product.stock_quantity, product.base_unit)}
       </p>
       <TextField
         label={`Stock réellement compté (${product.base_unit})`}
