@@ -113,6 +113,47 @@ d'écrire — le frontend n'est jamais la source de vérité financière.
   répare à la main en base.
 - **Pages légales** (conditions d'utilisation, confidentialité).
 
+## Mise en service
+
+Deux gestes restent à faire à la main, dans la console de l'hébergeur. Ils ne
+peuvent pas vivre dans ce dépôt : l'un porte un mot de passe, l'autre ouvre le
+site au public.
+
+### 1. La base
+
+La base Neon du projet porte encore le schéma de l'application précédente : dix
+tables en `id, user_id, data jsonb, updated_at`. Cinq d'entre elles s'appellent
+comme les nouvelles — `users`, `products`, `sales`, `expenses`,
+`stock_movements` — sans rien avoir en commun avec elles.
+
+**Rejouer `schema.sql` par-dessus ne suffit donc pas** : `CREATE TABLE IF NOT
+EXISTS` saute ces cinq tables, et l'application échouerait à l'exécution sur des
+colonnes absentes, au lieu de refuser de démarrer. Il faut une base neuve.
+
+1. Console Neon → projet `quincaFlow` → **Databases** → créer une base
+   `quincaflow` (l'ancienne reste intacte, consultable).
+2. **SQL Editor**, base `quincaflow` : coller le contenu de `schema.sql` et
+   exécuter. 21 tables sont créées.
+3. **Connection string** de cette base → la coller dans Vercel → Settings →
+   Environment Variables → `DATABASE_URL`, pour *Production* **et** *Preview*
+   (elle manque aujourd'hui en Preview).
+4. Vérifier que `JWT_SECRET` est défini dans les mêmes environnements.
+   L'application refuse de démarrer sans lui, plutôt que de signer les sessions
+   avec une valeur connue.
+5. Redéployer.
+
+### 2. L'accès au site
+
+Le site répond aujourd'hui par une redirection vers la page de connexion Vercel :
+la protection des déploiements est active, et aucun commerçant ne peut ouvrir
+l'application — ni depuis le lien, ni depuis l'APK.
+
+Vercel → projet `quincaflow` → Settings → **Deployment Protection** → *Vercel
+Authentication* → **Disabled**, puis enregistrer.
+
+Une fois ces deux points faits, `https://quincaflow.vercel.app/api/health` doit
+répondre `{"status":"ok"}` sans redirection.
+
 ## Rôles
 
 Deux rôles (§5), et la frontière passe par l'argent et les prix.
