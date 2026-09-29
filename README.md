@@ -309,28 +309,41 @@ rôle SELLER du §5 ne pourrait être attribué à personne —, Rapports financ
 propriétaire : elles donnent les salaires de toute l'équipe et le loyer de la
 boutique.
 
-## Emballage Android (§38)
+## Application Android native (§41)
 
-L'application s'installe depuis un lien (PWA). Un APK est produit en plus, pour
-les téléphones où le commerçant préfère recevoir un fichier.
+`mobile/` est une application React Native (Expo). Ce n'est pas la page web
+empaquetée : ce sont des écrans natifs qui appellent les mêmes routes d'API.
 
 ```bash
+cd mobile && npm install
+npx expo start                      # développement, avec Expo Go
+EXPO_PUBLIC_API_URL=https://… npx expo start
+
 export ANDROID_HOME=/chemin/vers/android-sdk
-npx cap sync android
+npx expo prebuild --platform android
 cd android && ./gradlew assembleDebug
-# android/app/build/outputs/apk/debug/app-debug.apk
+# mobile/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-`capacitor.config.ts` fixe l'adresse chargée ; `QUINCA_APP_URL` la remplace pour
-viser une préproduction. **L'APK est un lanceur, pas l'application** : les routes
-`/api` calculent les totaux côté serveur, et rien ne fonctionne si l'adresse ne
-répond pas. La mise à jour, elle, ne demande aucune réinstallation — l'APK charge
-l'application hébergée, donc la dernière version publiée.
+**Le domaine est partagé, pas recopié.** `metro.config.js` et `tsconfig.json`
+font pointer `@/…` vers le `src/` du dépôt : l'application mobile importe
+`@/domain/sale`, `@/utils/format` et `@/types` — les fichiers mêmes du web. Une
+correction de calcul vaut donc pour les deux, et les mêmes tests la couvrent.
+C'est la raison pour laquelle React Native a été retenu plutôt que Flutter, qui
+aurait imposé une seconde implémentation en Dart des formules monétaires. La CI
+type-vérifie `mobile/` pour que ce partage ne se rompe pas en silence.
+
+`mobile/android` et `mobile/ios` sont générés par `expo prebuild` et ne sont pas
+versionnés : la configuration vit dans `app.json`.
 
 La version de mise au point est signée par la clé de débogage d'Android : elle
 s'installe en autorisant les « sources inconnues » et ne peut pas être publiée.
 Une version de diffusion suppose une clé de signature détenue par le commerçant,
 qui ne doit pas vivre dans ce dépôt.
+
+**L'application ne fonctionne pas hors ligne**, et c'est délibéré : les totaux
+sont calculés côté serveur (§35). Sans réseau, l'écran annonce la coupure plutôt
+que d'afficher un chiffre périmé (§33).
 
 ## Connectivité (§33) et installation (§38)
 

@@ -998,7 +998,7 @@ Le MVP QuincaFlow est donc :
 > hors stock, commandes et réceptions fournisseurs, clients, fournisseurs,
 > historique, dashboard, rapports financiers avec dépenses et marges (§39) et
 > journal de caisse avec justificatifs (§40) — installable sur Android et iOS
-> depuis un lien (§38).
+> depuis un lien (§38), et disponible sur Android en application native (§41).
 
 Architecture :
 
@@ -1073,28 +1073,12 @@ ligne.
 Notifications push, lecture de fichiers hors de l'application, synchronisation en
 arrière-plan, publication sur les stores.
 
-**Ajout : un APK, à côté de la PWA et non à sa place**
+**Suite : une application Android native (§41)**
 
-L'emballage natif que cette section annonçait « possible plus tard » a été
-demandé et réalisé : un APK Android est produit avec Capacitor, à partir de la
-même application. Il ne remplace pas l'installation depuis un lien — il l'ajoute,
-pour les téléphones où le commerçant préfère recevoir un fichier par WhatsApp
-plutôt que d'ouvrir une adresse.
-
-Ce qu'il faut en savoir :
-
-| Point | Détail |
-| --- | --- |
-| Ce que contient l'APK | Un lanceur, pas l'application. QuincaFlow calcule ses totaux côté serveur (§35) et parle à Postgres : empaqueter les écrans sans leur serveur donnerait une coquille incapable d'enregistrer une vente |
-| Dépendance | L'APK n'affiche rien si l'adresse hébergée ne répond pas. Même dépendance que la PWA (§33) : installable n'est toujours pas hors ligne |
-| Identifiant | `tg.quincaflow.app`, nom affiché « MaQuincaillerie », icône de la boutique |
-| Signature | La version de mise au point est signée par la clé de débogage d'Android : elle s'installe en autorisant les « sources inconnues », et ne peut pas être publiée sur un store |
-| Store | Toujours hors périmètre. Une publication demanderait une clé de signature détenue par le commerçant, un compte développeur et une fiche — aucun des trois n'est un problème technique |
-
-La PWA reste la forme de référence : c'est elle qui se met à jour sans geste du
-commerçant (critère 5 ci-dessus). L'APK hérite de cette propriété, puisqu'il
-charge la même application hébergée — une nouvelle version publiée est prise en
-compte à la prochaine ouverture, sans réinstaller l'APK.
+La PWA reste la forme décrite ci-dessus, et continue de valoir pour iOS. Android
+reçoit en plus une **véritable application**, écrite en React Native : c'est
+l'objet du §41. Ce n'est pas un emballage de la page web — c'est un second
+client, avec ses propres écrans, qui appelle les mêmes routes d'API.
 
 ---
 
@@ -1361,3 +1345,95 @@ les salaires de toute l'équipe et le loyer de la boutique.
 6. Le graphique de répartition n'affiche aucun poste que la légende n'affiche
    aussi, avec son montant.
 7. Le journal d'une boutique ne contient aucune ligne d'une autre (§29).
+
+---
+
+## 41. Application Android native
+
+**Objectif**
+
+Livrer sur Android une application installée, écrite en React Native, plutôt
+qu'une page web déguisée. Le §38 garde sa valeur — la PWA reste la forme
+d'installation universelle, et la seule pour iOS en V1 — mais Android reçoit un
+vrai client natif.
+
+**Pourquoi React Native plutôt que Flutter**
+
+La question s'est posée entre les deux. Le partage du domaine a tranché.
+
+`src/domain` contient l'arithmétique qui décide de l'argent du commerçant : la
+vente du §11, les conditionnements du §10, la répartition de la remise et le
+bénéfice net du §39. Ce sont 679 lignes de TypeScript pur, couvertes par les
+tests du web.
+
+- En React Native, ces fichiers sont **importés tels quels**. Une correction de
+  calcul vaut pour le web et pour le mobile, et les mêmes tests la couvrent.
+- En Flutter, ils auraient été réécrits en Dart. Deux implémentations des mêmes
+  formules, qu'il aurait fallu garder d'accord à la main — et c'est exactement
+  là que naissent les écarts de montants entre l'écran et la facture.
+
+Flutter aurait offert un rendu plus homogène sur les vieux Android. Pour une
+application de formulaires et de listes, cet avantage ne pèse pas le risque
+d'avoir deux vérités sur le prix d'un sac de ciment.
+
+**Ce qui est partagé, ce qui ne l'est pas**
+
+| Couche | Sort |
+| --- | --- |
+| Routes d'API, couche serveur, base | Inchangées. Le mobile est un client de plus |
+| `src/domain`, `src/types`, `src/utils` | **Importés tels quels** par le mobile, via Metro et les chemins TypeScript |
+| Écrans, navigation, styles | Réécrits en natif. React Native n'a ni `div` ni CSS en cascade |
+| Client HTTP | Réécrit, et c'est la divergence assumée : le transport des jetons diffère (voir ci-dessous) |
+
+**Transport de la session**
+
+Le navigateur reçoit ses jetons en cookies `HttpOnly`, que le JavaScript de la
+page ne peut pas lire — c'est ce qui met une session hors de portée d'un script
+injecté. Une application native n'a pas de cookie exploitable.
+
+Les routes d'authentification rendent donc les jetons dans le corps de la
+réponse, **mais seulement sur demande explicite** : l'en-tête
+`x-quinca-client: native`, que le web ne pose jamais. Le second transport
+n'affaiblit pas le premier.
+
+| Règle | Raison |
+| --- | --- |
+| Les jetons ne figurent dans aucune réponse au navigateur | Sinon les cookies `HttpOnly` ne protègent plus rien |
+| Le cookie prime sur le corps partout où les deux se présentent | Sinon un corps forgé substituerait une session à celle du gérant |
+| Le refresh token va dans le coffre du système (Keystore) | Il vaut trente jours de session, et un téléphone de comptoir passe de main en main |
+| L'access token ne vit qu'en mémoire | Quinze minutes : l'écrire sur le disque l'exposerait sans rien faire gagner |
+| `getSession()` accepte `Authorization: Bearer` | Sans quoi aucune requête native ne serait authentifiée |
+
+**Périmètre de la première livraison**
+
+Les 25 écrans du web ne sont pas portés d'un coup. La première application
+couvre le parcours de comptoir, celui qu'on fait vingt fois par jour :
+
+```
+Connexion (§7) · Accueil (§8) · Vente rapide (§11, §12) · Produits (§9)
+```
+
+Le reste suit, une fois cette base éprouvée en boutique. Livrer les vingt-cinq
+écrans avant le premier essai reviendrait à construire vingt fois sur un modèle
+peut-être à revoir.
+
+**Ce que l'application native n'apporte pas**
+
+Elle ne fonctionne pas hors ligne. Les totaux sont calculés côté serveur (§35),
+le stock vit en base, et le §33 vaut ici comme ailleurs : sans réseau, l'écran
+annonce la coupure plutôt que d'afficher un chiffre périmé. Une application
+installée n'est pas une application autonome, et le laisser croire ferait
+encaisser des ventes sur un stock imaginaire.
+
+**Critères d'acceptation**
+
+1. L'APK s'installe sur Android 6 ou plus récent et s'ouvre sur l'écran de
+   connexion.
+2. Une session ouverte survit à la fermeture de l'application : le refresh token
+   du coffre la rouvre au lancement suivant.
+3. Le total affiché par le panier est celui que le serveur enregistre, au franc
+   près — ce sont les mêmes fonctions.
+4. Un panier au-delà du stock est refusé avant l'encaissement, avec le nombre
+   réellement disponible (§12).
+5. Hors réseau, l'application annonce la coupure et n'affiche aucun montant.
+6. Une réponse d'authentification au navigateur ne contient aucun jeton.

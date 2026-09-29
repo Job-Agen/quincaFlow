@@ -31,3 +31,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+# dépendances et artefacts de l'application mobile (mobile/)
+node_modules/
+mobile/.expo/
+mobile/android/
+mobile/ios/
+mobile/*.apk

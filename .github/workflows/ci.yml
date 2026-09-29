@@ -38,6 +38,17 @@ jobs:
       # lecture de base a glissé dans le rendu statique — et il faut le savoir ici.
       - run: npm run build
 
+      # L'application mobile compile contre `src/domain`, `src/types` et
+      # `src/utils` — les fichiers mêmes du web (§41). C'est ce qui garantit
+      # qu'il n'existe qu'une arithmétique des montants, et cette étape est ce
+      # qui l'empêche de se rompre en silence : une signature changée d'un côté
+      # échoue ici, pas trois semaines plus tard sur le téléphone d'un gérant.
+      - run: npm ci
+        working-directory: mobile
+
+      - run: npx tsc --noEmit
+        working-directory: mobile
+
   tests:
     name: Tests unitaires et d'intégration
     runs-on: ubuntu-latest
