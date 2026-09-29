@@ -159,15 +159,30 @@ l'utilisateur, sa quincaillerie et le lien `OWNER` entre les deux.
 Autres commandes :
 
 ```bash
-npm run lint    # ESLint
-npm test        # tests unitaires du domaine (Vitest)
-npm run build   # build de production
+npm run lint       # ESLint
+npm run typecheck  # tsc --noEmit, tests compris
+npm test           # Vitest : métier (node) + interface (jsdom)
+npm run build      # build de production
 ```
 
-### Tests d'intégration
+### Trois familles de tests
 
-Les calculs purs de `src/domain` sont couverts par des tests unitaires. Ce qui ne
-peut pas l'être — l'atomicité d'une vente, le rejet d'une survente par la
+**Métier (node).** Les calculs purs de `src/domain` — unités et conditionnements,
+totaux, marges, transitions de statut. Rapides, sans DOM ni base.
+
+**Interface (jsdom).** Les écrans sont montés pour vérifier ce que le gérant voit
+réellement. Deux comportements y sont gardés parce qu'ils ont déjà cassé ou
+coûteraient cher :
+
+- une coupure réseau ne doit pas renvoyer à l'écran de connexion (§38) — elle
+  l'a fait, et le test échoue sur le code d'avant la correction ;
+- le panier doit refuser la validation au-delà du stock, et dire combien il en
+  reste.
+
+Les deux environnements vivent côte à côte dans `vitest.config.ts` : jsdom n'est
+payé que par les tests qui en ont besoin.
+
+**Intégration (PostgreSQL réel).** Ce qui ne peut pas être simulé — l'atomicité d'une vente, le rejet d'une survente par la
 contrainte de stock, la restitution du stock à l'annulation, le coût moyen
 pondéré après livraison partielle — est vérifié sur un vrai PostgreSQL :
 
@@ -176,15 +191,18 @@ TEST_DATABASE_URL=postgres://…/quincaflow_test npm test
 ```
 
 Sans cette variable, cette partie de la suite est ignorée plutôt qu'en échec. Le
-code testé est bien le code livré, jusqu'au texte SQL : `src/test/neonOverPg.js`
+code testé est bien le code livré, jusqu'au texte SQL : `src/test/neonOverPg.ts`
 présente l'interface du pilote Neon au-dessus de `node-postgres`, plutôt que de
 tordre le code de production pour le rendre testable.
+
+Un test n'est retenu que s'il a d'abord échoué sur le code d'avant le correctif.
+Un test écrit après coup et vert du premier coup ne prouve rien.
 
 ### Intégration continue
 
 `.github/workflows/ci.yml` rejoue tout cela sur chaque pull request et sur chaque
-poussée vers `master`, en deux tâches parallèles : lint + format + build d'un
-côté, tests de l'autre.
+poussée vers `master`, en deux tâches parallèles : lint + format + types + build
+d'un côté, tests de l'autre.
 
 La tâche de tests démarre un service PostgreSQL 16, donc la suite d'intégration
 s'exécute réellement en CI. Une étape de garde le vérifie : comme ces tests
