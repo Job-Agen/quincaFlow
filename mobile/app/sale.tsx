@@ -54,7 +54,9 @@ export default function VenteRapide() {
     const terme = recherche.trim().toLowerCase();
     if (!terme) return catalogue.slice(0, 12);
     return catalogue
-      .filter((p) => p.name.toLowerCase().includes(terme) || (p.sku || '').toLowerCase().includes(terme))
+      .filter(
+        (p) => p.name.toLowerCase().includes(terme) || (p.sku || '').toLowerCase().includes(terme)
+      )
       .slice(0, 12);
   }, [catalogue, recherche]);
 
@@ -209,10 +211,7 @@ export default function VenteRapide() {
                         accessibilityRole="button"
                         accessibilityState={{ selected: unite.id === entree.unitId }}
                         onPress={() => changerUnite(index, unite.id)}
-                        style={[
-                          styles.unite,
-                          unite.id === entree.unitId && styles.uniteActive,
-                        ]}
+                        style={[styles.unite, unite.id === entree.unitId && styles.uniteActive]}
                       >
                         <Text
                           style={[

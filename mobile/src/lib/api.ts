@@ -146,7 +146,8 @@ function withQuery(path: string, query?: Query | null): string {
 }
 
 export const api = {
-  get: <T>(path: string, query?: Query | null) => send<T>(withQuery(path, query), { method: 'GET' }),
+  get: <T>(path: string, query?: Query | null) =>
+    send<T>(withQuery(path, query), { method: 'GET' }),
   post: <T>(path: string, body?: unknown) =>
     send<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body?: unknown) =>

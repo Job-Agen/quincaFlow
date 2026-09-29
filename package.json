@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" *.mjs *.json",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" *.mjs *.json",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"mobile/{app,src}/**/*.{ts,tsx}\" \"mobile/*.{js,json}\" *.mjs *.json",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"mobile/{app,src}/**/*.{ts,tsx}\" \"mobile/*.{js,json}\" *.mjs *.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
