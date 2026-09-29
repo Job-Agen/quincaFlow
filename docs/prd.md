@@ -1071,8 +1071,30 @@ ligne.
 **Hors périmètre de cette exigence**
 
 Notifications push, lecture de fichiers hors de l'application, synchronisation en
-arrière-plan, publication sur les stores. Un emballage natif (Capacitor ou
-équivalent) reste possible plus tard : la PWA en est la base, pas un détour.
+arrière-plan, publication sur les stores.
+
+**Ajout : un APK, à côté de la PWA et non à sa place**
+
+L'emballage natif que cette section annonçait « possible plus tard » a été
+demandé et réalisé : un APK Android est produit avec Capacitor, à partir de la
+même application. Il ne remplace pas l'installation depuis un lien — il l'ajoute,
+pour les téléphones où le commerçant préfère recevoir un fichier par WhatsApp
+plutôt que d'ouvrir une adresse.
+
+Ce qu'il faut en savoir :
+
+| Point | Détail |
+| --- | --- |
+| Ce que contient l'APK | Un lanceur, pas l'application. QuincaFlow calcule ses totaux côté serveur (§35) et parle à Postgres : empaqueter les écrans sans leur serveur donnerait une coquille incapable d'enregistrer une vente |
+| Dépendance | L'APK n'affiche rien si l'adresse hébergée ne répond pas. Même dépendance que la PWA (§33) : installable n'est toujours pas hors ligne |
+| Identifiant | `tg.quincaflow.app`, nom affiché « MaQuincaillerie », icône de la boutique |
+| Signature | La version de mise au point est signée par la clé de débogage d'Android : elle s'installe en autorisant les « sources inconnues », et ne peut pas être publiée sur un store |
+| Store | Toujours hors périmètre. Une publication demanderait une clé de signature détenue par le commerçant, un compte développeur et une fiche — aucun des trois n'est un problème technique |
+
+La PWA reste la forme de référence : c'est elle qui se met à jour sans geste du
+commerçant (critère 5 ci-dessus). L'APK hérite de cette propriété, puisqu'il
+charge la même application hébergée — une nouvelle version publiée est prise en
+compte à la prochaine ouverture, sans réinstaller l'APK.
 
 ---
 

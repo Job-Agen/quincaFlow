@@ -268,6 +268,29 @@ rôle SELLER du §5 ne pourrait être attribué à personne —, Rapports financ
 propriétaire : elles donnent les salaires de toute l'équipe et le loyer de la
 boutique.
 
+## Emballage Android (§38)
+
+L'application s'installe depuis un lien (PWA). Un APK est produit en plus, pour
+les téléphones où le commerçant préfère recevoir un fichier.
+
+```bash
+export ANDROID_HOME=/chemin/vers/android-sdk
+npx cap sync android
+cd android && ./gradlew assembleDebug
+# android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+`capacitor.config.ts` fixe l'adresse chargée ; `QUINCA_APP_URL` la remplace pour
+viser une préproduction. **L'APK est un lanceur, pas l'application** : les routes
+`/api` calculent les totaux côté serveur, et rien ne fonctionne si l'adresse ne
+répond pas. La mise à jour, elle, ne demande aucune réinstallation — l'APK charge
+l'application hébergée, donc la dernière version publiée.
+
+La version de mise au point est signée par la clé de débogage d'Android : elle
+s'installe en autorisant les « sources inconnues » et ne peut pas être publiée.
+Une version de diffusion suppose une clé de signature détenue par le commerçant,
+qui ne doit pas vivre dans ce dépôt.
+
 ## Connectivité (§33) et installation (§38)
 
 QuincaFlow ne promet pas de fonctionner hors ligne. Le PRD écarte l'offline
