@@ -231,14 +231,15 @@ Paramètres, auxquels s'ajoutent deux entrées que le PRD décrit sans les
 rattacher à une navigation : Ventes hors stock (§16) et Équipe, sans laquelle le
 rôle SELLER du §5 ne pourrait être attribué à personne.
 
-## Connectivité (§33)
+## Connectivité (§33) et installation (§38)
 
 QuincaFlow ne promet pas de fonctionner hors ligne. Le PRD écarte l'offline
 transactionnel de la V1 : ventes simultanées et conflits de stock demandent une
 architecture de synchronisation que le terrain n'a pas encore justifiée.
 
 L'application est en revanche installable sur Android et iOS (manifeste, icônes,
-service worker). Ce service worker met en cache la coque et les fichiers
+service worker, métadonnées iOS), comme l'exige le §38 : le gérant l'ouvre depuis
+son écran d'accueil, sans barre d'adresse. Ce service worker met en cache la coque et les fichiers
 statiques — **jamais `/api`**. Un stock servi depuis le disque du téléphone, ce
 serait une vente encaissée sur un article déjà parti : en cas de coupure, l'écran
 affiche une erreur plutôt qu'un chiffre périmé.

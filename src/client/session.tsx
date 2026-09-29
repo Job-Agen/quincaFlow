@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { api } from './api';
+import { api, ApiError } from './api';
 import type { BusinessRow, Profile, Role, UserRow } from '@/types';
 
 /**
@@ -15,9 +15,18 @@ import type { BusinessRow, Profile, Role, UserRow } from '@/types';
  * utilisateur qui a bien une session valide.
  */
 
-/** Ce que tout écran lit de la session courante. */
+/**
+ * Ce que tout écran lit de la session courante.
+ *
+ * `anonymous` et `unreachable` sont deux états bien distincts, et les confondre
+ * est précisément ce qu'il ne faut pas faire : le premier veut dire « le serveur
+ * a répondu que cette session ne vaut plus », le second « je n'ai pas pu le lui
+ * demander ». Renvoyer vers l'écran de connexion sur une simple coupure
+ * réseau ferait croire au gérant qu'il a été déconnecté, et l'enverrait ressaisir
+ * un mot de passe qu'aucun serveur n'est là pour vérifier.
+ */
 export interface SessionValue {
-  status: 'loading' | 'authenticated' | 'anonymous';
+  status: 'loading' | 'authenticated' | 'anonymous' | 'unreachable';
   profile: Profile | null;
   user: UserRow | null;
   business: BusinessRow | null;
@@ -49,8 +58,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .then((profile) => {
         if (!cancelled) setState({ status: 'authenticated', profile });
       })
-      .catch(() => {
-        if (!cancelled) setState({ status: 'anonymous', profile: null });
+      .catch((issue: unknown) => {
+        if (cancelled) return;
+        // Seul un refus explicite du serveur ferme la session.
+        const refused = issue instanceof ApiError && issue.status === 401;
+        setState({ status: refused ? 'anonymous' : 'unreachable', profile: null });
       });
     return () => {
       cancelled = true;

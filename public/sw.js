@@ -20,7 +20,7 @@ const VERSION = 'v1';
 const SHELL = `maquincaillerie-shell-${VERSION}`;
 
 /** Ressources suffisantes pour afficher quelque chose hors ligne. */
-const PRECACHE = ['/', '/login', '/icons/icon-192.png', '/manifest.webmanifest'];
+const PRECACHE = ['/dashboard', '/login', '/icons/icon-192.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
           cache.put(request, response.clone());
           return response;
         } catch (error) {
-          const cached = (await caches.match(request)) || (await caches.match('/'));
+          const cached = (await caches.match(request)) || (await caches.match('/dashboard'));
           if (cached) return cached;
           throw error;
         }

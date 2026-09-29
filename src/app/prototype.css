@@ -890,3 +890,23 @@ body {
   border-radius: 10px;
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
 }
+
+/* Écran de coupure réseau (§38). Fond clair plutôt que la marine de l'écran de
+   chargement : ce n'est pas une attente, c'est un message à lire. */
+.splash--offline {
+  gap: 14px;
+  padding: 0 32px;
+  background: var(--surface-2);
+  color: var(--navy);
+  text-align: center;
+}
+.splash--offline .small {
+  max-width: 34ch;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+.splash--offline .btn {
+  margin-top: 6px;
+  min-width: 160px;
+}

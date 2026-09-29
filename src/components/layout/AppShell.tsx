@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Home, ShoppingCart, Gift, History, Receipt, Menu, Store } from 'lucide-react';
+import { Home, ShoppingCart, Gift, History, Receipt, Menu, Store, WifiOff } from 'lucide-react';
 import { useSession } from '@/client/session';
 import type { ReactNode } from 'react';
 
@@ -46,10 +46,15 @@ function activeHref(pathname: string): string {
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { status } = useSession();
+  const { status, reload } = useSession();
 
   // Connexion et inscription occupent tout l'écran, et n'attendent aucune session.
   if (PUBLIC_ROUTES.includes(pathname)) return children;
+
+  // Le serveur est injoignable : on le dit, et on n'affiche rien d'autre. Pas de
+  // chiffre venu du cache, pas de renvoi vers la connexion — la session du gérant
+  // est valide, c'est le réseau qui manque (§38).
+  if (status === 'unreachable') return <Unreachable onRetry={reload} />;
 
   // Tant que la session n'est pas connue, les écrans protégés ne sont pas montés.
   // Les monter d'abord leur ferait lancer des requêtes vouées au 401, puis les
@@ -85,7 +90,24 @@ function Splash() {
   return (
     <div className="splash" role="status" aria-label="Chargement">
       <Store size={30} />
-      <span>QuincaFlow</span>
+      <span>MaQuincaillerie</span>
+    </div>
+  );
+}
+
+/** Écran de coupure : ce que le gérant voit quand le serveur ne répond pas. */
+function Unreachable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="splash splash--offline" role="alert">
+      <WifiOff size={30} />
+      <strong>Pas de connexion</strong>
+      <span className="small muted">
+        Vos chiffres ne peuvent pas être affichés tant que le serveur est injoignable. Rien n’est
+        perdu : reconnectez-vous au réseau puis réessayez.
+      </span>
+      <button type="button" className="btn btn--sm" onClick={onRetry}>
+        Réessayer
+      </button>
     </div>
   );
 }

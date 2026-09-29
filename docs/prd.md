@@ -901,6 +901,8 @@ Cibles UX : gros boutons ; champs courts ; recherche rapide ; minimum de saisie 
 FCFA affiché clairement ; actions principales visibles ; aucun menu complexe
 nécessaire pour vendre.
 
+L'application doit par ailleurs s'installer sur le téléphone du gérant (§38).
+
 ---
 
 ## 33. Connectivité
@@ -915,6 +917,9 @@ de stock et synchronisation peuvent provoquer des incohérences.
 inutiles.
 
 Le vrai offline transactionnel pourra être étudié après validation terrain.
+
+À ne pas confondre avec l'installation sur mobile (§38) : QuincaFlow s'installe
+sur l'écran d'accueil sans pour autant fonctionner hors ligne.
 
 ---
 
@@ -979,7 +984,7 @@ Le MVP QuincaFlow est donc :
 > Un SaaS mobile-first de gestion pour quincailleries permettant de gérer produits
 > et conditionnements, ventes rapides, factures/reçus, stock et mouvements, ventes
 > hors stock, commandes et réceptions fournisseurs, clients, fournisseurs,
-> historique et dashboard.
+> historique et dashboard — installable sur Android et iOS depuis un lien (§38).
 
 Architecture :
 
@@ -988,3 +993,69 @@ Next.js + TypeScript + Neon PostgreSQL + JWT
 ```
 
 avec QuincaFlow conçu dès le départ comme SaaS multi-tenant.
+
+---
+
+## 38. Installation sur mobile
+
+**Objectif**
+
+Le gérant doit pouvoir installer QuincaFlow sur son téléphone, Android ou iOS, et
+le lancer depuis son écran d'accueil comme n'importe quelle autre application :
+une icône, un nom, un démarrage en plein écran.
+
+**Pourquoi**
+
+Une adresse web à retaper chaque matin n'est pas un outil de comptoir. Le
+commerçant qui ouvre son cahier ne cherche pas une barre d'adresse. L'installation
+n'ajoute aucune fonctionnalité : elle rend l'application atteignable en un geste,
+ce qui conditionne l'adoption mesurée au §36.
+
+**Forme retenue : application web installable (PWA)**
+
+Pas d'application native, pas de passage par le Play Store ni par l'App Store en
+V1. Les raisons tiennent au §4 — résister à l'ajout prématuré — et au terrain :
+
+- une mise à jour est publiée en une fois, sans attendre la validation d'un
+  store ni espérer que le commerçant mette à jour ;
+- aucun compte développeur à ouvrir ni à renouveler (25 $ une fois chez Google,
+  99 $ par an chez Apple) ;
+- l'installation se fait depuis un lien, celui-là même qu'on envoie par WhatsApp.
+
+**Ce que cela suppose concrètement**
+
+| Exigence | Détail |
+| --- | --- |
+| Manifeste web | Nom, nom court, description, langue `fr`, `start_url`, `scope`, affichage `standalone`, orientation portrait, couleur de thème |
+| Icônes | 192 et 512 px, plus une version `maskable` qui tient dans le cercle intérieur — sans quoi Android rogne les angles |
+| Service worker | Obligatoire pour qu'Android propose l'installation ; un manifeste seul n'y suffit pas |
+| Métadonnées iOS | Les balises `apple-mobile-web-app-*` ; iOS ignore le manifeste, et sans elles « Ajouter à l'écran d'accueil » n'ouvre qu'un onglet Safari déguisé |
+| HTTPS | Requis pour l'installation comme pour la caméra |
+| Zones sûres | `viewport-fit=cover` et `env(safe-area-inset-*)`, pour que la barre du bas ne passe pas sous l'encoche |
+
+**Ce que le service worker ne doit pas faire**
+
+Il met en cache la coque de l'application et les fichiers statiques. **Jamais
+`/api`.** Un stock servi depuis le disque du téléphone, c'est une vente encaissée
+sur un article déjà parti. En cas de coupure, l'écran affiche une erreur : le
+gérant sait alors qu'il ne sait pas, ce qui vaut mieux qu'un chiffre périmé
+présenté comme certain. Cette règle prolonge le §33 — installable n'est pas hors
+ligne.
+
+**Critères d'acceptation**
+
+1. Sur Android (Chrome), le navigateur propose « Installer l'application », et
+   l'application lancée depuis l'écran d'accueil n'affiche aucune barre d'adresse.
+2. Sur iOS (Safari), « Ajouter à l'écran d'accueil » produit une icône au bon
+   format et un lancement en plein écran.
+3. L'icône installée est celle de la boutique, pas une capture de la page.
+4. Hors réseau, l'application s'ouvre et annonce l'absence de connexion ; elle
+   n'affiche aucun montant ni aucun stock issu du cache.
+5. Une nouvelle version publiée est prise en compte au prochain lancement, sans
+   geste du commerçant.
+
+**Hors périmètre de cette exigence**
+
+Notifications push, lecture de fichiers hors de l'application, synchronisation en
+arrière-plan, publication sur les stores. Un emballage natif (Capacitor ou
+équivalent) reste possible plus tard : la PWA en est la base, pas un détour.
