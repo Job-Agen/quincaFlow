@@ -1,9 +1,9 @@
 import { Link } from 'expo-router';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Card, CardHead, Chargement, Empty, Notice } from '../src/ui';
-import { useResource } from '../src/lib/useResource';
-import { useSession } from '../src/lib/session';
-import { couleurs, rayons } from '../src/lib/theme';
+import { Card, CardHead, Chargement, Empty, Notice } from '../../src/ui';
+import { useResource } from '../../src/lib/useResource';
+import { useSession } from '../../src/lib/session';
+import { couleurs, rayons } from '../../src/lib/theme';
 import { money, withUnit } from '@/utils/format';
 import type { DashboardSummary } from '@/types';
 

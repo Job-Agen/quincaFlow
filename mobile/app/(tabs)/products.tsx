@@ -1,9 +1,19 @@
 import { useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Chargement, Empty, Notice } from '../src/ui';
-import { useResource } from '../src/lib/useResource';
-import { useSession } from '../src/lib/session';
-import { CIBLE_TACTILE, couleurs, rayons } from '../src/lib/theme';
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Chargement, Empty, Notice } from '../../src/ui';
+import { useResource } from '../../src/lib/useResource';
+import { useSession } from '../../src/lib/session';
+import { CIBLE_TACTILE, couleurs, rayons } from '../../src/lib/theme';
 import { money, withUnit } from '@/utils/format';
 import type { Product } from '@/types';
 
@@ -19,7 +29,8 @@ import type { Product } from '@/types';
  * d'entrée de gamme.
  */
 export default function Produits() {
-  const { currency } = useSession();
+  const router = useRouter();
+  const { currency, isOwner } = useSession();
   const [recherche, setRecherche] = useState('');
   const { data, loading, error, reload } = useResource<Product[]>('/api/products', {
     search: recherche,
@@ -51,7 +62,12 @@ export default function Produits() {
         renderItem={({ item }) => {
           const enAlerte = item.stock_quantity <= item.low_stock_threshold;
           return (
-            <View style={styles.ligne}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Ouvrir ${item.name}`}
+              onPress={() => router.push(`/products/${item.id}`)}
+              style={styles.ligne}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={styles.titre}>{item.name}</Text>
                 <Text style={[styles.sous, enAlerte && { color: couleurs.red }]}>
@@ -62,10 +78,21 @@ export default function Produits() {
                 </Text>
               </View>
               <Text style={styles.prix}>{money(item.selling_price, currency)}</Text>
-            </View>
+            </Pressable>
           );
         }}
       />
+
+      {isOwner ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Nouveau produit"
+          onPress={() => router.push('/products/new')}
+          style={styles.fab}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -94,4 +121,16 @@ const styles = StyleSheet.create({
   titre: { fontSize: 14, fontWeight: '700', color: couleurs.ink },
   sous: { fontSize: 12, color: couleurs.muted },
   prix: { fontSize: 14, fontWeight: '800', color: couleurs.ink },
+  fab: {
+    position: 'absolute',
+    right: 18,
+    bottom: 18,
+    width: 56,
+    height: 56,
+    borderRadius: rayons.full,
+    backgroundColor: couleurs.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
 });

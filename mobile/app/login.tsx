@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Field, Notice } from '../src/ui';
@@ -14,6 +15,7 @@ import { couleurs } from '../src/lib/theme';
  * libre plutôt qu'en mode e-mail, qui masquerait le pavé numérique.
  */
 export default function Connexion() {
+  const router = useRouter();
   const { ouvrir } = useSession();
   const marges = useSafeAreaInsets();
   const [identifiant, setIdentifiant] = useState('');
@@ -79,6 +81,14 @@ export default function Connexion() {
             Mot de passe oublié ? Le propriétaire de la boutique peut vous en attribuer un nouveau
             depuis Plus → Équipe.
           </Text>
+
+          <Text
+            accessibilityRole="link"
+            style={styles.lien}
+            onPress={() => router.push('/register')}
+          >
+            Pas encore de boutique ? En créer une
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -97,4 +107,11 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   aide: { fontSize: 12, lineHeight: 18, color: couleurs.muted, textAlign: 'center' },
+  lien: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: couleurs.blue,
+    textAlign: 'center',
+    paddingVertical: 10,
+  },
 });

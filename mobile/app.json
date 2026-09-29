@@ -26,7 +26,20 @@
       "bundleIdentifier": "tg.quincaflow.app",
       "supportsTablet": true
     },
-    "plugins": ["expo-router", "expo-secure-store"],
-    "experiments": { "typedRoutes": true }
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MaQuincaillerie accède à vos photos pour joindre le reçu d’une dépense.",
+          "cameraPermission": "MaQuincaillerie utilise l’appareil photo pour prendre le reçu d’une dépense."
+        }
+      ],
+      "./plugins/withPermissionsMinimales"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

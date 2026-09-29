@@ -1404,18 +1404,28 @@ n'affaiblit pas le premier.
 | L'access token ne vit qu'en mémoire | Quinze minutes : l'écrire sur le disque l'exposerait sans rien faire gagner |
 | `getSession()` accepte `Authorization: Bearer` | Sans quoi aucune requête native ne serait authentifiée |
 
-**Périmètre de la première livraison**
+**Périmètre**
 
-Les 25 écrans du web ne sont pas portés d'un coup. La première application
-couvre le parcours de comptoir, celui qu'on fait vingt fois par jour :
+L'application couvre les vingt-cinq écrans du web, livrés en deux temps : le
+parcours de comptoir d'abord — connexion, accueil, vente rapide, produits —
+puis le reste, une fois cette base éprouvée. Livrer les vingt-cinq écrans avant
+le premier essai aurait été construire vingt fois sur un modèle peut-être à
+revoir.
 
-```
-Connexion (§7) · Accueil (§8) · Vente rapide (§11, §12) · Produits (§9)
-```
+La navigation est celle du §6, à six onglets ; les écrans de détail s'empilent
+par-dessus et rendent le bouton de retour d'Android.
 
-Le reste suit, une fois cette base éprouvée en boutique. Livrer les vingt-cinq
-écrans avant le premier essai reviendrait à construire vingt fois sur un modèle
-peut-être à revoir.
+**Permissions**
+
+L'application ne demande qu'Internet et la caméra — cette dernière pour
+photographier un reçu (§40). Les greffons Expo déclarent les permissions de
+toutes leurs capacités et non de celles qu'on emploie : `expo-image-picker` sait
+filmer, donc réclame le micro ; `expo-secure-store` sait s'adosser à l'empreinte,
+donc réclame le capteur. Elles sont retirées par un greffon de configuration.
+
+Ce n'est pas de la cosmétique. Un commerçant à qui Android annonce
+« MaQuincaillerie veut enregistrer l'audio » a raison de refuser d'installer, et
+il aurait tort de s'habituer à accepter.
 
 **Ce que l'application native n'apporte pas**
 

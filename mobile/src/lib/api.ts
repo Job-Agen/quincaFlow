@@ -152,6 +152,10 @@ export const api = {
     send<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body?: unknown) =>
     send<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
+  // PUT pour le justificatif : joindre deux fois la même photo doit donner le
+  // même résultat, un seul reçu (§40).
+  put: <T>(path: string, body?: unknown) =>
+    send<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }),
   delete: <T>(path: string) => send<T>(path, { method: 'DELETE' }),
 };
 

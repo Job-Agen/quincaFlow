@@ -10,11 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Button, Card, CardHead, Chargement, Empty, Notice } from '../src/ui';
-import { useResource } from '../src/lib/useResource';
-import { useSession } from '../src/lib/session';
-import { api } from '../src/lib/api';
-import { couleurs, rayons, CIBLE_TACTILE } from '../src/lib/theme';
+import { Button, Card, CardHead, Chargement, Empty, Notice } from '../../src/ui';
+import { useResource } from '../../src/lib/useResource';
+import { useSession } from '../../src/lib/session';
+import { api } from '../../src/lib/api';
+import { couleurs, rayons, CIBLE_TACTILE } from '../../src/lib/theme';
 import { buildSaleLine, totalsOf, baseQuantitiesByProduct } from '@/domain/sale';
 import { money, withUnit } from '@/utils/format';
 import type { Product, Sale } from '@/types';
@@ -133,7 +133,7 @@ export default function VenteRapide() {
       });
       setPanier([]);
       setOccupe(false);
-      router.replace({ pathname: '/dashboard', params: { vendu: vente.reference } });
+      router.replace(`/sales/${vente.id}`);
     } catch (souci) {
       setErreur(souci instanceof Error ? souci.message : 'La vente n’a pas été enregistrée.');
       setOccupe(false);
