@@ -1,0 +1,23 @@
+import type { NextRequest } from 'next/server';
+import { handle, json, readBody } from '../../../lib/http';
+import { requireAuth, requireOwner } from '../../../lib/auth';
+import { createProduct, listProducts } from '../../../server/products';
+
+export async function GET(request: NextRequest) {
+  return handle(async () => {
+    const session = await requireAuth();
+    const params = request.nextUrl.searchParams;
+    return json(
+      await listProducts(session.businessId, {
+        search: params.get('search') || '',
+        filter: params.get('filter') || 'all',
+      })
+    );
+  });
+}
+
+export async function POST(request: NextRequest) {
+  return handle(async () =>
+    json(await createProduct(await requireOwner(), await readBody(request)), 201)
+  );
+}

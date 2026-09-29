@@ -1,0 +1,21 @@
+import type { NextRequest } from 'next/server';
+import { handle, json, readBody } from '../../../lib/http';
+import { requireAuth, requireOwner } from '../../../lib/auth';
+import { createPurchaseOrder, listPurchaseOrders } from '../../../server/purchases';
+
+export async function GET(request: NextRequest) {
+  return handle(async () => {
+    const session = await requireAuth();
+    return json(
+      await listPurchaseOrders(session.businessId, {
+        search: request.nextUrl.searchParams.get('search') || '',
+      })
+    );
+  });
+}
+
+export async function POST(request: NextRequest) {
+  return handle(async () =>
+    json(await createPurchaseOrder(await requireOwner(), await readBody(request)), 201)
+  );
+}

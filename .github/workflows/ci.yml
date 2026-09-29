@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   qualite:
-    name: Lint, format et build
+    name: Lint, format, types et build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -28,6 +28,10 @@ jobs:
       - run: npm run lint
 
       - run: npm run format:check
+
+      # Le build de Next ne vérifie pas les types des fichiers qu'il ne rend pas.
+      # `tsc --noEmit` couvre l'ensemble, tests compris.
+      - run: npm run typecheck
 
       # Volontairement sans DATABASE_URL ni JWT_SECRET : le build ne doit
       # dépendre d'aucun secret. S'il commence à en exiger un, c'est qu'une

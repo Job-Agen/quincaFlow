@@ -126,8 +126,24 @@ body {
 }
 .tabbar__item {
   color: #66717e;
-  font-size: 10px;
+  /* Six onglets sur 390 px : « Historique » doit tenir sans rogner ses voisins. */
+  font-size: 9.5px;
   font-weight: 500;
+  min-width: 0;
+  padding: 0 2px;
+  text-align: center;
+}
+.tabbar__item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* La cinquième tuile du tableau de bord occupe seule sa ligne : elle la prend
+   toute, plutôt que de laisser un vide à côté d'elle. */
+.page--dashboard .tiles > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  min-height: 0;
 }
 .tabbar__item[data-active='true'] {
   font-weight: 700;
@@ -564,6 +580,15 @@ body {
   color: var(--blue);
   font-weight: 600;
   padding: 4px;
+  /* La maquette montre un simple lien : le triangle du <details> natif
+     trahirait un repli technique là où le gérant attend « on m'aide ». */
+  list-style: none;
+  font-size: 13px;
+}
+.auth-help summary::-webkit-details-marker,
+.auth-help summary::marker {
+  display: none;
+  content: '';
 }
 .auth-help p {
   padding: 8px;
@@ -813,4 +838,75 @@ body {
 .sale-lines input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* Scanner de code-barres (maquettes 3 et 5). */
+.scan-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+}
+.scan-button:disabled {
+  opacity: 0.5;
+}
+.appbar .scan-button {
+  width: 44px;
+  height: 44px;
+  background: transparent;
+}
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.search-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.scan-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: #000;
+  aspect-ratio: 4 / 3;
+}
+.scan-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.scan-frame__reticle {
+  position: absolute;
+  inset: 18% 10%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+}
+
+/* Écran de coupure réseau (§38). Fond clair plutôt que la marine de l'écran de
+   chargement : ce n'est pas une attente, c'est un message à lire. */
+.splash--offline {
+  gap: 14px;
+  padding: 0 32px;
+  background: var(--surface-2);
+  color: var(--navy);
+  text-align: center;
+}
+.splash--offline .small {
+  max-width: 34ch;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+.splash--offline .btn {
+  margin-top: 6px;
+  min-width: 160px;
 }
