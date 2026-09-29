@@ -836,6 +836,12 @@ select.input {
   line-height: 1.4;
 }
 
+/* Sans cela, un texte long comprime l'icône en largeur sans toucher à sa
+   hauteur : elle s'affiche en ovale noir au bord de l'encart. */
+.notice > svg {
+  flex: 0 0 auto;
+}
+
 .notice--error {
   background: var(--red-soft);
   color: #96201b;

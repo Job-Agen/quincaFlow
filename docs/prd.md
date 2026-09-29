@@ -379,6 +379,9 @@ grossMargin = sellingAmount - costOfGoodsSold
 **Important :** marge brute ≠ bénéfice net. Transport, salaires, loyer, pertes et
 autres dépenses ne sont pas encore déduits.
 
+Le bénéfice net, lui, exige que ces dépenses soient enregistrées quelque part :
+c'est l'objet du §39, qui ajoute leur saisie et en déduit un résultat de période.
+
 ---
 
 ## 14. F06 — Paiement
@@ -847,6 +850,15 @@ Structure possible :
 /settings
 ```
 
+Les rapports financiers, la saisie des dépenses et le journal de caisse
+s'ajoutent à cette liste (§39, §40) :
+
+```
+/reports
+/expenses
+/cash
+```
+
 ---
 
 ## 31. API V1
@@ -984,7 +996,9 @@ Le MVP QuincaFlow est donc :
 > Un SaaS mobile-first de gestion pour quincailleries permettant de gérer produits
 > et conditionnements, ventes rapides, factures/reçus, stock et mouvements, ventes
 > hors stock, commandes et réceptions fournisseurs, clients, fournisseurs,
-> historique et dashboard — installable sur Android et iOS depuis un lien (§38).
+> historique, dashboard, rapports financiers avec dépenses et marges (§39) et
+> journal de caisse avec justificatifs (§40) — installable sur Android et iOS
+> depuis un lien (§38).
 
 Architecture :
 
@@ -1059,3 +1073,269 @@ ligne.
 Notifications push, lecture de fichiers hors de l'application, synchronisation en
 arrière-plan, publication sur les stores. Un emballage natif (Capacitor ou
 équivalent) reste possible plus tard : la PWA en est la base, pas un détour.
+
+---
+
+## 39. Rapports financiers & marges
+
+**Objectif**
+
+Répondre à la question que le tableau de bord ne pose pas : « qu'est-ce que ce
+mois m'a réellement rapporté ? ». Le §8 regarde la journée en cours ; cette
+section regarde une période, et va jusqu'au bénéfice, dépenses déduites.
+
+Trois réponses attendues :
+
+1. la marge brute **et le bénéfice net réel** de la période ;
+2. le rapport des ventes par période ;
+3. la rentabilité produit par produit.
+
+**Pourquoi le bénéfice net exige une saisie des dépenses**
+
+Le §13 le dit sans détour : marge brute ≠ bénéfice net, parce que transport,
+salaires, loyer et pertes ne sont pas déduits. Tant que ces dépenses ne sont
+enregistrées nulle part, aucun calcul ne peut produire un bénéfice net — il ne
+serait qu'une marge brute rebaptisée, et le commerçant croirait gagner ce qu'il
+a déjà dépensé.
+
+Cette section ajoute donc une **saisie des dépenses**, sans laquelle l'exigence
+« bénéfices réels nets » n'est pas tenable.
+
+**F13 — Dépenses**
+
+| Champ | Détail |
+| --- | --- |
+| Poste | Les six postes fixés au §40 |
+| Libellé | Texte court : « Taxi-bagages livraison Kara », « Salaire Kossi juin » |
+| Montant | FCFA, positif |
+| Date de la dépense | La date où l'argent est sorti, pas celle de la saisie : le gérant note le transport de la veille le lendemain matin |
+| Justificatif | Photo du reçu, facultative (§40) |
+| Note | Facultative |
+
+Une dépense se saisit, se corrige et se supprime. Elle n'entre dans aucun
+mouvement de stock : ce n'est pas une marchandise.
+
+**Calculs de la période**
+
+```
+chiffreAffairesVentes   = somme(ventes.total)              — ventes COMPLETED
+chiffreAffairesHorsStock = somme(prixVente × quantité)     — hors stock non annulées
+chiffreAffaires         = chiffreAffairesVentes + chiffreAffairesHorsStock
+
+coutMarchandises        = somme(ventes.cost_of_goods)
+                        + somme(horsStock: coût × quantité)
+
+margeBrute              = chiffreAffaires − coutMarchandises
+tauxDeMarge             = margeBrute / chiffreAffaires
+
+depensesFonctionnement  = somme(dépenses de la période, hors « Achat de stock »)
+beneficeNet             = margeBrute − depensesFonctionnement
+```
+
+**Pourquoi l'achat de stock n'est pas déduit du bénéfice.** La marchandise achetée
+est déjà comptée, mais au moment où elle est vendue : c'est le coût des
+marchandises vendues (§13, §28). La déduire une seconde fois en tant que dépense
+ferait payer deux fois le même sac de ciment, et un mois de réassort afficherait
+une perte imaginaire. L'achat de stock est une sortie de caisse (§40), pas une
+charge de la période.
+
+Une vente annulée (§25) ne compte dans aucun de ces totaux : elle reste dans
+l'historique, mais un chiffre d'affaires qui l'inclurait ne se retrouverait pas
+en caisse.
+
+**Rapport des ventes par période**
+
+Le total est découpé en tranches : par jour lorsque la période couvre trois mois
+ou moins, par mois au-delà. Chaque tranche porte le nombre de ventes, le chiffre
+d'affaires, le coût et la marge. La somme des tranches doit être exactement
+égale au total affiché en tête : un rapport dont les lignes ne reconstituent pas
+son propre total ne vaut rien.
+
+**Rentabilité produit par produit**
+
+Une ligne par produit vendu sur la période :
+
+| Colonne | Détail |
+| --- | --- |
+| Quantité vendue | En unité de base (§10) : 80 pièces, non « 2 cartons » |
+| Chiffre d'affaires | Somme des lignes de vente, **remise répartie** (voir ci-dessous) |
+| Coût | Somme des `sale_items.unit_cost`, figés à la vente |
+| Marge | Chiffre d'affaires − coût |
+| Taux de marge | Marge / chiffre d'affaires |
+
+Le coût vient de `sale_items.unit_cost`, figé à l'instant de la vente (§28) : le
+prix d'achat qui bougera demain ne doit pas réécrire la marge d'hier.
+
+**Répartition de la remise.** La remise est accordée sur la vente entière, pas
+sur une ligne. L'attribuer à un seul produit fausserait sa rentabilité ; l'ignorer
+ferait que la somme des produits dépasse le chiffre d'affaires réel. Elle est
+donc répartie au prorata du montant de chaque ligne :
+
+```
+chiffreAffairesLigne = lineTotal × (vente.total / vente.subtotal)
+```
+
+**Ventes hors stock.** Elles portent une marge réelle (§16) et sont rattachées à
+leur produit, mais comptées à part dans la ligne du produit : la quantité hors
+stock n'est pas exprimée en unité de base, puisque l'article n'est jamais entré
+en stock.
+
+**Accès**
+
+Réservé au propriétaire. Le §5 donne au vendeur ce qu'il faut pour vendre ;
+salaires, loyer et bénéfice net ne s'y trouvent pas — et un vendeur qui lit la
+fiche de paie de ses collègues est un problème que le produit doit éviter de
+créer.
+
+**Routes** — s'ajoutent au §30 :
+
+```
+/reports
+/expenses
+```
+
+L'entrée vit dans « Plus » (§6), comme Clients et Fournisseurs : on ne consulte
+pas un rapport financier pendant qu'un client attend au comptoir.
+
+**Ce que cette section n'est pas**
+
+Pas de comptabilité. Pas de bilan, pas de TVA, pas d'amortissement, pas de
+compte de résultat au sens légal. Le §4 tient : ce qui est produit ici est un
+état de gestion, lisible par un commerçant, pas une liasse fiscale.
+
+Un seul graphique existe, celui de la répartition des dépenses (§40). Le §8
+n'interdit les graphiques que sur le tableau de bord, et celui-là répond à une
+question qu'une colonne de chiffres pose mal : « lequel de mes postes me mange ? ».
+
+**Honnêteté de l'affichage**
+
+L'écran doit dire ce que le chiffre vaut. « Bénéfice net » n'est juste que si
+toutes les dépenses de la période ont été saisies ; l'écran le rappelle et
+indique combien de dépenses composent le total. Un bénéfice net affiché sans
+aucune dépense enregistrée est une marge brute, et l'écran doit le dire.
+
+**Critères d'acceptation**
+
+1. Le résultat de la période affiche chiffre d'affaires, coût des marchandises,
+   marge brute, dépenses et bénéfice net, dans cet ordre, en FCFA.
+2. La somme des tranches du rapport par période égale le chiffre d'affaires
+   affiché en tête.
+3. La somme des chiffres d'affaires par produit égale le chiffre d'affaires des
+   ventes de la période, remises comprises.
+4. Une vente annulée n'apparaît dans aucun total.
+5. Une dépense saisie fait baisser le bénéfice net du même montant, et lui seul.
+6. Un vendeur qui appelle la route des rapports reçoit un refus.
+7. Le rapport d'une boutique ne contient aucune ligne d'une autre (§29).
+
+---
+
+## 40. Trésorerie & suivi des dépenses
+
+**Objectif**
+
+Savoir ce qui est entré et ce qui est sorti de la caisse, jour par jour. Le §39
+répond à « combien ai-je gagné ? » ; celui-ci répond à « où est passé
+l'argent ? ». Ce ne sont pas la même question, et la réponse peut différer du
+tout au tout : un mois de gros réassort vide la caisse tout en étant rentable.
+
+**F14 — Journal de caisse**
+
+Un seul flux chronologique, entrées et sorties mêlées, avec un solde qui court.
+
+| Sens | Origine |
+| --- | --- |
+| Entrée | Encaissement d'une vente : espèces, Mobile Money, virement ou autre — chaque paiement tel qu'il a été enregistré (§14) |
+| Sortie | Dépense de fonctionnement du commerce (voir les postes ci-dessous) |
+
+Chaque ligne porte sa date, son libellé, son moyen ou son poste, son montant et
+le solde après l'opération. Le total des entrées, celui des sorties et le solde
+de la période sont affichés en tête.
+
+**Ce que le journal ne contient pas.** Les encaissements d'une vente annulée
+(§25) : l'argent est revenu au client, et le compter en entrée gonflerait une
+caisse que le gérant ne retrouverait pas. Les pertes et la casse non plus :
+aucun argent ne sort du tiroir quand une vitre se brise — c'est un ajustement de
+stock (§26), pas une dépense.
+
+**Les ventes hors stock n'y figurent pas encore, et c'est une limite connue.**
+Le §17 suit leur avancement par une étape (« client payé »), sans jamais
+enregistrer de montant encaissé ni de date de règlement. Le journal ne peut donc
+pas les porter sans inventer la somme et le jour. Elles comptent bien, en
+revanche, dans le chiffre d'affaires et la marge du §39. Les faire entrer en
+caisse suppose d'ajouter un montant et une date de paiement au workflow hors
+stock : c'est une évolution du §17, pas de cette section.
+
+**Le solde est celui des opérations saisies, pas le fond de caisse.** Aucun solde
+d'ouverture n'est demandé en V1 : le journal dit combien la période a fait
+entrer et sortir, non combien il reste dans le tiroir. L'écran le dit, plutôt que
+de laisser croire à un solde de caisse réel.
+
+**Postes de dépense**
+
+Six postes, tirés de ce que paie réellement une quincaillerie :
+
+| Code | Libellé | Exemple |
+| --- | --- | --- |
+| `RENT` | Loyer de boutique | Loyer du mois, avance de bail |
+| `UTILITIES` | Énergie et eau | Facture CEET, facture TdE, groupe électrogène |
+| `SALARY` | Salaires des commis | Paie du mois, avance sur salaire, journée d'apprenti |
+| `STOCK_PURCHASE` | Achat de stock | Sacs de ciment payés comptant chez le grossiste |
+| `TRANSPORT` | Transport | Tricycle de livraison, taxi-bagages, carburant |
+| `OTHER` | Divers | Le reste, détaillé par le libellé |
+
+`STOCK_PURCHASE` est une sortie de caisse mais **pas** une charge de la période :
+voir l'explication du §39. Les cinq autres sont déduites du bénéfice net.
+
+**F15 — Justificatif de dépense**
+
+Une dépense peut porter la photo de son reçu, prise à l'appareil ou choisie dans
+la galerie. C'est ce qui rend la dépense opposable : « 45 000 de transport » sans
+pièce se discute, avec le reçu ne se discute plus.
+
+| Exigence | Détail |
+| --- | --- |
+| Source | Appareil photo ou galerie — `capture` proposé, jamais imposé, le reçu étant souvent déjà dans le téléphone |
+| Réduction | L'image est réduite côté téléphone avant l'envoi : un cliché de 4 Mo sur une connexion de comptoir ne part pas |
+| Format | JPEG, un seul justificatif par dépense, remplaçable et supprimable |
+| Chargement | La liste des dépenses ne transporte jamais les images : elle indique seulement qu'un reçu existe, et l'image n'est demandée qu'à l'ouverture de la dépense |
+
+Le justificatif se range parmi les pièces jointes (§20), avec les bons de commande
+et les factures fournisseurs : même table, même notion.
+
+**F16 — Répartition des dépenses**
+
+Un graphique en anneau, une part par poste, accompagné de sa légende chiffrée. Il
+répond à une question qu'une colonne de chiffres pose mal : lequel de mes postes
+me mange ?
+
+| Exigence | Détail |
+| --- | --- |
+| Lisibilité | Les parts sont aussi listées en clair, avec montant et pourcentage : le graphique éclaire, il ne remplace pas les chiffres |
+| Accessibilité | Le graphique est décrit en texte pour un lecteur d'écran, et ne porte aucune information que la légende ne porte aussi |
+| Couleur | La couleur ne distingue pas seule : chaque part est nommée dans la légende, dans le même ordre |
+| Sobriété | Pas d'animation, pas de bibliothèque de graphiques — un SVG, calculé à l'affichage |
+
+**Routes** — s'ajoutent au §30 :
+
+```
+/cash
+```
+
+**Accès**
+
+Propriétaire seul, pour les mêmes raisons qu'au §39 : le journal de caisse donne
+les salaires de toute l'équipe et le loyer de la boutique.
+
+**Critères d'acceptation**
+
+1. Le journal affiche entrées et sorties dans un même flux, du plus récent au
+   plus ancien, chacune avec son solde courant.
+2. Total des entrées − total des sorties = solde de la période, à la ligne près.
+3. L'encaissement d'une vente annulée n'apparaît pas dans le journal.
+4. Une dépense « Achat de stock » apparaît en sortie de caisse et ne réduit pas
+   le bénéfice net du §39.
+5. Une photo de reçu se joint depuis l'appareil ou la galerie, se remplace et se
+   supprime ; la liste des dépenses reste légère.
+6. Le graphique de répartition n'affiche aucun poste que la légende n'affiche
+   aussi, avec son montant.
+7. Le journal d'une boutique ne contient aucune ligne d'une autre (§29).

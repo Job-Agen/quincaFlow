@@ -4,6 +4,8 @@ import Link from 'next/link';
 import {
   ArrowLeftRight,
   ChevronRight,
+  LineChart,
+  Wallet,
   LogOut,
   Settings,
   Truck,
@@ -26,12 +28,17 @@ interface MoreLink {
  * Entrées de « Plus », dans l'ordre du §6 : Clients, Fournisseurs, Paramètres,
  * Déconnexion.
  *
- * Deux ajouts assumés au-delà de cette liste. « Ventes hors stock » donne accès
+ * Quatre ajouts assumés au-delà de cette liste. « Ventes hors stock » donne accès
  * à l'écran du §16, que le PRD décrit mais ne rattache à aucune navigation.
  * « Équipe » crée les comptes vendeurs : sans elle, le rôle SELLER du §5
- * existerait dans le modèle sans aucun moyen de l'attribuer.
+ * existerait dans le modèle sans aucun moyen de l'attribuer. « Rapports
+ * financiers » et « Journal de caisse » sont les portes des §39 et §40, qui les
+ * rattachent ici — on ne lit pas son bénéfice du mois pendant qu'un client attend
+ * au comptoir.
  */
 const LINKS: readonly MoreLink[] = [
+  { href: '/reports', label: 'Rapports financiers', icon: LineChart, ownerOnly: true },
+  { href: '/cash', label: 'Journal de caisse', icon: Wallet, ownerOnly: true },
   { href: '/customers', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Fournisseurs', icon: Truck },
   { href: '/settings', label: 'Paramètres', icon: Settings },

@@ -89,9 +89,25 @@ export async function listHistory(
   );
 }
 
+/** Date civile locale d'un instant, au format `YYYY-MM-DD`. */
+function dateKey(date: Date): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 /**
  * Traduit un raccourci de période en bornes.
- * `today | 7d | 30d | all`, ou des dates explicites côté appelant.
+ *
+ * `today | 7d | 30d | month | last-month | all`. Le mois civil sert aux rapports
+ * financiers (§39) : loyer et salaires se raisonnent au mois, pas sur trente
+ * jours glissants.
+ *
+ * Deux paires de bornes sont rendues pour le même intervalle. Les horodatages
+ * filtrent les ventes, dont la colonne est un `timestamptz` ; les dates civiles
+ * filtrent les dépenses, dont `spent_on` est une `date` (§39). Comparer une
+ * `date` à un horodatage ferait intervenir le fuseau de la session Postgres, et
+ * la dépense du 1er basculerait au 31 selon l'endroit d'où part la requête.
  */
 export function periodBounds(period: string | null | undefined) {
   const end = new Date();
@@ -101,7 +117,20 @@ export function periodBounds(period: string | null | undefined) {
 
   if (period === '7d') start.setDate(start.getDate() - 6);
   else if (period === '30d') start.setDate(start.getDate() - 29);
-  else if (period !== 'today') return { from: null, to: null };
+  else if (period === 'month') start.setDate(1);
+  else if (period === 'last-month') {
+    start.setDate(1);
+    start.setMonth(start.getMonth() - 1);
+    // Fin du mois précédent : le jour 0 du mois courant, soit la veille du 1er.
+    end.setDate(0);
+  } else if (period !== 'today') {
+    return { from: null, to: null, fromDate: null, toDate: null };
+  }
 
-  return { from: start.toISOString(), to: end.toISOString() };
+  return {
+    from: start.toISOString(),
+    to: end.toISOString(),
+    fromDate: dateKey(start),
+    toDate: dateKey(end),
+  };
 }

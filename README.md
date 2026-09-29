@@ -29,9 +29,18 @@ y renvoient par numéro de section.
 | **Achats fournisseurs** | Commandes, réception partielle, coût moyen pondéré, documents joints. |
 | **Historique** | Flux unifié — ventes, hors stock, commandes, réceptions — filtrable par période et par nature. |
 | **Répertoires** | Clients (optionnels sur une vente) et fournisseurs. |
+| **Rapports financiers** (§39) | Marge brute et bénéfice net d'une période, ventes par jour ou par mois, rentabilité produit par produit. |
+| **Trésorerie** (§40) | Journal de caisse — encaissements et dépenses dans un même flux, avec solde courant —, six postes de dépense, photo du reçu, répartition en anneau. |
 
 Volontairement hors périmètre : IA, marketplace, e-commerce, comptabilité OHADA,
 paie, CRM, fidélité, prévisions, multi-boutiques.
+
+**Rapports ≠ comptabilité.** Le bénéfice net du §39 déduit les dépenses saisies,
+pas davantage : ni amortissement, ni TVA, ni bilan. Deux règles le rendent juste
+plutôt que flatteur — l'achat de stock sort de la caisse sans être déduit du
+bénéfice, la marchandise étant déjà comptée à son coût le jour de la vente ; et
+un bénéfice net calculé sans aucune dépense saisie est annoncé pour ce qu'il
+est, une marge brute.
 
 ## Trois décisions structurantes
 
@@ -216,9 +225,10 @@ glissé dans le rendu statique.
 
 ## Modèle de données
 
-20 tables : les 18 du §28, plus `counters` (numérotation) et `login_attempts`
-(freinage des essais de mot de passe). Toutes portent `business_id` à trois
-exceptions près : `users`, `refresh_tokens` et `login_attempts`.
+21 tables : les 18 du §28, plus `counters` (numérotation), `login_attempts`
+(freinage des essais de mot de passe) et `expenses` (§40). Toutes portent
+`business_id` à trois exceptions près : `users`, `refresh_tokens` et
+`login_attempts`.
 
 ```
 businesses
@@ -230,9 +240,15 @@ businesses
  ├── out_of_stock_sales               n'écrit aucun mouvement de stock
  ├── purchase_orders ─── purchase_order_items
  │        └── purchase_receipts ─── purchase_receipt_items
- ├── documents                        pièces jointes d'une commande
+ ├── expenses                         sorties de caisse, datées du jour du décaissement
+ ├── documents                        pièces jointes d'une commande, et reçus de dépense
  └── counters                         numérotation par boutique
 ```
+
+Une dépense porte `spent_on`, une date civile distincte de `created_at` : le
+gérant note au matin le taxi-bagages de la veille, et la dépense doit peser sur
+le jour où l'argent est sorti. Son justificatif se range dans `documents`, avec
+les pièces des commandes fournisseurs — `reference_type = 'EXPENSE'`.
 
 Références : `VE-0001` (vente), `FA-2026-0001` (facture, remise à zéro chaque
 année), `HS-0001` (hors stock), `PO-0001` (commande), `RC-0001` (réception).
@@ -245,9 +261,12 @@ Accueil | Vendre | Produits | Achats | Historique | Plus
 
 L'accueil vit à `/dashboard` ; `/` y redirige, parce que c'est l'adresse qu'un
 gérant tape ou met en favori. « Plus » regroupe Clients, Fournisseurs et
-Paramètres, auxquels s'ajoutent deux entrées que le PRD décrit sans les
-rattacher à une navigation : Ventes hors stock (§16) et Équipe, sans laquelle le
-rôle SELLER du §5 ne pourrait être attribué à personne.
+Paramètres, auxquels s'ajoutent quatre entrées que le PRD décrit sans les
+rattacher à une navigation : Ventes hors stock (§16), Équipe — sans laquelle le
+rôle SELLER du §5 ne pourrait être attribué à personne —, Rapports financiers
+(§39) et Journal de caisse (§40). Ces deux dernières sont réservées au
+propriétaire : elles donnent les salaires de toute l'équipe et le loyer de la
+boutique.
 
 ## Connectivité (§33) et installation (§38)
 

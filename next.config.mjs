@@ -18,8 +18,12 @@ const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   {
+    // `camera=(self)`, et non `camera=()` : une liste vide interdit la caméra à
+    // la page elle-même, ce qui faisait échouer le scan de code-barres (§9) avec
+    // un refus du navigateur plutôt qu'un refus de l'utilisateur. La photo d'un
+    // reçu (§40) passe, elle, par un champ de fichier et n'était pas concernée.
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+    value: 'camera=(self), microphone=(), geolocation=(), interest-cohort=()',
   },
 ];
 

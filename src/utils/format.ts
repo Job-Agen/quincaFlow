@@ -77,6 +77,22 @@ export function dateTime(value: DateLike): string {
   return `${shortDate(value)} · ${time(value)}`;
 }
 
+/** « septembre 2026 » — en-tête d'une tranche mensuelle de rapport (§39). */
+export function monthLabel(value: DateLike): string {
+  return new Date(value).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+}
+
+/**
+ * « 24 % », ou « — » quand le taux n'existe pas.
+ *
+ * Un taux absent n'est pas un taux nul : rien n'a été vendu, et afficher 0 %
+ * se lirait comme une vente faite sans marge (§39).
+ */
+export function percent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return `${value.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
+}
+
 /** « aujourd'hui » / « hier » / date — utilisé pour grouper l'historique. */
 export function dayLabel(value: DateLike): string {
   const date = new Date(value);

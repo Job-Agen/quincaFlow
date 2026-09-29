@@ -357,3 +357,29 @@ CREATE TABLE IF NOT EXISTS documents (
 
 CREATE INDEX IF NOT EXISTS documents_ref_idx ON documents (business_id, reference_type, reference_id);
 
+
+-- ────────────────────────── Dépenses (§39) ─────────────────────────────────
+--
+-- Sans cette table, « bénéfice net » ne peut pas exister : il ne serait qu'une
+-- marge brute rebaptisée (§13). Les postes sont exactement ceux que le §13
+-- nomme — transport, salaires, loyer, pertes — plus un fourre-tout assumé.
+--
+-- `spent_on` est une date, distincte de `created_at` : le gérant note au matin
+-- le taxi-moto de la veille, et la dépense doit peser sur le jour où l'argent
+-- est sorti, pas sur celui de la saisie. Rattachée à `created_at`, elle
+-- basculerait d'un mois à l'autre selon l'heure à laquelle on ouvre l'écran.
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id          text PRIMARY KEY,
+  business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
+  category    text NOT NULL DEFAULT 'OTHER',
+  label       text NOT NULL,
+  amount      numeric(14, 2) NOT NULL CHECK (amount >= 0),
+  spent_on    date NOT NULL DEFAULT CURRENT_DATE,
+  note        text,
+  user_id     text REFERENCES users (id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS expenses_business_date_idx ON expenses (business_id, spent_on DESC);

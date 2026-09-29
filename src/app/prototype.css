@@ -910,3 +910,220 @@ body {
   margin-top: 6px;
   min-width: 160px;
 }
+
+/* ───────────────────── Rapports financiers (§39) ───────────────────────── */
+
+/* Bénéfice net négatif : la tuile change de couleur. C'est le chiffre pour
+   lequel on ouvre l'écran, et un mois déficitaire doit se voir avant d'être lu. */
+.tile--red {
+  background: linear-gradient(120deg, #ffe0e0, #ffd0d0);
+}
+.tile--red svg {
+  color: #c3342f;
+}
+
+/* Cascade du chiffre d'affaires au bénéfice : chaque ligne retranche la
+   précédente, et les sous-totaux se détachent pour qu'on puisse suivre la
+   soustraction du regard. */
+.waterfall .total-line {
+  padding: 7px 0;
+  font-size: 14px;
+}
+.waterfall .total-line--sub {
+  border-top: 1px solid var(--line);
+  font-weight: 700;
+}
+.waterfall .negative {
+  color: var(--red);
+}
+.page--reports .notice,
+.page--reports > .card > p {
+  margin-top: 12px;
+}
+.page--reports .segmented {
+  margin-bottom: 2px;
+}
+.page--reports .list__end {
+  align-items: flex-end;
+}
+
+/* Postes de dépense : cinq libellés ne tiennent pas sur une ligne de téléphone,
+   et un menu déroulant cacherait la liste alors qu'elle est courte. */
+.category-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* Le poste non choisi porte son propre contour : hérité du bandeau segmenté, il
+   n'aurait ni bordure ni fond, et six libellés flottant côte à côte ne se
+   liraient plus comme des boutons.
+
+   L'état choisi est redéclaré ici, et non laissé à la règle du bandeau : à
+   spécificité égale, celle-ci l'emporterait par son ordre dans le fichier et
+   éteindrait le poste sélectionné. */
+.category-grid .segmented__item {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--ink-2);
+}
+.category-grid .segmented__item[data-active='true'] {
+  border-color: transparent;
+  background: linear-gradient(120deg, #0067ae, #00599d);
+  color: #fff;
+}
+
+/* ─────────── Répartition des dépenses en anneau (§40, F16) ─────────────── */
+
+.donut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.donut__ring {
+  width: 172px;
+  height: 172px;
+  flex: 0 0 auto;
+}
+.donut__total {
+  font-size: 22px;
+  font-weight: 800;
+  fill: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.donut__unit {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--muted);
+}
+
+/* La légende porte les mêmes chiffres que l'anneau : c'est elle qui rend le
+   graphique lisible, trois des six teintes n'atteignant pas 3:1 sur fond blanc. */
+.donut__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.donut__legend li {
+  display: grid;
+  grid-template-columns: 12px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.donut__legend li:last-child {
+  border-bottom: none;
+}
+.donut__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+.donut__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.donut__amount {
+  font-weight: 700;
+}
+.donut__share {
+  min-width: 48px;
+  text-align: right;
+}
+
+/* À partir de la tablette, l'anneau et sa légende se placent côte à côte. */
+@media (min-width: 560px) {
+  .donut {
+    flex-direction: row;
+    align-items: center;
+    gap: 24px;
+  }
+  .donut__legend {
+    flex: 1;
+  }
+}
+
+/* ────────────────────── Journal de caisse (§40) ────────────────────────── */
+
+.cash-totals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.cash-totals > div {
+  padding: 12px 10px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  text-align: center;
+}
+.cash-totals .cash-totals__label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.cash-totals .num {
+  font-size: 15px;
+  font-weight: 800;
+}
+.cash-in {
+  color: var(--green-dark);
+}
+.cash-out {
+  color: var(--red);
+}
+
+/* Le sens de l'opération se lit au signe et à la pastille, jamais à la couleur
+   seule : un daltonien doit pouvoir tenir son journal. */
+.cash-row__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.cash-row__icon--in {
+  background: var(--green-soft);
+  color: var(--green-dark);
+}
+.cash-row__icon--out {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.cash-row__balance {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Justificatif : la vignette reste petite, l'image entière s'ouvre au toucher. */
+.receipt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.receipt__thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.receipt__full {
+  width: 100%;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+}
