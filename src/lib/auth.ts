@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from 'crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getSql, one } from './db';
 import { newId } from './ids';
 import { unauthorized, forbidden } from './http';
+import { pickRefreshToken } from './session';
 import type { Role, Session } from '@/types';
 
 /** Le membre retrouvé par un refresh token, tel que la rotation le renvoie. */
@@ -30,9 +31,20 @@ export interface RotatedMember {
  *
  * Le `businessId` embarqué dans l'access token est la clé de l'isolation
  * multi-tenant : toute requête métier filtre dessus (§29).
+ *
+ * **Deux transports pour les mêmes jetons (§41).** Le navigateur les reçoit en
+ * cookies `HttpOnly`, que le JavaScript de la page ne peut pas lire : c'est ce
+ * qui met une session hors de portée d'un script injecté. Une application native
+ * n'a pas de cookies exploitables et les reçoit dans le corps de la réponse,
+ * pour les ranger dans le coffre du téléphone.
+ *
+ * Le second transport n'affaiblit pas le premier : les jetons ne sont rendus
+ * dans le corps que si le client le demande explicitement, et le web ne le
+ * demande jamais. Un script injecté dans la page ne peut donc pas s'en servir
+ * pour exfiltrer une session qu'il ne pouvait pas lire.
  */
 
-const ACCESS_TTL_SECONDS = 15 * 60;
+export const ACCESS_TTL_SECONDS = 15 * 60;
 const REFRESH_TTL_DAYS = 30;
 
 export const ACCESS_COOKIE = 'qf_at';
@@ -76,7 +88,7 @@ export async function signAccessToken({
     .sign(secretKey());
 }
 
-async function verifyAccessToken(token: string): Promise<JWTPayload | null> {
+export async function verifyAccessToken(token: string): Promise<JWTPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey());
     return payload;
@@ -177,17 +189,39 @@ export async function clearSessionCookies(): Promise<void> {
   store.set(REFRESH_COOKIE, '', cookieOptions(0));
 }
 
-export async function readRefreshCookie(): Promise<string | null> {
+/**
+ * Refresh token de la requête : cookie, ou corps envoyé par un client natif.
+ *
+ * Le choix entre les deux vit dans `pickRefreshToken`, qui est pure et testée ;
+ * ici on ne fait que lui présenter le cookie (§41).
+ */
+export async function readRefreshCookie(body?: Record<string, unknown>): Promise<string | null> {
   const store = await cookies();
-  return store.get(REFRESH_COOKIE)?.value || null;
+  return pickRefreshToken(store.get(REFRESH_COOKIE)?.value, body);
 }
 
 // ──────────────────────────────── Gardes ──────────────────────────────────
 
+/**
+ * Jeton d'accès de la requête courante.
+ *
+ * Le cookie d'abord, puis l'en-tête `Authorization` : un navigateur porte
+ * toujours son cookie, et lui donner la priorité évite qu'un en-tête ajouté par
+ * un intermédiaire ne prenne le pas sur la session réelle du gérant.
+ */
+async function accessToken(): Promise<string | null> {
+  const store = await cookies();
+  const cookieToken = store.get(ACCESS_COOKIE)?.value;
+  if (cookieToken) return cookieToken;
+
+  const header = (await headers()).get('authorization') || '';
+  const [scheme, value] = header.split(' ');
+  return scheme?.toLowerCase() === 'bearer' && value ? value : null;
+}
+
 /** Session courante, ou null. À n'utiliser que là où l'anonyme est acceptable. */
 export async function getSession(): Promise<Session | null> {
-  const store = await cookies();
-  const token = store.get(ACCESS_COOKIE)?.value;
+  const token = await accessToken();
   if (!token) return null;
   const payload = await verifyAccessToken(token);
   if (!payload?.sub || !payload?.businessId) return null;

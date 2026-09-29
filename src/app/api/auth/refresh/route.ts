@@ -1,22 +1,21 @@
-import { handle, json, unauthorized } from '../../../../lib/http';
-import {
-  readRefreshCookie,
-  rotateRefreshToken,
-  setSessionCookies,
-  signAccessToken,
-} from '../../../../lib/auth';
+import type { NextRequest } from 'next/server';
+import { handle, json, readBody, unauthorized } from '../../../../lib/http';
+import { readRefreshCookie, rotateRefreshToken, signAccessToken } from '../../../../lib/auth';
+import { respondWithSession } from '../../../../lib/session';
 import { profile } from '../../../../server/accounts';
 
 /**
  * Renouvelle l'access token à partir du refresh token.
  *
  * Le refresh token est remplacé au passage : un jeton ne sert qu'une fois, ce
- * qui rend un jeton volé inutilisable dès que le vrai navigateur s'est
- * rafraîchi.
+ * qui rend un jeton volé inutilisable dès que le vrai client s'est rafraîchi.
+ *
+ * Le navigateur envoie le sien en cookie ; une application native le passe dans
+ * le corps, n'ayant pas de cookie à présenter (§41).
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   return handle(async () => {
-    const rotated = await rotateRefreshToken(await readRefreshCookie());
+    const rotated = await rotateRefreshToken(await readRefreshCookie(await readBody(request)));
     if (!rotated) throw unauthorized();
 
     const session = {
@@ -25,10 +24,11 @@ export async function POST() {
       role: rotated.member.role,
       name: rotated.member.name,
     };
-    await setSessionCookies({
-      accessToken: await signAccessToken(session),
-      refreshToken: rotated.refreshToken,
-    });
-    return json(await profile(session));
+    return json(
+      await respondWithSession(request, await profile(session), {
+        accessToken: await signAccessToken(session),
+        refreshToken: rotated.refreshToken,
+      })
+    );
   });
 }

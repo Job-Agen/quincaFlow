@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { ApiError, handle, json, readBody } from '../../../../lib/http';
-import { issueRefreshToken, setSessionCookies, signAccessToken } from '../../../../lib/auth';
+import { mintTokens, respondWithSession } from '../../../../lib/session';
 import { guardLogin, recordFailedLogin } from '../../../../lib/throttle';
 import { authenticate, profile } from '../../../../server/accounts';
 
@@ -25,10 +25,8 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    await setSessionCookies({
-      accessToken: await signAccessToken(session),
-      refreshToken: await issueRefreshToken(session.userId, session.businessId),
-    });
-    return json(await profile(session));
+    return json(
+      await respondWithSession(request, await profile(session), await mintTokens(session))
+    );
   });
 }

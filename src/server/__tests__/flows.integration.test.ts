@@ -54,6 +54,9 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
 
   beforeAll(async () => {
     process.env.DATABASE_URL = CONNECTION;
+    // Un secret de test, posé ici et nulle part ailleurs : le code de production
+    // continue de refuser de démarrer sans le sien plutôt que d'en inventer un.
+    process.env.JWT_SECRET ||= 'secret-de-test-quincaflow-32-caracteres-minimum';
     pool = new pg.Pool({ connectionString: CONNECTION });
     await pool.query(readFileSync(resolve(process.cwd(), 'schema.sql'), 'utf8'));
 
@@ -1082,5 +1085,30 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       "SELECT count(*)::int AS n FROM documents WHERE reference_type = 'EXPENSE'"
     );
     expect(rows[0]!.n).toBe(0);
+  });
+  // ─────────────── Deux transports pour la session (§41) ───────────────
+
+  it('accepte le refresh token dans le corps, faute de cookie à présenter', async () => {
+    const auth = await import('../../lib/auth');
+    const jeton = await auth.issueRefreshToken(OWNER.userId, OWNER.businessId);
+
+    const tourne = await auth.rotateRefreshToken(jeton);
+    expect(tourne?.member.id).toBe(OWNER.userId);
+    expect(tourne?.member.business_id).toBe(OWNER.businessId);
+    // Un jeton ne sert qu'une fois, quel que soit le transport qui l'a apporté.
+    await expect(auth.rotateRefreshToken(jeton)).resolves.toBeNull();
+    // Et le jeton neuf issu de la rotation, lui, vaut toujours.
+    expect(await auth.rotateRefreshToken(tourne!.refreshToken)).not.toBeNull();
+  });
+
+  it('signe un access token que le serveur accepte tel quel', async () => {
+    const auth = await import('../../lib/auth');
+    const jeton = await auth.signAccessToken(OWNER);
+    const charge = await auth.verifyAccessToken(jeton);
+    // C'est le `businessId` du jeton qui porte le cloisonnement (§29) : s'il ne
+    // survivait pas à l'aller-retour, un client natif lirait la mauvaise boutique.
+    expect(charge?.businessId).toBe(OWNER.businessId);
+    expect(charge?.sub).toBe(OWNER.userId);
+    expect(await auth.verifyAccessToken('jeton.forgé.ici')).toBeNull();
   });
 });

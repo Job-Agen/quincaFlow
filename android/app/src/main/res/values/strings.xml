@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">MaQuincaillerie</string>
-    <string name="title_activity_main">MaQuincaillerie</string>
-    <string name="package_name">tg.quincaflow.app</string>
-    <string name="custom_url_scheme">tg.quincaflow.app</string>
-</resources>

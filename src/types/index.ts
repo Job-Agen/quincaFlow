@@ -76,6 +76,20 @@ export interface Profile {
   role: Role;
 }
 
+/**
+ * Jetons rendus dans le corps à un client natif (§41).
+ *
+ * Absents de toute réponse au navigateur, qui les reçoit en cookies `HttpOnly` :
+ * les rendre lisibles par le JavaScript de la page mettrait la session à portée
+ * d'un script injecté, ce que les cookies évitent précisément.
+ */
+export interface IssuedTokens {
+  accessToken: string;
+  refreshToken: string;
+  /** Secondes de validité de l'access token : le client sait quand renouveler. */
+  expiresIn: number;
+}
+
 // ---------------------------------------------------------------------------
 // Produits, conditionnements et stock (§9, §10, §26)
 // ---------------------------------------------------------------------------
