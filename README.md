@@ -321,9 +321,19 @@ EXPO_PUBLIC_API_URL=https://… npx expo start
 
 export ANDROID_HOME=/chemin/vers/android-sdk
 npx expo prebuild --platform android
-cd android && ./gradlew assembleDebug
-# mobile/android/app/build/outputs/apk/debug/app-debug.apk
+cd android && ./gradlew assembleRelease \
+  -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+# mobile/android/app/build/outputs/apk/release/app-release.apk
 ```
+
+**`assembleRelease`, et non `assembleDebug`** : un paquet de mise au point ne
+contient pas le JavaScript, il le réclame à un serveur Metro et ne sert donc à
+rien hors du poste de développement.
+
+`reactNativeArchitectures` écarte `x86` et `x86_64`, qui ne servent qu'aux
+émulateurs : 48 Mo au lieu de 83, sur un marché où la donnée mobile se paie.
+Les deux architectures conservées couvrent tous les téléphones réels, y compris
+les 32 bits d'entrée de gamme.
 
 **Le domaine est partagé, pas recopié.** `metro.config.js` et `tsconfig.json`
 font pointer `@/…` vers le `src/` du dépôt : l'application mobile importe
