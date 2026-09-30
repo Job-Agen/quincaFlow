@@ -336,12 +336,27 @@ WhatsApp, le poids compte :
 
 | Architectures | Poids | Couverture |
 | --- | --- | --- |
-| `armeabi-v7a` | 26 Mio | Tous les téléphones, sauf les plus récents qui ont abandonné le 32 bits |
-| `arm64-v8a` | 31 Mio | Tous les téléphones depuis 2017 environ |
-| Les deux | 39 Mio | Tout, sans exception |
+| `armeabi-v7a` | 28 Mio | Tous les téléphones, sauf les plus récents qui ont abandonné le 32 bits |
+| `arm64-v8a` | 33 Mio | Tous les téléphones depuis 2017 environ |
+| Les deux | 41 Mio | Tout, sans exception |
 
-Ajouter `-Pandroid.enableMinifyInReleaseBuilds=true
--Pandroid.enableShrinkResourcesInReleaseBuilds=true` réduit encore d'un tiers.
+Ces poids supposent R8 passé. Sa configuration vit dans `app.json`, par
+`expo-build-properties`, et non en options de ligne de commande : `android/`
+étant régénéré par `prebuild`, un réglage passé à la main ne survit à personne.
+Qui l'ignorait obtenait un paquet d'un tiers plus lourd, quatre fichiers `dex`
+au lieu de trois.
+
+Lint réclame plus de Metaspace que n'en accorde le modèle Expo : sur les modules
+Expo générés, `lintVitalAnalyzeRelease` meurt en `OutOfMemoryError: Metaspace`
+avec les 512 Mio par défaut. Portez la ligne à
+
+```properties
+org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1536m
+```
+
+dans `android/gradle.properties` après le `prebuild`. Couper le contrôle
+(`lint { checkReleaseBuilds false }`) ferait passer la compilation en taisant
+une vérification, ce qui n'est pas la même chose que de la faire tenir.
 
 Les permissions sont ramenées à Internet et à la caméra par
 `plugins/withPermissionsMinimales.js` : sans lui, les greffons Expo réclament
