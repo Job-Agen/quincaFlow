@@ -52,7 +52,9 @@ export default function NouvelleCommande() {
   const [occupe, setOccupe] = useState(false);
   const [souci, setSouci] = useState<string | null>(null);
 
-  const catalogue = produits.data || [];
+  // Même raison que sur l'écran de vente : sans mémo, la recherche se
+  // recalcule à chaque rendu au lieu de chaque frappe.
+  const catalogue = useMemo(() => produits.data || [], [produits.data]);
 
   const visibles = useMemo(() => {
     const terme = recherche.trim().toLowerCase();

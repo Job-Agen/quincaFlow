@@ -48,6 +48,14 @@ const CIRCONFERENCE = 2 * Math.PI * RAYON;
 /** Fente entre deux parts : sans elle, deux teintes voisines se lisent comme une. */
 const FENTE = 2;
 
+/** Une part de l'anneau : son poids et l'angle où elle commence. */
+interface Part {
+  categorie: (typeof EXPENSE_CATEGORIES)[number];
+  montant: number;
+  fraction: number;
+  depart: number;
+}
+
 function Anneau({
   postes,
   total,
@@ -59,15 +67,17 @@ function Anneau({
 }) {
   if (total <= 0) return null;
 
-  let curseur = 0;
-  const parts = EXPENSE_CATEGORIES.flatMap((categorie) => {
+  // Chaque part démarre là où la précédente s'arrête. Le cumul se lit dans la
+  // part déjà placée plutôt que dans une variable réassignée pendant le rendu :
+  // le compilateur React refuse la seconde forme, et il a raison — un rendu
+  // interrompu laisserait le curseur à mi-course.
+  const parts = EXPENSE_CATEGORIES.reduce<Part[]>((placees, categorie) => {
     const montant = postes.find((p) => p.category === categorie)?.amount ?? 0;
-    if (montant <= 0) return [];
-    const fraction = montant / total;
-    const part = { categorie, montant, fraction, depart: curseur };
-    curseur += fraction;
-    return [part];
-  });
+    if (montant <= 0) return placees;
+    const precedente = placees[placees.length - 1];
+    const depart = precedente ? precedente.depart + precedente.fraction : 0;
+    return [...placees, { categorie, montant, fraction: montant / total, depart }];
+  }, []);
 
   const description = `Répartition des dépenses : ${parts
     .map(

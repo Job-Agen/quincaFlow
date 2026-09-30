@@ -48,7 +48,9 @@ export default function VenteRapide() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
 
-  const catalogue = produits || [];
+  // Mémorisé pour lui-même : `produits || []` forge un tableau neuf à chaque
+  // rendu, ce qui invaliderait les mémos en aval à chaque frappe du vendeur.
+  const catalogue = useMemo(() => produits || [], [produits]);
 
   const visibles = useMemo(() => {
     const terme = recherche.trim().toLowerCase();

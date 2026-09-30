@@ -400,7 +400,12 @@ function Justificatif({ expenseId, aUnRecu }: { expenseId: string | null; aUnRec
 
       {recu ? (
         <View style={styles.recu}>
-          <Image source={{ uri: recu.url }} style={styles.vignette} resizeMode="cover" />
+          <Image
+            source={{ uri: recu.url }}
+            style={styles.vignette}
+            resizeMode="cover"
+            accessibilityLabel={`Reçu joint : ${recu.name}`}
+          />
           <View style={{ flex: 1 }}>
             <Text style={styles.titre}>{recu.name}</Text>
           </View>
