@@ -20,7 +20,9 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["android.permission.INTERNET"]
+      "permissions": [
+        "android.permission.INTERNET"
+      ]
     },
     "ios": {
       "bundleIdentifier": "tg.quincaflow.app",
@@ -34,6 +36,15 @@
         {
           "photosPermission": "MaQuincaillerie accède à vos photos pour joindre le reçu d’une dépense.",
           "cameraPermission": "MaQuincaillerie utilise l’appareil photo pour prendre le reçu d’une dépense."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
         }
       ],
       "./plugins/withPermissionsMinimales"
