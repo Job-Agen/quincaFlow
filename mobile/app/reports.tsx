@@ -7,7 +7,7 @@ import { useResource } from '../src/lib/useResource';
 import { useSession } from '../src/lib/session';
 import { couleurs, rayons } from '../src/lib/theme';
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS, isOperating } from '@/domain/report';
-import { money, monthLabel, percent, quantity, shortDate, withUnit } from '@/utils/format';
+import { amount, money, monthLabel, percent, quantity, shortDate, withUnit } from '@/utils/format';
 import type { ExpenseBucket, FinancialReport } from '@/types';
 
 /**
@@ -397,7 +397,7 @@ function Tuile({
     <View style={[styles.tuile, { backgroundColor: fond }]}>
       <Text style={styles.tuileLibelle}>{libelle}</Text>
       <Text style={[styles.tuileValeur, alerte && { color: couleurs.red }]}>
-        {valeur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+        {amount(valeur, 0)}
       </Text>
       <Text style={styles.tuileUnite}>{devise}</Text>
     </View>

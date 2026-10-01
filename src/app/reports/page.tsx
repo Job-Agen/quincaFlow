@@ -18,7 +18,7 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { EXPENSE_CATEGORY_LABELS, isOperating } from '@/domain/report';
 import ExpenseDonut from '@/components/reports/ExpenseDonut';
-import { money, monthLabel, percent, quantity, shortDate, withUnit } from '@/utils/format';
+import { amount, money, monthLabel, percent, quantity, shortDate, withUnit } from '@/utils/format';
 import type { FinancialReport, ProductProfit } from '@/types';
 
 /**
@@ -362,7 +362,7 @@ function Tile({
         <Icon size={16} />
       </span>
       <span className="tile__value num">
-        {value.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+        {amount(value, 0)}
       </span>
       <span className="tile__unit">{currency}</span>
     </div>

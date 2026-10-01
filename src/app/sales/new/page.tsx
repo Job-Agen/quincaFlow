@@ -26,7 +26,7 @@ import {
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
 } from '@/domain/sale';
-import { money, quantity as fmtQuantity, withUnit } from '@/utils/format';
+import { amount, money, quantity as fmtQuantity, withUnit } from '@/utils/format';
 import BarcodeScanner from '@/components/products/BarcodeScanner';
 import { errorMessage } from '@/utils/errors';
 import type { CatalogEntry, ContactRow, PaymentMethod, PricedLine, Product, Sale } from '@/types';
@@ -328,7 +328,7 @@ export default function NewSalePage() {
                           }
                         />
                       </td>
-                      <td className="num strong">{line.lineTotal.toLocaleString('fr-FR')}</td>
+                      <td className="num strong">{amount(line.lineTotal, 3)}</td>
                       <td>
                         <button
                           type="button"

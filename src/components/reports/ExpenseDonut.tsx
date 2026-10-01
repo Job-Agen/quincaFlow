@@ -1,7 +1,7 @@
 'use client';
 
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from '@/domain/report';
-import { money, percent } from '@/utils/format';
+import { amount, money, percent } from '@/utils/format';
 import type { ExpenseBucket, ExpenseCategory } from '@/types';
 
 /**
@@ -138,7 +138,7 @@ export default function ExpenseDonut({
           );
         })}
         <text className="donut__total" x="80" y="76" textAnchor="middle">
-          {Number(total).toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
+          {amount(total, 0)}
         </text>
         <text className="donut__unit" x="80" y="94" textAnchor="middle">
           {currency}
