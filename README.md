@@ -15,7 +15,10 @@ vente créée → stock −5 → CA +2 250 → marge calculée → historique �
 
 SaaS multi-tenant, mobile d'abord, en français, en FCFA. Le cahier des charges
 complet est versionné dans [`docs/prd.md`](docs/prd.md) ; les commentaires du code
-y renvoient par numéro de section.
+y renvoient par numéro de section. Pour ajouter quelque chose à l'application une
+fois qu'elle tourne :
+[`docs/ajouter-une-fonctionnalite.md`](docs/ajouter-une-fonctionnalite.md) — la
+marche à suivre, et l'ordre entre la base et le code qu'il ne faut pas inverser.
 
 ## Périmètre du MVP
 
