@@ -152,6 +152,11 @@ et la mauvaise forme — le cas de l'ancienne base de QuincaFlow, dont `users`,
 Ses codes de sortie : `0` rien à faire, `1` il y a du travail ou un conflit de
 forme, `2` configuration absente.
 
+Il parle aux deux sortes de bases : le pilote HTTP de Neon quand l'adresse est
+en `.neon.tech`, `pg` sinon. C'est ce qui lui permet de tourner aussi sur un
+PostgreSQL de poste ou de CI — un contrôle qui ne pourrait s'exercer qu'en
+production s'exercerait trop tard.
+
 ### 10. Déployer, puis vérifier
 
 Fusionner dans `master` ; Vercel construit et publie.
@@ -185,9 +190,23 @@ recompter à la main.
 | `npm test` sur un PostgreSQL 16 | atomicité, contraintes de stock, cloisonnement |
 | un garde dédié | exige que la suite d'intégration **se soit exécutée**, car `npm test` reste vert quand elle s'ignore |
 
-Ce que la CI **ne vérifie pas** : l'état de la base de production. Aucune
-intégration continue ne peut deviner vers quelle base pointe `DATABASE_URL`.
-C'est l'étape 9, et elle est manuelle.
+S'y ajoute la tâche **Schéma**, qui confronte `schema.sql` à deux bases :
+
+- **un PostgreSQL neuf, toujours** — `db:apply` doit tout créer, se relancer sans
+  effet, et `db:check` conclure que plus rien ne manque. C'est ce qui garantit
+  que le schéma et l'outil qui le lit ne divergent pas.
+- **la base de production, si son adresse est fournie** — par le secret de dépôt
+  `PRODUCTION_DATABASE_URL`, à définir dans *Settings → Secrets and variables →
+  Actions*. Avec lui, l'étape 9 cesse d'être une discipline et devient un
+  contrôle : une base en retard fait échouer la CI avant le déploiement.
+
+Sans ce secret, la tâche **avertit bruyamment** plutôt que de passer en
+silence — dans les annotations et dans le résumé du run. Une vérification qui
+n'a pas pu avoir lieu ne doit jamais ressembler à une vérification qui passe,
+pour la même raison qui a fait ajouter le garde des tests d'intégration.
+
+La CI ne peut toujours pas appliquer le schéma à votre place : `db:apply` sur la
+production reste un geste délibéré, à faire **avant** de déployer.
 
 ---
 

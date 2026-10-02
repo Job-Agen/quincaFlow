@@ -26,6 +26,34 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { neon } from '@neondatabase/serverless';
 
+/**
+ * Deux façons de parler à Postgres, et une seule interface.
+ *
+ * `@neondatabase/serverless` ne sait joindre que le proxy HTTP de Neon. C'est
+ * le pilote de l'application, donc celui qu'il faut utiliser contre une base
+ * Neon. Mais un PostgreSQL ordinaire — celui d'un poste de développement, celui
+ * de la CI — ne parle pas ce protocole, et ce script doit pouvoir l'examiner
+ * aussi : sans cela, le contrôle de schéma ne pourrait jamais tourner ailleurs
+ * qu'en production, c'est-à-dire trop tard.
+ *
+ * Deux capacités suffisent ici : le gabarit étiqueté sans paramètre, et
+ * `query()`. Le reste du pilote n'est pas réimplémenté.
+ */
+async function connecter(url) {
+  if (/\.neon\.tech(?::|\/|$)/.test(new URL(url).host) || process.env.FORCE_NEON === '1') {
+    return { sql: neon(url), fermer: async () => {} };
+  }
+  const { default: pg } = await import('pg');
+  const client = new pg.Client({ connectionString: url });
+  await client.connect();
+  const sql = (morceaux, ...valeurs) => {
+    if (valeurs.length) throw new Error('Ce script n’interpole aucune valeur.');
+    return client.query(morceaux.join('')).then((r) => r.rows);
+  };
+  sql.query = (texte) => client.query(texte).then((r) => r.rows);
+  return { sql, fermer: () => client.end() };
+}
+
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCHEMA = join(RACINE, 'schema.sql');
 
@@ -89,24 +117,14 @@ async function etatDeLaBase(sql) {
   return presentes;
 }
 
-async function principal() {
-  const action = process.argv[2];
-  if (action !== 'check' && action !== 'apply') {
-    console.error('Usage : node scripts/db.mjs check|apply');
-    process.exit(2);
-  }
-
-  const url = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
-  if (!url) {
-    console.error(
-      'DATABASE_URL absente. Renseignez-la — la même que celle de l’hébergeur si\n' +
-        'c’est la base de production que vous voulez examiner.'
-    );
-    process.exit(2);
-  }
-
-  const texte = readFileSync(SCHEMA, 'utf8');
-  const sql = neon(url);
+/**
+ * Le diagnostic et, si on le lui demande, la mise à niveau.
+ *
+ * Rend un code de sortie plutôt que d'appeler `process.exit` : la connexion
+ * doit être refermée avant de quitter, sinon un client `pg` laisse le processus
+ * suspendu une fois le travail fait.
+ */
+async function examiner(sql, texte, action) {
   const presentes = await etatDeLaBase(sql);
   const voulues = attendu(texte);
 
@@ -131,7 +149,7 @@ async function principal() {
 
   if (!absentes.length && !incompletes.length) {
     console.log('\nLa base correspond au schéma. Rien à faire.');
-    return;
+    return 0;
   }
 
   if (incompletes.length) {
@@ -144,12 +162,12 @@ async function principal() {
         'échouerait à l’exécution. Renommez-les, ou pointez l’application sur\n' +
         'une base neuve, avant de poursuivre.'
     );
-    process.exit(1);
+    return 1;
   }
 
   if (action === 'check') {
     console.log('\n`npm run db:apply` créera ce qui manque, sans toucher au reste.');
-    process.exit(1);
+    return 1;
   }
 
   console.log('\nApplication du schéma…');
@@ -164,9 +182,35 @@ async function principal() {
   const restantes = [...voulues.keys()].filter((table) => !apres.has(table));
   if (restantes.length) {
     console.error(`\nIl manque encore : ${restantes.join(', ')}`);
-    process.exit(1);
+    return 1;
   }
   console.log('La base correspond maintenant au schéma.');
+  return 0;
+}
+
+async function principal() {
+  const action = process.argv[2];
+  if (action !== 'check' && action !== 'apply') {
+    console.error('Usage : node scripts/db.mjs check|apply');
+    process.exit(2);
+  }
+
+  const url = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
+  if (!url) {
+    console.error(
+      'DATABASE_URL absente. Renseignez-la — la même que celle de l’hébergeur si\n' +
+        'c’est la base de production que vous voulez examiner.'
+    );
+    process.exit(2);
+  }
+
+  const texte = readFileSync(SCHEMA, 'utf8');
+  const { sql, fermer } = await connecter(url);
+  try {
+    process.exitCode = await examiner(sql, texte, action);
+  } finally {
+    await fermer();
+  }
 }
 
 principal().catch((souci) => {
