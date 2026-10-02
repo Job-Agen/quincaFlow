@@ -115,9 +115,7 @@ export default function DashboardPage() {
                       <Icon size={16} />
                     </span>
                     <span className="tile__value num">
-                      {isMoney
-                        ? amount(value, 0)
-                        : String(value)}
+                      {isMoney ? amount(value, 0) : String(value)}
                     </span>
                     {isMoney ? <span className="tile__unit">{currency}</span> : null}
                   </>

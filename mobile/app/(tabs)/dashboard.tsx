@@ -55,9 +55,7 @@ export default function TableauDeBord() {
               <View key={cle} style={[styles.tuile, { backgroundColor: fond }]}>
                 <Text style={styles.tuileLibelle}>{libelle}</Text>
                 <Text style={styles.tuileValeur}>
-                  {montant
-                    ? amount(data[cle], 0)
-                    : String(data[cle])}
+                  {montant ? amount(data[cle], 0) : String(data[cle])}
                 </Text>
                 {montant ? <Text style={styles.tuileUnite}>{currency}</Text> : null}
               </View>

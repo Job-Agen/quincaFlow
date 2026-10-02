@@ -103,9 +103,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                 </div>
                 <div className="tile tile--green">
                   <span className="tile__label">Prix de vente</span>
-                  <span className="tile__value num">
-                    {amount(data.selling_price, 3)}
-                  </span>
+                  <span className="tile__value num">{amount(data.selling_price, 3)}</span>
                   <span className="tile__unit">{currency}</span>
                 </div>
               </div>

@@ -130,29 +130,48 @@ comme les nouvelles — `users`, `products`, `sales`, `expenses`,
 EXISTS` saute ces cinq tables, et l'application échouerait à l'exécution sur des
 colonnes absentes, au lieu de refuser de démarrer. Il faut une base neuve.
 
-1. Console Neon → projet `quincaFlow` → **Databases** → créer une base
-   `quincaflow` (l'ancienne reste intacte, consultable).
-2. **SQL Editor**, base `quincaflow` : coller le contenu de `schema.sql` et
-   exécuter. 21 tables sont créées.
-3. **Connection string** de cette base → la coller dans Vercel → Settings →
+1. Console Neon → projet `quincaFlow` → **Databases** → créer une base neuve.
+   Son nom est libre : il n'apparaît nulle part dans le code, seulement dans la
+   chaîne de connexion. L'ancienne reste intacte, consultable.
+2. **Connection string** de cette base → la coller dans Vercel → Settings →
    Environment Variables → `DATABASE_URL`, pour *Production* **et** *Preview*
    (elle manque aujourd'hui en Preview).
-4. Vérifier que `JWT_SECRET` est défini dans les mêmes environnements.
+3. Vérifier que `JWT_SECRET` est défini dans les mêmes environnements.
    L'application refuse de démarrer sans lui, plutôt que de signer les sessions
    avec une valeur connue.
+4. Créer les tables :
+
+   ```bash
+   DATABASE_URL="<la même chaîne>" npm run db:check   # dit ce qui manque
+   DATABASE_URL="<la même chaîne>" npm run db:apply   # le crée
+   ```
+
+   `db:check` compare les colonnes et pas seulement les noms de tables : c'est
+   lui qui refuse d'avancer sur l'ancienne base, dont cinq tables portent le bon
+   nom et la mauvaise forme. À défaut, le **SQL Editor** de Neon exécute
+   `schema.sql` tel quel.
 5. Redéployer.
+
+**Renommer une base ne déplace rien, mais casse les chaînes qui la nomment.**
+Le nom vit dans `DATABASE_URL`, pas dans le code : après un renommage côté Neon,
+il faut reporter le nouveau nom dans la variable, partout où elle est définie —
+Vercel (*Production* et *Preview*) et le `.env.local` de chaque poste. Tant que
+ce n'est pas fait, l'application répond `degraded` sur `/api/health`.
 
 ### 2. L'accès au site
 
-Le site répond aujourd'hui par une redirection vers la page de connexion Vercel :
-la protection des déploiements est active, et aucun commerçant ne peut ouvrir
+Le site répondait par une redirection vers la page de connexion Vercel : la
+protection des déploiements était active, et aucun commerçant ne pouvait ouvrir
 l'application — ni depuis le lien, ni depuis l'APK.
 
 Vercel → projet `quincaflow` → Settings → **Deployment Protection** → *Vercel
-Authentication* → **Disabled**, puis enregistrer.
+Authentication* → **Disabled**, puis enregistrer. C'est fait depuis le
+2 octobre 2026 : le site s'ouvre sans compte Vercel.
 
-Une fois ces deux points faits, `https://quincaflow.vercel.app/api/health` doit
-répondre `{"status":"ok"}` sans redirection.
+`https://quincaflow.vercel.app/api/health` doit répondre `{"status":"ok"}` sans
+redirection. Attention : cette sonde n'exécute qu'un `SELECT 1`, qui réussit sur
+n'importe quelle base. Elle prouve que la connexion aboutit, pas que le schéma
+est à jour — c'est `npm run db:check` qui le dit.
 
 ## Rôles
 

@@ -20,9 +20,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": [
-        "android.permission.INTERNET"
-      ]
+      "permissions": ["android.permission.INTERNET"]
     },
     "ios": {
       "bundleIdentifier": "tg.quincaflow.app",

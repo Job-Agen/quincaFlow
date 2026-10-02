@@ -361,9 +361,7 @@ function Tile({
         {label}
         <Icon size={16} />
       </span>
-      <span className="tile__value num">
-        {amount(value, 0)}
-      </span>
+      <span className="tile__value num">{amount(value, 0)}</span>
       <span className="tile__unit">{currency}</span>
     </div>
   );
