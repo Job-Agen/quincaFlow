@@ -10,7 +10,9 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"mobile/{app,src}/**/*.{ts,tsx}\" \"mobile/*.{js,json}\" *.mjs *.json",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"mobile/{app,src}/**/*.{ts,tsx}\" \"mobile/*.{js,json}\" *.mjs *.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:check": "node scripts/db.mjs check",
+    "db:apply": "node scripts/db.mjs apply"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
