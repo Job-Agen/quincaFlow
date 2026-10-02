@@ -26,5 +26,11 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  /* `mobile/` est exclu : c'est une autre application, avec ses propres
+     dépendances et son propre `tsconfig.json`. L'y laisser faisait type-vérifier
+     `expo-router` par `next build`, qui réussissait ici — où `mobile/node_modules`
+     existe — et échouait sur Vercel, qui n'installe que les dépendances de la
+     racine. La CI type-vérifie `mobile/` à part, après y avoir installé ses
+     dépendances : la couverture est entière, elle est simplement au bon endroit. */
+  "exclude": ["node_modules", "mobile"]
 }
