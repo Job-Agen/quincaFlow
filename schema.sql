@@ -383,3 +383,27 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 
 CREATE INDEX IF NOT EXISTS expenses_business_date_idx ON expenses (business_id, spent_on DESC);
+
+-- Encaissements hors vente (§42).
+--
+-- Le symétrique de `expenses`, et délibérément de la même forme : même colonnes,
+-- même index, même façon de dater. Un poste y porte une règle comptable comme
+-- `STOCK_PURCHASE` en porte une côté dépenses — `DEBT_REPAYMENT` entre en caisse
+-- sans être du chiffre d'affaires, la vente ayant déjà été comptée (§13).
+--
+-- `received_on` est la date où l'argent est entré, pas celle de la saisie : une
+-- recette de samedi inscrite le lundi appartient au samedi.
+CREATE TABLE IF NOT EXISTS incomes (
+  id          text PRIMARY KEY,
+  business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
+  category    text NOT NULL DEFAULT 'OTHER',
+  label       text NOT NULL,
+  amount      numeric(14, 2) NOT NULL CHECK (amount >= 0),
+  received_on date NOT NULL DEFAULT CURRENT_DATE,
+  note        text,
+  user_id     text REFERENCES users (id) ON DELETE SET NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS incomes_business_date_idx ON incomes (business_id, received_on DESC);

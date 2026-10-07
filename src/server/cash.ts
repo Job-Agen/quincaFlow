@@ -2,11 +2,13 @@ import { getSql, one, rows } from '../lib/db';
 import { round2 } from '../utils/money';
 import { PAYMENT_METHOD_LABELS } from '../domain/sale';
 import { EXPENSE_CATEGORY_LABELS } from '../domain/report';
+import { INCOME_CATEGORY_LABELS } from '../domain/income';
 import type {
   CashEntry,
   CashEntryWithBalance,
   CashJournal,
   ExpenseCategory,
+  IncomeCategory,
   PaymentMethod,
 } from '@/types';
 
@@ -35,7 +37,7 @@ const ENTRY_LIMIT = 300;
 interface CashRow {
   id: string;
   direction: 'IN' | 'OUT';
-  kind: 'SALE_PAYMENT' | 'EXPENSE';
+  kind: 'SALE_PAYMENT' | 'INCOME' | 'EXPENSE';
   occurred_at: string;
   label: string;
   /** Moyen de paiement ou poste de dépense, à traduire en libellé lisible. */
@@ -49,6 +51,9 @@ interface CashRow {
 function detailOf(row: CashRow): string {
   if (row.kind === 'SALE_PAYMENT') {
     return PAYMENT_METHOD_LABELS[row.code as PaymentMethod] ?? 'Encaissement';
+  }
+  if (row.kind === 'INCOME') {
+    return INCOME_CATEGORY_LABELS[row.code as IncomeCategory] ?? 'Divers';
   }
   return EXPENSE_CATEGORY_LABELS[row.code as ExpenseCategory] ?? 'Divers';
 }
@@ -88,6 +93,20 @@ export async function cashJournal(
          AND (${to}::timestamptz IS NULL OR p.created_at <= ${to})
 
       UNION ALL
+      -- Les recettes hors vente (§42) : le troisième filet d'entrée. Datées du
+      -- jour où l'argent est entré, comme les dépenses le sont du jour où il
+      -- est sorti. Un remboursement de dette y figure — il entre bien en
+      -- caisse —, même s'il ne compte pas au chiffre d'affaires du §39.
+      SELECT i.id, 'IN', 'INCOME',
+             (i.received_on + i.created_at::time)::timestamptz,
+             i.label, i.category, i.amount::float8,
+             NULL, NULL
+        FROM incomes i
+       WHERE i.business_id = ${businessId}
+         AND (${fromDate}::date IS NULL OR i.received_on >= ${fromDate})
+         AND (${toDate}::date IS NULL OR i.received_on <= ${toDate})
+
+      UNION ALL
       -- La dépense est datée du jour où l'argent est sorti, et l'heure de saisie
       -- ne sert qu'à départager deux dépenses du même jour.
       SELECT e.id, 'OUT', 'EXPENSE',
@@ -108,7 +127,12 @@ export async function cashJournal(
   // Les totaux ignorent le filtre de sens et la limite : le solde de la période
   // ne doit pas changer selon ce que l'écran affiche.
   const sums = sql`
-    SELECT COALESCE(SUM(p.amount), 0)::float8 AS cash_in,
+    SELECT COALESCE(SUM(p.amount), 0)::float8
+             + (SELECT COALESCE(SUM(i.amount), 0)::float8
+                  FROM incomes i
+                 WHERE i.business_id = ${businessId}
+                   AND (${fromDate}::date IS NULL OR i.received_on >= ${fromDate})
+                   AND (${toDate}::date IS NULL OR i.received_on <= ${toDate})) AS cash_in,
            (SELECT COALESCE(SUM(e.amount), 0)::float8
               FROM expenses e
              WHERE e.business_id = ${businessId}

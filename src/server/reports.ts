@@ -1,7 +1,15 @@
 import { getSql, one, rows } from '../lib/db';
 import { round2 } from '../utils/money';
 import { granularityOf, isOperating, marginRate, periodTotals } from '../domain/report';
-import type { ExpenseBucket, FinancialReport, PeriodBucket, ProductProfit } from '@/types';
+import { revenueShare } from '../domain/income';
+import { incomesByCategory } from './incomes';
+import type {
+  ExpenseBucket,
+  FinancialReport,
+  IncomeBucket,
+  PeriodBucket,
+  ProductProfit,
+} from '@/types';
 
 /**
  * Rapports financiers & marges (§39).
@@ -232,6 +240,11 @@ export async function financialReport(
       .reduce((sum, bucket) => sum + bucket.amount, 0)
   );
 
+  // Les recettes hors vente du §42. `revenueShare` écarte les remboursements de
+  // dette : l'argent entre, mais la vente a été comptée le jour où elle a eu
+  // lieu, et la recompter ici ferait vendre deux fois le même sac de ciment.
+  const incomeBuckets: IncomeBucket[] = await incomesByCategory(businessId, { fromDate, toDate });
+
   const totals = periodTotals({
     salesRevenue: sales.revenue,
     salesCost: sales.cost,
@@ -239,6 +252,7 @@ export async function financialReport(
     outOfStockMargin: oos.margin,
     expenses,
     stockPurchases,
+    otherRevenue: revenueShare(incomeBuckets),
   });
 
   const buckets: PeriodBucket[] = rows<BucketRow>(bucketRows).map((row) => ({

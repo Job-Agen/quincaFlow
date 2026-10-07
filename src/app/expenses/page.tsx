@@ -93,7 +93,7 @@ export default function ExpensesPage() {
     <>
       <AppBar back="/reports" title="Dépenses" />
 
-      <main className="page">
+      <main className="page page--fab">
         {!isOwner ? (
           <Notice tone="warn">Seul le propriétaire enregistre les dépenses de la boutique.</Notice>
         ) : null}

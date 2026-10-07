@@ -30,7 +30,7 @@ export default function OutOfStockPage() {
     <>
       <AppBar back="/dashboard" title="Ventes hors stock" />
 
-      <main className="page">
+      <main className="page page--fab">
         <SearchField value={search} onChange={setSearch} placeholder="Produit, client, vendeur…" />
 
         {error ? <Notice tone="error">{error.message}</Notice> : null}

@@ -38,6 +38,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let expenses: typeof import('../expenses');
   let history: typeof import('../history');
   let cash: typeof import('../cash');
+  let incomes: typeof import('../incomes');
 
   const OWNER: Session = {
     userId: 'usr_owner',
@@ -68,6 +69,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expenses = await import('../expenses');
     history = await import('../history');
     cash = await import('../cash');
+    incomes = await import('../incomes');
   });
 
   afterAll(async () => {
@@ -81,7 +83,8 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       TRUNCATE users, businesses, business_members, refresh_tokens, counters, login_attempts,
         products, product_units, customers, suppliers, sales, sale_items, payments,
         out_of_stock_sales, purchase_orders, purchase_order_items,
-        purchase_receipts, purchase_receipt_items, stock_movements, documents, expenses
+        purchase_receipts, purchase_receipt_items, stock_movements, documents, expenses,
+        incomes
       RESTART IDENTITY CASCADE
     `);
     await pool.query(
@@ -1110,5 +1113,125 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expect(charge?.businessId).toBe(OWNER.businessId);
     expect(charge?.sub).toBe(OWNER.userId);
     expect(await auth.verifyAccessToken('jeton.forgé.ici')).toBeNull();
+  });
+
+  // ─────────────────────── Cahier de recettes (§42) ────────────────────────
+
+  it('porte les encaissements de vente dans la journée où ils ont eu lieu', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+
+    const cahier = await incomes.takingsBook(OWNER.businessId);
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+
+    expect(cahier.days).toHaveLength(1);
+    expect(cahier.days[0]?.day).toBe(aujourdhui);
+    expect(cahier.days[0]?.salesCount).toBe(1);
+    expect(cahier.salesTotal).toBeGreaterThan(0);
+    expect(cahier.otherTotal).toBe(0);
+    // L'en-tête se retrouve dans les lignes.
+    expect(cahier.total).toBe(cahier.days.reduce((n, j) => n + j.total, 0));
+  });
+
+  it('range une recette au jour de sa date, non au jour de sa saisie', async () => {
+    await incomes.createIncome(OWNER, {
+      category: 'SERVICE',
+      label: 'Découpe de fer',
+      amount: 3000,
+      receivedOn: '2026-01-15',
+    });
+
+    const cahier = await incomes.takingsBook(OWNER.businessId);
+    expect(cahier.days.map((j) => j.day)).toContain('2026-01-15');
+    expect(cahier.otherTotal).toBe(3000);
+  });
+
+  it('fait entrer un remboursement de dette en caisse sans gonfler le chiffre d’affaires', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+
+    const avant = await reports.financialReport(OWNER.businessId);
+    const caisseAvant = await cash.cashJournal(OWNER.businessId);
+
+    await incomes.createIncome(OWNER, {
+      category: 'DEBT_REPAYMENT',
+      label: 'Ardoise de Kodjo',
+      amount: 40000,
+    });
+
+    const apres = await reports.financialReport(OWNER.businessId);
+    const caisseApres = await cash.cashJournal(OWNER.businessId);
+
+    // La vente a été comptée le jour où elle a eu lieu : la recompter ici ferait
+    // vendre deux fois la même marchandise (§42).
+    expect(apres.totals.revenue).toBe(avant.totals.revenue);
+    expect(apres.totals.grossMargin).toBeCloseTo(avant.totals.grossMargin, 2);
+    expect(apres.totals.netProfit).toBeCloseTo(avant.totals.netProfit, 2);
+
+    // Mais l'argent est bien entré dans le tiroir.
+    expect(caisseApres.cashIn).toBeCloseTo(caisseAvant.cashIn + 40000, 2);
+    expect(caisseApres.entries.some((e) => e.kind === 'INCOME')).toBe(true);
+  });
+
+  it('fait d’un service rendu une recette et une marge, sans coût de marchandise', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+
+    const avant = await reports.financialReport(OWNER.businessId);
+
+    await incomes.createIncome(OWNER, {
+      category: 'SERVICE',
+      label: 'Pose de serrure',
+      amount: 12000,
+    });
+
+    const apres = await reports.financialReport(OWNER.businessId);
+
+    expect(apres.totals.revenue).toBeCloseTo(avant.totals.revenue + 12000, 2);
+    expect(apres.totals.otherRevenue).toBe(12000);
+    // Sans marchandise derrière, la somme passe entière en marge puis en bénéfice.
+    expect(apres.totals.costOfGoods).toBeCloseTo(avant.totals.costOfGoods, 2);
+    expect(apres.totals.grossMargin).toBeCloseTo(avant.totals.grossMargin + 12000, 2);
+    expect(apres.totals.netProfit).toBeCloseTo(avant.totals.netProfit + 12000, 2);
+  });
+
+  it('corrige et supprime une recette', async () => {
+    const recette = await incomes.createIncome(OWNER, {
+      category: 'RENTAL',
+      label: 'Location brouette',
+      amount: 1000,
+    });
+    expect(recette.amount).toBe(1000);
+
+    const corrigee = await incomes.updateIncome(OWNER, recette.id, {
+      category: 'RENTAL',
+      label: 'Location bétonnière',
+      amount: 2500,
+    });
+    expect(corrigee.label).toBe('Location bétonnière');
+    expect(corrigee.amount).toBe(2500);
+
+    await incomes.deleteIncome(OWNER, recette.id);
+    expect(await incomes.listIncomes(OWNER.businessId)).toHaveLength(0);
+    expect((await incomes.takingsBook(OWNER.businessId)).otherTotal).toBe(0);
+  });
+
+  it('ne laisse pas une boutique voir le cahier d’une autre (§29)', async () => {
+    await incomes.createIncome(OWNER, {
+      category: 'SERVICE',
+      label: 'Réparation chez A',
+      amount: 7000,
+    });
+
+    const chezLeVoisin = await incomes.takingsBook(RIVAL.businessId);
+    expect(chezLeVoisin.otherTotal).toBe(0);
+    expect(chezLeVoisin.days).toHaveLength(0);
+    expect(await incomes.listIncomes(RIVAL.businessId)).toHaveLength(0);
   });
 });

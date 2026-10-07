@@ -54,7 +54,7 @@ function ProductsView() {
         right={<BarcodeScanner onScan={setSearch} label="Scanner un code-barres" />}
       />
 
-      <main className="page page--products">
+      <main className="page page--products page--fab">
         <div className="filter-row">
           <SearchField value={search} onChange={setSearch} placeholder="Rechercher un produit…" />
           <button

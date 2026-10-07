@@ -457,6 +457,65 @@ export interface ExpenseBucket {
   count: number;
 }
 
+// ---------------------------------------------------------------------------
+// Cahier de recettes (§42)
+// ---------------------------------------------------------------------------
+
+/** Les cinq postes d'une recette hors vente (§42). */
+export type IncomeCategory = 'SERVICE' | 'DELIVERY' | 'RENTAL' | 'DEBT_REPAYMENT' | 'OTHER';
+
+export interface IncomeRow {
+  id: string;
+  business_id: string;
+  category: IncomeCategory;
+  label: string;
+  amount: Money;
+  /** Date d'entrée de l'argent, au format `YYYY-MM-DD` — pas celle de la saisie. */
+  received_on: string;
+  note: string | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+/** Total d'un poste de recette sur la période. */
+export interface IncomeBucket {
+  category: IncomeCategory;
+  amount: Money;
+  count: number;
+}
+
+/**
+ * Une journée du cahier (§42).
+ *
+ * `total` est la somme des deux origines. Les garder séparées est ce qui permet
+ * au gérant de voir d'où vient sa journée : vingt mille de ventes et rien
+ * d'autre ne se lit pas comme vingt mille dont quinze de location.
+ */
+export interface TakingsDay {
+  /** Jour au format `YYYY-MM-DD`. */
+  day: string;
+  salesAmount: Money;
+  salesCount: number;
+  otherAmount: Money;
+  otherCount: number;
+  total: Money;
+}
+
+/** Le cahier de recettes d'une période (§42). */
+export interface TakingsBook {
+  from: string | null;
+  to: string | null;
+  /** Encaissements de vente de la période (§14). */
+  salesTotal: Money;
+  /** Recettes hors vente, tous postes confondus. */
+  otherTotal: Money;
+  /** La part des recettes hors vente qui est du chiffre d'affaires (§42). */
+  otherRevenue: Money;
+  total: Money;
+  days: TakingsDay[];
+  byCategory: IncomeBucket[];
+}
+
 /**
  * Résultat d'une période, du chiffre d'affaires au bénéfice net (§39).
  *
@@ -467,6 +526,8 @@ export interface PeriodTotals {
   revenue: Money;
   salesRevenue: Money;
   outOfStockRevenue: Money;
+  /** Recettes hors vente qui comptent comme chiffre d'affaires (§42). */
+  otherRevenue: Money;
   costOfGoods: Money;
   grossMargin: Money;
   marginRate: number | null;
@@ -545,8 +606,8 @@ export interface FinancialReport {
 export interface CashEntry {
   id: string;
   direction: 'IN' | 'OUT';
-  /** `SALE_PAYMENT` pour un encaissement, `EXPENSE` pour une dépense. */
-  kind: 'SALE_PAYMENT' | 'EXPENSE';
+  /** `SALE_PAYMENT` encaissement de vente, `INCOME` recette hors vente (§42), `EXPENSE` dépense. */
+  kind: 'SALE_PAYMENT' | 'INCOME' | 'EXPENSE';
   occurredAt: string;
   label: string;
   /** Moyen de paiement pour une entrée, poste de dépense pour une sortie. */

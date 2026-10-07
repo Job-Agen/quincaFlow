@@ -60,6 +60,7 @@ function reportWith(overrides: Partial<FinancialReport> = {}): FinancialReport {
       revenue: 19250,
       salesRevenue: 19250,
       outOfStockRevenue: 0,
+      otherRevenue: 0,
       costOfGoods: 14343.75,
       grossMargin: 4906.25,
       marginRate: 25.5,

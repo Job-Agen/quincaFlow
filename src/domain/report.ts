@@ -86,6 +86,14 @@ export function periodTotals(parts: {
   expenses: unknown;
   /** La part qui n'est pas une charge — l'achat de stock, déjà compté au coût. */
   stockPurchases?: unknown;
+  /**
+   * Recettes hors vente comptant comme chiffre d'affaires (§42).
+   *
+   * Un service rendu ou une location n'a pas de marchandise derrière : la somme
+   * passe donc entière dans la marge brute. Les remboursements de dette sont
+   * exclus en amont, par `revenueShare` — la vente a déjà été comptée (§13).
+   */
+  otherRevenue?: unknown;
 }): PeriodTotals {
   const salesRevenue = round2(parts.salesRevenue);
   const salesCost = round2(parts.salesCost);
@@ -95,7 +103,9 @@ export function periodTotals(parts: {
   const stockPurchases = round2(parts.stockPurchases);
   const operatingExpenses = round2(expenses - stockPurchases);
 
-  const revenue = round2(salesRevenue + outOfStockRevenue);
+  const otherRevenue = round2(parts.otherRevenue);
+
+  const revenue = round2(salesRevenue + outOfStockRevenue + otherRevenue);
   const costOfGoods = round2(salesCost + (outOfStockRevenue - outOfStockMargin));
   const grossMargin = round2(revenue - costOfGoods);
 
@@ -103,6 +113,7 @@ export function periodTotals(parts: {
     revenue,
     salesRevenue,
     outOfStockRevenue,
+    otherRevenue,
     costOfGoods,
     grossMargin,
     marginRate: marginRate(grossMargin, revenue),

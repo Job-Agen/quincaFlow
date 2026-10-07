@@ -1447,3 +1447,86 @@ encaisser des ventes sur un stock imaginaire.
    réellement disponible (§12).
 5. Hors réseau, l'application annonce la coupure et n'affiche aucun montant.
 6. Une réponse d'authentification au navigateur ne contient aucun jeton.
+
+---
+
+## 42. Cahier de recettes
+
+**Objectif**
+
+Rendre au gérant le cahier qu'il tient à la main : ce qui est entré aujourd'hui,
+hier, avant-hier. Le §39 regarde la rentabilité d'une période, le §40 le
+mouvement de la caisse ; celui-ci répond à la question du soir, la seule que le
+commerçant se pose en fermant : « combien ai-je fait aujourd'hui ? »
+
+Il comble aussi un trou. L'argent qui entre sans passer par une vente de produit
+— une réparation, une livraison facturée, la location d'une brouette, une
+vieille dette remboursée — n'a aujourd'hui nulle part où aller. Il ne figure ni
+dans le chiffre d'affaires, ni dans le journal de caisse. Le cahier de papier le
+portait ; l'application le perdait.
+
+**F17 — Les recettes, jour par jour**
+
+Un écran, deux moitiés qui se complètent.
+
+La première se remplit toute seule : chaque encaissement de vente (§14) tombe
+dans la journée où il a eu lieu. La seconde se saisit à la main : les
+encaissements hors vente.
+
+Chaque journée affiche son total, et la part de chaque origine. La période se
+choisit comme ailleurs — ce mois, le mois dernier, trente jours, tout.
+
+**F18 — Encaissements hors vente**
+
+Un montant, un libellé, une date, un poste, une note facultative. Cinq postes :
+
+| Poste | Exemple |
+| --- | --- |
+| Service rendu | Découpe de fer, réparation, pose |
+| Livraison | Course facturée au client |
+| Location de matériel | Brouette, bétonnière, échafaudage |
+| Remboursement de dette | Un client solde une ardoise ancienne |
+| Divers | Le reste |
+
+Le propriétaire et le vendeur peuvent tous deux en saisir : l'argent entre au
+comptoir, et interdire au vendeur de l'inscrire le ferait disparaître.
+
+**Toute recette n'est pas un chiffre d'affaires.**
+
+C'est la règle de cette section, et elle est la symétrique exacte de l'achat de
+stock au §40.
+
+Un remboursement de dette fait entrer de l'argent, mais la vente a été comptée
+le jour où elle a eu lieu, au prix et au coût de ce jour-là (§13). La recompter
+à l'encaissement gonflerait le chiffre d'affaires d'un mois avec les ventes d'un
+autre, et le gérant croirait avoir vendu deux fois.
+
+Elle entre donc dans le journal de caisse et dans le cahier, mais pas dans le
+chiffre d'affaires du §39. Les quatre autres postes, eux, sont bien du chiffre
+d'affaires — sans coût de marchandise, donc intégralement en marge.
+
+**Ce que le cahier ne contient pas.** Les encaissements d'une vente annulée
+(§25), pour la raison du §40 : l'argent est reparti. Et les ventes hors stock,
+tant que le §17 n'enregistrera ni montant encaissé ni date de règlement — la
+même limite, dite au même endroit.
+
+**Conséquences sur les sections voisines**
+
+- **§39** gagne une ligne : « Recettes hors vente », entre les ventes hors stock
+  et le chiffre d'affaires. Sans coût, elle passe entière dans la marge brute.
+- **§40** gagne une troisième origine d'entrée, à côté des encaissements de
+  vente : les recettes hors vente, avec leur poste pour détail.
+
+**Critères d'acceptation**
+
+1. Un encaissement de vente apparaît dans la journée où il a eu lieu, sans
+   aucune saisie.
+2. Une recette hors vente se saisit, se corrige et se supprime ; elle apparaît
+   le jour de sa date, non le jour de sa saisie.
+3. Le total d'une journée est la somme de ses lignes, à l'unité près.
+4. Un « Remboursement de dette » apparaît dans le cahier et en entrée de caisse,
+   et n'augmente pas le chiffre d'affaires du §39.
+5. Un « Service rendu » augmente le chiffre d'affaires **et** la marge brute du
+   §39, sans toucher au coût des marchandises vendues.
+6. L'encaissement d'une vente annulée n'apparaît pas dans le cahier.
+7. Le cahier d'une boutique ne contient aucune ligne d'une autre (§29).

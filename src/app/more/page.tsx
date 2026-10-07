@@ -3,14 +3,15 @@
 import Link from 'next/link';
 import {
   ArrowLeftRight,
+  BookOpen,
   ChevronRight,
   LineChart,
-  Wallet,
   LogOut,
   Settings,
   Truck,
   UserCog,
   Users,
+  Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
@@ -28,17 +29,22 @@ interface MoreLink {
  * Entrées de « Plus », dans l'ordre du §6 : Clients, Fournisseurs, Paramètres,
  * Déconnexion.
  *
- * Quatre ajouts assumés au-delà de cette liste. « Ventes hors stock » donne accès
+ * Cinq ajouts assumés au-delà de cette liste. « Ventes hors stock » donne accès
  * à l'écran du §16, que le PRD décrit mais ne rattache à aucune navigation.
  * « Équipe » crée les comptes vendeurs : sans elle, le rôle SELLER du §5
  * existerait dans le modèle sans aucun moyen de l'attribuer. « Rapports
  * financiers » et « Journal de caisse » sont les portes des §39 et §40, qui les
  * rattachent ici — on ne lit pas son bénéfice du mois pendant qu'un client attend
- * au comptoir.
+ * au comptoir. « Cahier de recettes » est la porte du §42, et la seule des trois
+ * ouverte au vendeur : elle ne montre aucun prix d'achat.
  */
 const LINKS: readonly MoreLink[] = [
   { href: '/reports', label: 'Rapports financiers', icon: LineChart, ownerOnly: true },
   { href: '/cash', label: 'Journal de caisse', icon: Wallet, ownerOnly: true },
+  // Le cahier du §42 n'est pas réservé au propriétaire : il ne montre que ce qui
+  // est entré, jamais une marge ni un coût, et le vendeur doit pouvoir y
+  // inscrire la réparation qu'il vient d'encaisser au comptoir.
+  { href: '/income', label: 'Cahier de recettes', icon: BookOpen },
   { href: '/customers', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Fournisseurs', icon: Truck },
   { href: '/settings', label: 'Paramètres', icon: Settings },

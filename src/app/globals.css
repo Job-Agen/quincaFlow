@@ -167,6 +167,24 @@ a {
   gap: 14px;
 }
 
+/*
+ * Dégagement du bouton flottant.
+ *
+ * Il s'élève au-dessus du bas de la fenêtre et mesure 56 px : il recouvrait la
+ * dernière ligne des écrans qui en portent un, et notamment les totaux qu'ils
+ * posent en pied — « 52 000 FCFA » s'y lisait « 52 000 FC ». Un total dont les
+ * derniers chiffres disparaissent est pire qu'un total absent.
+ *
+ * La marge porte sur le dernier enfant plutôt que sur la réserve basse de la
+ * page : `padding-bottom` est déjà disputé par `.page` et par
+ * `.shell--detail .page`, dont la spécificité l'emporte — une règle de plus s'y
+ * serait fait écraser en silence, ce qui est exactement ce qui est arrivé au
+ * premier essai. Cette marge-là, personne ne la revendique.
+ */
+.page--fab > :last-child {
+  margin-bottom: 92px;
+}
+
 .page--flush {
   padding-left: 0;
   padding-right: 0;
