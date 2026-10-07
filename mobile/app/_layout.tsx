@@ -82,6 +82,7 @@ function Garde() {
       <Stack.Screen name="reports" options={{ title: 'Rapports financiers' }} />
       <Stack.Screen name="cash" options={{ title: 'Journal de caisse' }} />
       <Stack.Screen name="expenses" options={{ title: 'Dépenses' }} />
+      <Stack.Screen name="income" options={{ title: 'Cahier de recettes' }} />
     </Stack>
   );
 }

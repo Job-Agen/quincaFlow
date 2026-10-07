@@ -28,6 +28,10 @@ const ENTREES: readonly Entree[] = [
   { href: '/reports', libelle: 'Rapports financiers', icone: 'stats-chart', proprietaire: true },
   { href: '/cash', libelle: 'Journal de caisse', icone: 'wallet', proprietaire: true },
   { href: '/expenses', libelle: 'Dépenses', icone: 'card', proprietaire: true },
+  // Le cahier du §42 n'est pas réservé au propriétaire : il ne montre ni marge
+  // ni prix d'achat, et le vendeur doit pouvoir y inscrire la réparation qu'il
+  // vient d'encaisser au comptoir.
+  { href: '/income', libelle: 'Cahier de recettes', icone: 'book' },
   { href: '/customers', libelle: 'Clients', icone: 'people' },
   { href: '/suppliers', libelle: 'Fournisseurs', icone: 'business' },
   { href: '/out-of-stock', libelle: 'Ventes hors stock', icone: 'swap-horizontal' },
