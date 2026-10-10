@@ -1,12 +1,17 @@
 import { useMemo, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button, Card, CardHead, Chargement, Notice } from '../../src/ui';
 import { useResource } from '../../src/lib/useResource';
 import { useSession } from '../../src/lib/session';
 import { api } from '../../src/lib/api';
 import { CIBLE_TACTILE, couleurs, rayons } from '../../src/lib/theme';
-import { PO_STATUS_LABELS, remainingOf } from '@/domain/purchase';
+import {
+  PO_STATUS_LABELS,
+  orderMessageLines,
+  purchaseOrderMessage,
+  remainingOf,
+} from '@/domain/purchase';
 import { dateTime, money, quantity, withUnit } from '@/utils/format';
 import type { PurchaseOrder, PurchaseOrderStatus } from '@/types';
 
@@ -32,7 +37,7 @@ const SUITES: Partial<Record<PurchaseOrderStatus, PurchaseOrderStatus[]>> = {
 
 export default function Commande() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { currency } = useSession();
+  const { profil, currency } = useSession();
   const { data, loading, error, reload } = useResource<PurchaseOrder>(
     id ? `/api/purchase-orders/${id}` : null
   );
@@ -76,6 +81,36 @@ export default function Commande() {
     }
   }
 
+  /**
+   * Le bon de commande, par la feuille de partage du téléphone (§43).
+   *
+   * Cet écran n'envoyait rien : il fallait sortir de l'application, retrouver
+   * le fournisseur dans WhatsApp et retaper la liste. Le texte vient de la
+   * même fonction que le web, donc le fournisseur reçoit le même document
+   * quel que soit l'appareil du gérant (§41).
+   */
+  async function envoyer() {
+    if (!data) return;
+    try {
+      await Share.share({
+        message: purchaseOrderMessage(
+          {
+            reference: data.reference,
+            supplierName: data.supplier_name,
+            createdAt: data.created_at,
+            notes: data.notes,
+            cancelled: data.status === 'CANCELLED',
+          },
+          orderMessageLines(data.items),
+          profil?.business,
+          currency
+        ),
+      });
+    } catch {
+      // Un partage annulé n'est pas une erreur à signaler.
+    }
+  }
+
   async function recevoir() {
     setOccupe(true);
     setSouci(null);
@@ -106,6 +141,9 @@ export default function Commande() {
           <Text style={styles.montant}>{money(data.total_estimated, currency)}</Text>
         </View>
         {data.notes ? <Text style={styles.sous}>{data.notes}</Text> : null}
+        <Button variant="success" onPress={envoyer}>
+          Envoyer le bon de commande
+        </Button>
       </Card>
 
       <Card>

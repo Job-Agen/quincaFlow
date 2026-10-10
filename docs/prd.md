@@ -1530,3 +1530,124 @@ même limite, dite au même endroit.
    §39, sans toucher au coût des marchandises vendues.
 6. L'encaissement d'une vente annulée n'apparaît pas dans le cahier.
 7. Le cahier d'une boutique ne contient aucune ligne d'une autre (§29).
+
+---
+
+## 43. Bon de commande fournisseur
+
+**Objectif**
+
+Le §19 annonçait trois actions sur une commande : « Enregistrer | Générer
+document | Partager ». Deux ont été faites. La troisième — le document — n'a
+jamais existé, et le partage s'est contenté d'un texte brut :
+
+```
+Commande PO-0042
+Fournisseur : Ets Kodjo
+
+• Ciment Diamond 50 kg — 40 sac
+• Fer à béton 8 — 20 barre
+
+Total estimé : 242 000 FCFA
+```
+
+Ce message a trois défauts, et chacun coûte quelque chose au gérant. Il ne dit
+pas **qui commande** : le fournisseur reçoit une liste sans nom de boutique ni
+numéro de téléphone, et ne sait ni à qui répondre ni où livrer. Il ne dit pas
+**à quel prix** : les coûts unitaires sont saisis à la commande, stockés en
+base, et jetés au moment de l'envoi — c'est-à-dire au seul moment où ils
+engagent les deux parties. Et il ne ressemble pas à un bon de commande : à
+Lomé, un gérant qui envoie ça traite avec un fournisseur qui, lui, répond sur
+papier à en-tête.
+
+**F19 — Le document**
+
+Un bon de commande, mis en page comme la facture du §15 et imprimable par le
+même chemin — « Imprimer » propose « Enregistrer au format PDF » sur tous les
+navigateurs mobiles courants, ce qui donne la pièce jointe sans embarquer de
+moteur PDF.
+
+Il porte :
+
+- l'identité de la boutique — nom, accroche, adresse, téléphone ;
+- le titre « BON DE COMMANDE » et le numéro (PO-0042) ;
+- la date, le fournisseur, le statut ;
+- les lignes : désignation, quantité, prix unitaire, total de ligne ;
+- le total estimé ;
+- les observations, quand il y en a ;
+- deux emplacements de signature, le gérant et le fournisseur.
+
+Une commande annulée (§20) porte le filigrane du §15 : c'est le document seul
+qui circule, et rien d'autre n'avertirait le fournisseur qu'il ne vaut plus
+commande.
+
+**F20 — Le message WhatsApp**
+
+Le document se joint ; le message se lit dans la conversation. Les deux sont
+construits à partir des mêmes données, et le message est rendu par une seule
+fonction du domaine — pas trois fois, à trois endroits, avec trois résultats
+différents comme c'était le cas.
+
+```
+*QUINCAILLERIE ABC*
+Lomé — Avenue de la Libération
+Tél : 90 11 22 33
+
+*BON DE COMMANDE N° PO-0042*
+Date : 10/10/2026
+Fournisseur : Ets Kodjo
+
+1. Ciment Diamond 50 kg
+   40 sacs × 3 800 = 152 000 FCFA
+2. Fer à béton 8
+   20 barres × 4 500 = 90 000 FCFA
+
+*TOTAL ESTIMÉ : 242 000 FCFA*
+
+Merci de nous confirmer la disponibilité, le délai de livraison et le prix
+définitif.
+
+QUINCAILLERIE ABC — Tél : 90 11 22 33
+```
+
+Les astérisques sont la mise en gras de WhatsApp : le message arrive mis en
+forme, pas décoré de symboles. On ne tente pas d'aligner des colonnes en
+espaces — la police de WhatsApp est proportionnelle, et un tableau ASCII y
+arrive de travers.
+
+**Une commande sans prix est une demande de prix.** Le gérant qui ne connaît pas
+encore le tarif laisse les coûts à zéro. Le document s'intitule alors « DEMANDE
+DE PRIX » et non « BON DE COMMANDE » : les lignes portent la seule quantité, le
+total disparaît — annoncer « 0 FCFA » serait faux — et la clôture demande un
+prix au lieu de le confirmer. Garder le titre d'un bon de commande tout en
+demandant les tarifs donnerait au fournisseur deux lectures contradictoires, et
+il pourrait y voir un engagement sur des prix qu'il n'a pas encore donnés. C'est
+le même écran pour les deux usages, parce que c'est la même démarche à deux
+jours d'intervalle.
+
+**Une commande annulée ne demande rien.** Sous un bandeau « ANNULÉE », une
+clôture qui réclame un délai de livraison annule l'annulation dans la tête de
+celui qui lit : le message demande alors de ne pas donner suite, et rien
+d'autre.
+
+**Routes**
+
+```
+/purchases/[id]/document
+```
+
+**Critères d'acceptation**
+
+1. Le document porte le nom, l'adresse et le téléphone de la boutique, le
+   numéro de commande et la date.
+2. Chaque ligne montre la quantité, le prix unitaire et le total de ligne ; la
+   somme des lignes est le total affiché.
+3. « Imprimer » ne sort que le document : ni barre d'application, ni boutons.
+4. Le message WhatsApp porte les mêmes montants que le document, au franc près.
+5. Une commande sans aucun prix s'intitule « DEMANDE DE PRIX », n'affiche aucun
+   total, et sa clôture demande le prix.
+6. Une commande annulée demande de ne pas donner suite, et ne réclame ni délai
+   ni confirmation.
+7. Une commande annulée porte le filigrane sur le document et un avertissement
+   en tête du message.
+8. Le message est rendu par la même fonction sur le web et sur l'Android (§41).

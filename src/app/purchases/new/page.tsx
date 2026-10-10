@@ -18,8 +18,8 @@ import {
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { orderTotal } from '@/domain/purchase';
-import { money, quantity as fmtQuantity, withUnit } from '@/utils/format';
+import { orderTotal, purchaseOrderMessage } from '@/domain/purchase';
+import { money, withUnit } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type { ContactRow, Product, PurchaseOrder } from '@/types';
 
@@ -46,7 +46,7 @@ interface OrderLine {
 
 export default function NewPurchaseOrderPage() {
   const router = useRouter();
-  const { currency } = useSession();
+  const { business, currency } = useSession();
   const products = useResource<Product[]>('/api/products');
   const suppliers = useResource<ContactRow[]>('/api/suppliers');
 
@@ -92,28 +92,30 @@ export default function NewPurchaseOrderPage() {
       current.map((item) => (item.key === key ? { ...item, ...values } : item))
     );
 
+  /**
+   * La commande encore à l'écran, en message (§43).
+   *
+   * Elle n'a pas de numéro : elle n'est pas enregistrée. Le message le dit —
+   * « (projet) » — plutôt que d'inventer une référence que le fournisseur
+   * citerait ensuite et qu'aucun écran ne retrouverait.
+   */
   function shareDraft() {
     const supplier = (suppliers.data || []).find((row) => row.id === supplierId);
-    const text = [
-      'Projet de commande',
-      'Fournisseur : ' + (supplier?.name || ''),
-      ...items.map((item) => {
+    const text = purchaseOrderMessage(
+      { supplierName: supplier?.name, notes },
+      items.map((item) => {
         const product = catalog.get(item.productId);
         const unit = (product?.units ?? []).find((row) => row.id === item.unitId);
-        return (
-          '• ' +
-          product?.name +
-          ' — ' +
-          fmtQuantity(item.quantity) +
-          ' ' +
-          (unit?.label || product?.base_unit)
-        );
+        return {
+          productName: product?.name || 'Article',
+          unitLabel: unit?.label || product?.base_unit,
+          quantity: item.quantity,
+          unitCost: item.unitCost,
+        };
       }),
-      'Total estimé : ' + money(total, currency),
-      notes,
-    ]
-      .filter(Boolean)
-      .join('\n');
+      business,
+      currency
+    );
     window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
   }
 
