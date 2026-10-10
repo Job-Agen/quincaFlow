@@ -5,6 +5,7 @@ import {
   purchaseOrderMessage,
   receptionStatus,
   remainingOf,
+  unitCostFor,
 } from '../purchase';
 
 /** L'exemple du PRD : 50 sacs commandés, 30 reçus, puis les 20 derniers (§22). */
@@ -26,6 +27,38 @@ describe('orderTotal', () => {
 
   it('chiffre une ligne isolée', () => {
     expect(orderTotal([{ quantity: 3, unitCost: 1500 }])).toBe(4500);
+  });
+});
+
+describe('unitCostFor', () => {
+  /**
+   * Le défaut que ce test garde : l'écran natif ne changeait que l'unité, pas
+   * le coût. Un carton de quarante sacs partait à 3 800 au lieu de 152 000.
+   */
+  it('multiplie le coût de l’unité de base par le contenu du conditionnement', () => {
+    expect(unitCostFor(3800, 40)).toBe(152000);
+  });
+
+  it('laisse l’unité de base à son propre coût', () => {
+    expect(unitCostFor(3800, 1)).toBe(3800);
+  });
+
+  it('accepte des chaînes, comme un champ de formulaire en cours de frappe', () => {
+    expect(unitCostFor('3800', '40')).toBe(152000);
+  });
+
+  it('arrondit au centime, pas en dessous', () => {
+    expect(unitCostFor(12.345, 3)).toBe(37.04);
+  });
+
+  it('rend zéro quand le coût d’achat n’est pas encore saisi', () => {
+    expect(unitCostFor('', 40)).toBe(0);
+  });
+
+  it('chiffre la commande au coût du conditionnement choisi, pas à celui du sac', () => {
+    // 10 cartons de 40 sacs à 3 800 le sac : 1 520 000, et non 38 000.
+    const cout = unitCostFor(3800, 40);
+    expect(orderTotal([{ quantity: 10, unitCost: cout }])).toBe(1520000);
   });
 });
 

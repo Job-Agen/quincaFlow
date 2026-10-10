@@ -16,10 +16,10 @@ import { useResource } from '../../src/lib/useResource';
 import { useSession } from '../../src/lib/session';
 import { api } from '../../src/lib/api';
 import { CIBLE_TACTILE, couleurs, rayons } from '../../src/lib/theme';
-import { orderTotal } from '@/domain/purchase';
+import { orderTotal, unitCostFor } from '@/domain/purchase';
 import { money, withUnit } from '@/utils/format';
 import { toNumber } from '@/utils/money';
-import type { ContactRow, Product, PurchaseOrderRow } from '@/types';
+import type { ContactRow, Product, PurchaseOrderRow, Unit } from '@/types';
 
 /**
  * Nouvelle commande fournisseur (§19, §20).
@@ -89,6 +89,26 @@ export default function NouvelleCommande() {
   function changer(index: number, champ: 'quantite' | 'cout' | 'unitId', valeur: string) {
     setLignes((actuelles) =>
       actuelles.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l))
+    );
+  }
+
+  /**
+   * Changer de conditionnement change le coût : commander par carton de
+   * quarante, c'est payer quarante fois le sac. Ne déplacer que l'unité
+   * laissait le coût du sac sur une ligne au carton, et ce chiffre finissait
+   * dans le coût moyen pondéré du produit à la réception (§21).
+   */
+  function choisirUnite(index: number, produit: Product, unite: Unit) {
+    setLignes((actuelles) =>
+      actuelles.map((l, i) =>
+        i === index
+          ? {
+              ...l,
+              unitId: unite.id,
+              cout: String(unitCostFor(produit.purchase_price, unite.factor)),
+            }
+          : l
+      )
     );
   }
 
@@ -212,7 +232,7 @@ export default function NouvelleCommande() {
                           key={unite.id}
                           accessibilityRole="button"
                           accessibilityState={{ selected: unite.id === ligne.unitId }}
-                          onPress={() => changer(index, 'unitId', unite.id)}
+                          onPress={() => choisirUnite(index, produit, unite)}
                           style={[
                             styles.pastille,
                             unite.id === ligne.unitId && styles.pastilleActive,
@@ -224,7 +244,9 @@ export default function NouvelleCommande() {
                               unite.id === ligne.unitId && { color: '#fff' },
                             ]}
                           >
-                            {unite.label}
+                            {unite.isBase
+                              ? unite.label
+                              : `${unite.label} · ${withUnit(unite.factor, produit.base_unit)}`}
                           </Text>
                         </Pressable>
                       ))}

@@ -18,7 +18,7 @@ import {
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { orderTotal, purchaseOrderMessage } from '@/domain/purchase';
+import { orderTotal, purchaseOrderMessage, unitCostFor } from '@/domain/purchase';
 import { money, withUnit } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type { ContactRow, Product, PurchaseOrder } from '@/types';
@@ -211,7 +211,10 @@ export default function NewPurchaseOrderPage() {
                             const unit = units.find((unit) => unit.id === event.target.value);
                             patch(item.key, {
                               unitId: event.target.value,
-                              unitCost: (product?.purchase_price || 0) * (unit?.factor || 1),
+                              unitCost: unitCostFor(
+                                product?.purchase_price || 0,
+                                unit?.factor || 1
+                              ),
                             });
                           }}
                         >

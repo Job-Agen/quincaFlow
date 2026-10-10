@@ -93,6 +93,22 @@ export function orderTotal(items: OrderLineDraft[]): Money {
   );
 }
 
+/**
+ * Le coût d'un conditionnement, déduit du coût de l'unité de base.
+ *
+ * Commander par carton de quarante, c'est payer quarante fois le sac. Laisser
+ * le coût du sac sur une ligne passée au carton sous-estime la commande d'un
+ * facteur quarante — et ce chiffre ne reste pas sur la commande : à la
+ * réception, c'est lui qui entre dans le coût moyen pondéré du produit (§21).
+ * Une seule ligne fausse et toutes les marges du §39 mentent.
+ *
+ * Un point de départ, pas une contrainte : le gérant corrige ensuite si le
+ * grossiste fait un prix au gros.
+ */
+export function unitCostFor(purchasePrice: Money | string, factor: Quantity | string): Money {
+  return round2(toNumber(purchasePrice) * toNumber(factor));
+}
+
 /** Reste à livrer sur une ligne, jamais négatif. */
 export function remainingOf(item: ReceivedLine): Quantity {
   const ordered = toNumber(item.quantity_ordered);
