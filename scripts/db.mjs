@@ -10,6 +10,9 @@
  *
  *   npm run db:check    dit ce qui manque, n'écrit rien
  *   npm run db:apply    crée ce qui manque, ne touche à rien d'existant
+ *   npm run db:deploy   comme `apply`, mais ne se plaint pas d'une adresse
+ *                       absente : c'est le mode appelé par la construction,
+ *                       qui doit rester faisable sans aucun secret.
  *
  * `schema.sql` n'est fait que de `CREATE … IF NOT EXISTS` : le rejouer sur une
  * base déjà à jour ne fait rien, et sur une base en retard ne crée que le
@@ -190,13 +193,21 @@ async function examiner(sql, texte, action) {
 
 async function principal() {
   const action = process.argv[2];
-  if (action !== 'check' && action !== 'apply') {
-    console.error('Usage : node scripts/db.mjs check|apply');
+  if (action !== 'check' && action !== 'apply' && action !== 'deploy') {
+    console.error('Usage : node scripts/db.mjs check|apply|deploy');
     process.exit(2);
   }
 
   const url = process.env.DATABASE_URL || process.env.NEON_DATABASE_URL;
   if (!url) {
+    // `deploy` tourne dans la construction, qui doit rester faisable sans
+    // aucun secret : la CI construit l'application sans base, et doit pouvoir
+    // continuer. Une absence d'adresse n'est donc pas une erreur ici — c'est
+    // simplement qu'il n'y a pas de base à mettre à niveau.
+    if (action === 'deploy') {
+      console.log('Pas de DATABASE_URL : aucune base à mettre à niveau, on construit.');
+      return;
+    }
     console.error(
       'DATABASE_URL absente. Renseignez-la — la même que celle de l’hébergeur si\n' +
         'c’est la base de production que vous voulez examiner.'
@@ -207,7 +218,7 @@ async function principal() {
   const texte = readFileSync(SCHEMA, 'utf8');
   const { sql, fermer } = await connecter(url);
   try {
-    process.exitCode = await examiner(sql, texte, action);
+    process.exitCode = await examiner(sql, texte, action === 'deploy' ? 'apply' : action);
   } finally {
     await fermer();
   }

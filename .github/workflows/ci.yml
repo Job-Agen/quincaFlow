@@ -36,6 +36,11 @@ jobs:
       # Volontairement sans DATABASE_URL ni JWT_SECRET : le build ne doit
       # dépendre d'aucun secret. S'il commence à en exiger un, c'est qu'une
       # lecture de base a glissé dans le rendu statique — et il faut le savoir ici.
+      #
+      # Le build commence pourtant par `db:deploy`, qui met la base à niveau
+      # (§43). Sans adresse, cette étape le dit et passe son chemin : elle ne
+      # rend donc pas le build dépendant d'un secret, et cette exécution-ci le
+      # vérifie à chaque fois.
       - run: npm run build
 
       # L'application mobile compile contre `src/domain`, `src/types` et
