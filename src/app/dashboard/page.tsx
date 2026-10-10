@@ -16,7 +16,7 @@ import AppBar from '@/components/layout/AppBar';
 import { Card, CardHead, Empty, Notice, Skeleton } from '@/components/ui';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { money, time, withUnit } from '@/utils/format';
+import { amount, money, time, withUnit } from '@/utils/format';
 import type { DashboardSummary } from '@/types';
 
 /**
@@ -115,9 +115,7 @@ export default function DashboardPage() {
                       <Icon size={16} />
                     </span>
                     <span className="tile__value num">
-                      {isMoney
-                        ? Number(value).toLocaleString('fr-FR', { maximumFractionDigits: 0 })
-                        : String(value)}
+                      {isMoney ? amount(value, 0) : String(value)}
                     </span>
                     {isMoney ? <span className="tile__unit">{currency}</span> : null}
                   </>

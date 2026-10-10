@@ -167,6 +167,24 @@ a {
   gap: 14px;
 }
 
+/*
+ * Dégagement du bouton flottant.
+ *
+ * Il s'élève au-dessus du bas de la fenêtre et mesure 56 px : il recouvrait la
+ * dernière ligne des écrans qui en portent un, et notamment les totaux qu'ils
+ * posent en pied — « 52 000 FCFA » s'y lisait « 52 000 FC ». Un total dont les
+ * derniers chiffres disparaissent est pire qu'un total absent.
+ *
+ * La marge porte sur le dernier enfant plutôt que sur la réserve basse de la
+ * page : `padding-bottom` est déjà disputé par `.page` et par
+ * `.shell--detail .page`, dont la spécificité l'emporte — une règle de plus s'y
+ * serait fait écraser en silence, ce qui est exactement ce qui est arrivé au
+ * premier essai. Cette marge-là, personne ne la revendique.
+ */
+.page--fab > :last-child {
+  margin-bottom: 92px;
+}
+
 .page--flush {
   padding-left: 0;
   padding-right: 0;
@@ -836,6 +854,12 @@ select.input {
   line-height: 1.4;
 }
 
+/* Sans cela, un texte long comprime l'icône en largeur sans toucher à sa
+   hauteur : elle s'affiche en ovale noir au bord de l'encart. */
+.notice > svg {
+  flex: 0 0 auto;
+}
+
 .notice--error {
   background: var(--red-soft);
   color: #96201b;
@@ -1041,6 +1065,89 @@ select.input {
   padding-top: 12px;
   font-size: 17px;
   font-weight: 800;
+}
+
+/*
+ * Les boutons sous le document.
+ *
+ * La classe était posée sur la facture (§15) sans jamais être définie : les
+ * trois boutons se suivaient en ligne et « Imprimer » sortait de l'écran sur un
+ * téléphone. Le partage, qui est l'action attendue, prend toute la largeur ;
+ * imprimer et enregistrer se partagent la ligne suivante.
+ */
+.invoice-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.invoice-actions > :first-child {
+  grid-column: 1 / -1;
+}
+
+/*
+ * Le tableau d'un document, resserré.
+ *
+ * Quatre colonnes à 14 px débordaient d'une feuille de 390 px : la colonne des
+ * totaux était tronquée, et c'est le seul chiffre que le fournisseur vérifie.
+ */
+.invoice .table {
+  font-size: 12.5px;
+}
+
+.invoice .table th,
+.invoice .table td {
+  padding: 9px 5px;
+}
+
+.invoice .table th:first-child,
+.invoice .table td:first-child {
+  padding-left: 0;
+}
+
+.invoice .table th:last-child,
+.invoice .table td:last-child {
+  padding-right: 0;
+}
+
+/* Le statut, aligné avec les autres lignes d'en-tête du document (§43). */
+.doc-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Observations du bon de commande (§43) : une consigne de livraison se lit. */
+.invoice__note {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: #444;
+  line-height: 1.5;
+}
+
+/*
+ * Signatures du bon de commande (§43).
+ *
+ * Un bon de commande se signe des deux côtés, et le fournisseur attend
+ * l'emplacement. Les deux colonnes tiennent côte à côte même sur un écran de
+ * 320 px : le trait rétrécit, il ne passe pas à la ligne.
+ */
+.invoice__signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.invoice__signatures > div {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.invoice__rule {
+  border-bottom: 1px solid #999;
 }
 
 .invoice__thanks {

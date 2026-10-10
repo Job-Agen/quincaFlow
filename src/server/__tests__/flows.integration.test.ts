@@ -34,6 +34,11 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let sales: typeof import('../sales');
   let purchases: typeof import('../purchases');
   let accounts: typeof import('../accounts');
+  let reports: typeof import('../reports');
+  let expenses: typeof import('../expenses');
+  let history: typeof import('../history');
+  let cash: typeof import('../cash');
+  let incomes: typeof import('../incomes');
 
   const OWNER: Session = {
     userId: 'usr_owner',
@@ -50,6 +55,9 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
 
   beforeAll(async () => {
     process.env.DATABASE_URL = CONNECTION;
+    // Un secret de test, posé ici et nulle part ailleurs : le code de production
+    // continue de refuser de démarrer sans le sien plutôt que d'en inventer un.
+    process.env.JWT_SECRET ||= 'secret-de-test-quincaflow-32-caracteres-minimum';
     pool = new pg.Pool({ connectionString: CONNECTION });
     await pool.query(readFileSync(resolve(process.cwd(), 'schema.sql'), 'utf8'));
 
@@ -57,6 +65,11 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     sales = await import('../sales');
     purchases = await import('../purchases');
     accounts = await import('../accounts');
+    reports = await import('../reports');
+    expenses = await import('../expenses');
+    history = await import('../history');
+    cash = await import('../cash');
+    incomes = await import('../incomes');
   });
 
   afterAll(async () => {
@@ -64,13 +77,14 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   });
 
   beforeEach(async () => {
-    // TRUNCATE … CASCADE remet les 19 tables à zéro d'un coup : chaque test part
+    // TRUNCATE … CASCADE remet les tables à zéro d'un coup : chaque test part
     // d'une boutique vierge, sans dépendre de l'ordre d'exécution.
     await pool.query(`
       TRUNCATE users, businesses, business_members, refresh_tokens, counters, login_attempts,
         products, product_units, customers, suppliers, sales, sale_items, payments,
         out_of_stock_sales, purchase_orders, purchase_order_items,
-        purchase_receipts, purchase_receipt_items, stock_movements, documents
+        purchase_receipts, purchase_receipt_items, stock_movements, documents, expenses,
+        incomes
       RESTART IDENTITY CASCADE
     `);
     await pool.query(
@@ -627,5 +641,597 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     await expect(
       accounts.authenticate({ identifier: 'inconnu@test.tg', password: 'motdepasse123' })
     ).rejects.toThrow(/incorrect/i);
+  });
+  // ───────────────────── Rapports financiers (§39) ─────────────────────
+
+  /** Le rapport « tout » : aucune borne, donc rien ne peut tomber hors période. */
+  const fullReport = () => reports.financialReport(OWNER.businessId, {});
+
+  it('mène du chiffre d’affaires au bénéfice net, dépenses déduites', async () => {
+    const vitre = await seedVitre();
+    const carton = vitre.units.find((unit) => unit.factor === 40)!;
+
+    // La vente du §11 : un carton + 5 pièces = 19 250, coût 14 343,75.
+    await sales.createSale(OWNER, {
+      lines: [
+        { productId: vitre.id, unitId: carton.id, quantity: 1 },
+        { productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 5 },
+      ],
+    });
+
+    const before = await fullReport();
+    expect(before.totals.revenue).toBe(19250);
+    expect(before.totals.costOfGoods).toBeCloseTo(14343.75, 2);
+    expect(before.totals.grossMargin).toBeCloseTo(4906.25, 2);
+    // Sans dépense saisie, le bénéfice net *est* la marge brute — et l'écran doit
+    // le dire plutôt que laisser croire (§39).
+    expect(before.expenseCount).toBe(0);
+    expect(before.totals.netProfit).toBe(before.totals.grossMargin);
+
+    await expenses.createExpense(OWNER, {
+      category: 'TRANSPORT',
+      label: 'Taxi-bagages livraison',
+      amount: 1500,
+    });
+    await expenses.createExpense(OWNER, {
+      category: 'RENT',
+      label: 'Loyer du mois',
+      amount: 2000,
+    });
+
+    const after = await fullReport();
+    // Une dépense fait baisser le bénéfice net du même montant, et lui seul : le
+    // chiffre d'affaires et la marge brute ne bougent pas d'un franc.
+    expect(after.totals.revenue).toBe(before.totals.revenue);
+    expect(after.totals.grossMargin).toBeCloseTo(before.totals.grossMargin, 2);
+    expect(after.totals.expenses).toBe(3500);
+    expect(after.expenseCount).toBe(2);
+    expect(after.totals.netProfit).toBeCloseTo(before.totals.grossMargin - 3500, 2);
+    expect(after.expensesByCategory.map((bucket) => bucket.category).sort()).toEqual([
+      'RENT',
+      'TRANSPORT',
+    ]);
+  });
+
+  it('exclut une vente annulée de tous les totaux', async () => {
+    const vitre = await seedVitre();
+    const gardee = await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+    const annulee = await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10 }],
+    });
+    await sales.cancelSale(OWNER, annulee.id, 'Erreur de saisie');
+
+    const report = await fullReport();
+    // 4 × 450 : la vente annulée reste dans l'historique (§25) mais un chiffre
+    // d'affaires qui l'inclurait ne se retrouverait pas en caisse.
+    expect(report.totals.revenue).toBe(gardee.total);
+    expect(report.salesCount).toBe(1);
+    expect(report.products).toHaveLength(1);
+    expect(report.products[0]!.quantity).toBe(4);
+  });
+
+  it('répartit la remise : la somme des produits égale le chiffre d’affaires', async () => {
+    const vitre = await seedVitre();
+    const carton = vitre.units.find((unit) => unit.factor === 40)!;
+    const serrure = await products.createProduct(OWNER, {
+      name: 'Serrure porte',
+      baseUnit: 'pièce',
+      purchasePrice: 3400,
+      sellingPrice: 5000,
+      stockQuantity: 10,
+    });
+
+    // Sous-total 17 000 + 15 000 = 32 000, remise 3 200 → encaissé 28 800.
+    const sale = await sales.createSale(OWNER, {
+      lines: [
+        { productId: vitre.id, unitId: carton.id, quantity: 1 },
+        { productId: serrure.id, unitId: serrure.units[0]!.id, quantity: 3 },
+      ],
+      discount: 3200,
+    });
+    expect(sale.total).toBe(28800);
+
+    const report = await fullReport();
+    const sum = report.products.reduce((acc, product) => acc + product.revenue, 0);
+    // L'invariant du §39 : imputer la remise à une seule ligne fausserait sa
+    // rentabilité, l'ignorer ferait dépasser le chiffre d'affaires encaissé.
+    expect(sum).toBeCloseTo(report.totals.revenue, 2);
+    expect(sum).toBeCloseTo(28800, 2);
+
+    const vitreLine = report.products.find((product) => product.productId === vitre.id)!;
+    // 17 000 × 0,9 = 15 300, et le coût reste celui figé à la vente : 12 750.
+    expect(vitreLine.revenue).toBeCloseTo(15300, 2);
+    expect(vitreLine.cost).toBeCloseTo(12750, 2);
+    expect(vitreLine.quantity).toBe(40);
+  });
+
+  it('garde le coût figé à la vente quand le prix d’achat monte ensuite', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10 }],
+    });
+
+    const avant = await fullReport();
+    expect(avant.products[0]!.cost).toBeCloseTo(3187.5, 2);
+
+    // Le fournisseur double son prix : la marge d'hier ne doit pas être réécrite.
+    await pool.query('UPDATE products SET purchase_price = 700 WHERE id = $1', [vitre.id]);
+
+    const apres = await fullReport();
+    expect(apres.products[0]!.cost).toBeCloseTo(3187.5, 2);
+    expect(apres.totals.grossMargin).toBeCloseTo(avant.totals.grossMargin, 2);
+  });
+
+  it('rattache une vente hors stock à son produit sans la compter en stock', async () => {
+    const outOfStock = await import('../outOfStock');
+    const vitre = await seedVitre(0);
+    await outOfStock.createOutOfStockSale(OWNER, {
+      productId: vitre.id,
+      quantity: 3,
+      costPrice: 6800,
+      sellingPrice: 9500,
+    });
+
+    const report = await fullReport();
+    expect(report.totals.salesRevenue).toBe(0);
+    expect(report.totals.outOfStockRevenue).toBe(28500);
+    expect(report.totals.grossMargin).toBe(8100);
+
+    const line = report.products[0]!;
+    // La quantité hors stock est comptée à part : l'article n'est jamais entré en
+    // stock, sa quantité n'est donc pas exprimée en unité de base (§39).
+    expect(line.quantity).toBe(0);
+    expect(line.outOfStockQuantity).toBe(3);
+    expect(line.margin).toBe(8100);
+  });
+
+  it('reconstitue le total : la somme des tranches égale le chiffre d’affaires', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 6 }],
+    });
+
+    const { from, to, fromDate, toDate } = history.periodBounds('30d');
+    const report = await reports.financialReport(OWNER.businessId, { from, to, fromDate, toDate });
+
+    expect(report.granularity).toBe('day');
+    const sum = report.buckets.reduce((acc, bucket) => acc + bucket.revenue, 0);
+    expect(sum).toBeCloseTo(report.totals.revenue, 2);
+    expect(report.buckets.reduce((acc, bucket) => acc + bucket.salesCount, 0)).toBe(2);
+  });
+
+  it('ne laisse passer aucune ligne d’une autre quincaillerie', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+    await expenses.createExpense(OWNER, { category: 'RENT', label: 'Loyer', amount: 50000 });
+
+    const chezLeVoisin = await reports.financialReport(RIVAL.businessId, {});
+    expect(chezLeVoisin.totals.revenue).toBe(0);
+    expect(chezLeVoisin.totals.expenses).toBe(0);
+    expect(chezLeVoisin.products).toHaveLength(0);
+    expect(chezLeVoisin.buckets).toHaveLength(0);
+    await expect(expenses.listExpenses(RIVAL.businessId)).resolves.toHaveLength(0);
+  });
+
+  it('borne les dépenses sur le jour de la sortie d’argent, pas celui de la saisie', async () => {
+    // Le gérant note ce matin le transport de l'avant-veille : la dépense doit
+    // peser sur l'avant-veille (§39).
+    const avantHier = new Date();
+    avantHier.setDate(avantHier.getDate() - 2);
+    const cle = avantHier.toISOString().slice(0, 10);
+
+    await expenses.createExpense(OWNER, {
+      category: 'TRANSPORT',
+      label: 'Taxi-bagages de mardi',
+      amount: 1200,
+      spentOn: cle,
+    });
+    await expenses.createExpense(OWNER, {
+      category: 'TRANSPORT',
+      label: 'Taxi-bagages du jour',
+      amount: 800,
+    });
+
+    const aujourdhui = history.periodBounds('today');
+    const surLaSemaine = history.periodBounds('7d');
+
+    const dujour = await reports.financialReport(OWNER.businessId, aujourdhui);
+    expect(dujour.totals.expenses).toBe(800);
+
+    const semaine = await reports.financialReport(OWNER.businessId, surLaSemaine);
+    expect(semaine.totals.expenses).toBe(2000);
+  });
+
+  it('corrige et supprime une dépense, sans toucher à celle du voisin', async () => {
+    const depense = await expenses.createExpense(OWNER, {
+      category: 'OTHER',
+      label: 'Saisie approximative',
+      amount: 9999,
+    });
+
+    const corrigee = await expenses.updateExpense(OWNER, depense.id, {
+      category: 'SALARY',
+      label: 'Salaire Kossi',
+      amount: 25000,
+    });
+    expect(corrigee.category).toBe('SALARY');
+    expect(corrigee.amount).toBe(25000);
+
+    await expect(
+      expenses.updateExpense(RIVAL, depense.id, {
+        category: 'SALARY',
+        label: 'Détournement',
+        amount: 1,
+      })
+    ).rejects.toThrow(/introuvable/i);
+    await expect(expenses.deleteExpense(RIVAL, depense.id)).rejects.toThrow(/introuvable/i);
+
+    await expenses.deleteExpense(OWNER, depense.id);
+    await expect(expenses.listExpenses(OWNER.businessId)).resolves.toHaveLength(0);
+    expect((await fullReport()).totals.expenses).toBe(0);
+  });
+
+  it('refuse un poste de dépense inventé', async () => {
+    await expect(
+      expenses.createExpense(OWNER, { category: 'CRYPTO', label: 'Bitcoin', amount: 1 })
+    ).rejects.toThrow(/poste de dépense/i);
+  });
+  // ────────────────────── Journal de caisse (§40) ──────────────────────
+
+  it('mêle encaissements et dépenses, et boucle son solde', async () => {
+    const vitre = await seedVitre();
+    // Une vente payée pour moitié : le tiroir n'a vu que la moitié.
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10 }],
+      amountPaid: 2000,
+    });
+    await expenses.createExpense(OWNER, {
+      category: 'RENT',
+      label: 'Loyer de septembre',
+      amount: 1200,
+    });
+
+    const journal = await cash.cashJournal(OWNER.businessId, {});
+
+    // L'entrée est l'encaissement, non le montant de la vente : 2 000, pas 4 500.
+    expect(journal.cashIn).toBe(2000);
+    expect(journal.cashOut).toBe(1200);
+    expect(journal.balance).toBe(800);
+    // Le critère 2 du §40 : entrées − sorties = solde, à la ligne près.
+    expect(journal.cashIn - journal.cashOut).toBe(journal.balance);
+    expect(journal.entries).toHaveLength(2);
+    // La ligne la plus récente porte le solde de la période entière.
+    expect(journal.entries[0]!.balance).toBe(journal.balance);
+  });
+
+  it('ne compte pas l’encaissement d’une vente annulée', async () => {
+    const vitre = await seedVitre();
+    const gardee = await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+    const annulee = await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10 }],
+    });
+    await sales.cancelSale(OWNER, annulee.id, 'Le client a changé d’avis');
+
+    const journal = await cash.cashJournal(OWNER.businessId, {});
+    // L'argent est revenu au client : le compter gonflerait une caisse
+    // introuvable (§25, §40).
+    expect(journal.cashIn).toBe(gardee.total);
+    expect(journal.entries).toHaveLength(1);
+    expect(journal.entries[0]!.reference).toBe(gardee.reference);
+  });
+
+  it('traduit le moyen de paiement et le poste, jamais un code brut', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 2 }],
+      paymentMethod: 'MOBILE_MONEY',
+    });
+    await expenses.createExpense(OWNER, {
+      category: 'UTILITIES',
+      label: 'Facture CEET',
+      amount: 9000,
+    });
+
+    const journal = await cash.cashJournal(OWNER.businessId, {});
+    const details = journal.entries
+      .map((entry) => entry.detail)
+      .sort((a, b) => a.localeCompare(b, 'fr'));
+    expect(details).toEqual(['Énergie et eau', 'Mobile Money']);
+  });
+
+  it('filtre un sens sans changer les totaux de la période', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+    await expenses.createExpense(OWNER, { category: 'SALARY', label: 'Paie', amount: 500 });
+
+    const sorties = await cash.cashJournal(OWNER.businessId, { direction: 'OUT' });
+    expect(sorties.entries.every((entry) => entry.direction === 'OUT')).toBe(true);
+    // Le solde de la période ne doit pas dépendre de ce que l'écran affiche.
+    expect(sorties.cashIn).toBe(1800);
+    expect(sorties.balance).toBe(1300);
+  });
+
+  it('ne laisse voir à personne la caisse d’une autre quincaillerie', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+    await expenses.createExpense(OWNER, { category: 'RENT', label: 'Loyer', amount: 50000 });
+
+    const voisin = await cash.cashJournal(RIVAL.businessId, {});
+    expect(voisin.cashIn).toBe(0);
+    expect(voisin.cashOut).toBe(0);
+    expect(voisin.entries).toHaveLength(0);
+  });
+
+  it('fait sortir l’achat de stock de la caisse sans toucher au bénéfice', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10 }],
+    });
+    const avant = await fullReport();
+
+    await expenses.createExpense(OWNER, {
+      category: 'STOCK_PURCHASE',
+      label: 'Ciment payé comptant au grossiste',
+      amount: 200000,
+    });
+
+    const apres = await fullReport();
+    // Le critère 4 du §40 : la marchandise est déjà comptée à son coût le jour
+    // où elle est vendue ; la retirer ici ferait apparaître une perte inventée.
+    expect(apres.totals.netProfit).toBe(avant.totals.netProfit);
+    expect(apres.totals.operatingExpenses).toBe(0);
+    expect(apres.totals.stockPurchases).toBe(200000);
+    expect(apres.totals.expenses).toBe(200000);
+
+    // La caisse, elle, l'a bien vu partir.
+    const journal = await cash.cashJournal(OWNER.businessId, {});
+    expect(journal.cashOut).toBe(200000);
+  });
+
+  // ──────────────────── Justificatifs de dépense (§40) ─────────────────
+
+  /** Le plus petit JPEG qui soit une vraie image, pour ne pas peser sur le test. */
+  const PHOTO = `data:image/jpeg;base64,${'A'.repeat(64)}`;
+
+  it('joint, remplace et supprime le reçu d’une dépense', async () => {
+    const depense = await expenses.createExpense(OWNER, {
+      category: 'TRANSPORT',
+      label: 'Tricycle de livraison',
+      amount: 3000,
+    });
+    expect(depense.has_receipt).toBe(false);
+
+    await expenses.attachReceipt(OWNER, depense.id, { image: PHOTO, name: 'recu.jpg' });
+    const [avecRecu] = await expenses.listExpenses(OWNER.businessId);
+    expect(avecRecu!.has_receipt).toBe(true);
+    expect((await expenses.getReceipt(OWNER.businessId, depense.id)).url).toBe(PHOTO);
+
+    // Un second envoi remplace le premier : trois photos du même reçu
+    // s'accumuleraient sans qu'aucun écran ne sache laquelle montrer.
+    const autre = `data:image/png;base64,${'B'.repeat(64)}`;
+    await expenses.attachReceipt(OWNER, depense.id, { image: autre, name: 'mieux.png' });
+    const { rows: pieces } = await pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM documents WHERE reference_type = 'EXPENSE'"
+    );
+    expect(pieces[0]!.n).toBe(1);
+    expect((await expenses.getReceipt(OWNER.businessId, depense.id)).name).toBe('mieux.png');
+
+    await expenses.deleteReceipt(OWNER, depense.id);
+    await expect(expenses.getReceipt(OWNER.businessId, depense.id)).rejects.toThrow(
+      /aucun justificatif/i
+    );
+    const [sansRecu] = await expenses.listExpenses(OWNER.businessId);
+    expect(sansRecu!.has_receipt).toBe(false);
+  });
+
+  it('refuse ce qui n’est pas une photo, et ce qui est trop lourd', async () => {
+    const depense = await expenses.createExpense(OWNER, {
+      category: 'OTHER',
+      label: 'Divers',
+      amount: 500,
+    });
+
+    await expect(
+      expenses.attachReceipt(OWNER, depense.id, { image: 'data:text/html,<script>' })
+    ).rejects.toThrow(/photo/i);
+    await expect(expenses.attachReceipt(OWNER, depense.id, { image: '' })).rejects.toThrow(
+      /aucune image/i
+    );
+    await expect(
+      expenses.attachReceipt(OWNER, depense.id, {
+        image: `data:image/jpeg;base64,${'A'.repeat(700_000)}`,
+      })
+    ).rejects.toThrow(/trop lourde/i);
+  });
+
+  it('ne laisse pas le voisin lire ni joindre un justificatif', async () => {
+    const depense = await expenses.createExpense(OWNER, {
+      category: 'RENT',
+      label: 'Loyer',
+      amount: 40000,
+    });
+    await expenses.attachReceipt(OWNER, depense.id, { image: PHOTO });
+
+    await expect(expenses.getReceipt(RIVAL.businessId, depense.id)).rejects.toThrow(/introuvable/i);
+    await expect(expenses.attachReceipt(RIVAL, depense.id, { image: PHOTO })).rejects.toThrow(
+      /introuvable/i
+    );
+    await expect(expenses.deleteReceipt(RIVAL, depense.id)).rejects.toThrow(/introuvable/i);
+  });
+
+  it('emporte le justificatif quand la dépense est supprimée', async () => {
+    const depense = await expenses.createExpense(OWNER, {
+      category: 'OTHER',
+      label: 'Erreur de saisie',
+      amount: 100,
+    });
+    await expenses.attachReceipt(OWNER, depense.id, { image: PHOTO });
+    await expenses.deleteExpense(OWNER, depense.id);
+
+    // La pièce jointe ne référence pas la dépense en base : sans ce nettoyage
+    // elle resterait orpheline, et repeuplerait `has_receipt` d'une dépense
+    // portant par hasard le même identifiant.
+    const { rows } = await pool.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM documents WHERE reference_type = 'EXPENSE'"
+    );
+    expect(rows[0]!.n).toBe(0);
+  });
+  // ─────────────── Deux transports pour la session (§41) ───────────────
+
+  it('accepte le refresh token dans le corps, faute de cookie à présenter', async () => {
+    const auth = await import('../../lib/auth');
+    const jeton = await auth.issueRefreshToken(OWNER.userId, OWNER.businessId);
+
+    const tourne = await auth.rotateRefreshToken(jeton);
+    expect(tourne?.member.id).toBe(OWNER.userId);
+    expect(tourne?.member.business_id).toBe(OWNER.businessId);
+    // Un jeton ne sert qu'une fois, quel que soit le transport qui l'a apporté.
+    await expect(auth.rotateRefreshToken(jeton)).resolves.toBeNull();
+    // Et le jeton neuf issu de la rotation, lui, vaut toujours.
+    expect(await auth.rotateRefreshToken(tourne!.refreshToken)).not.toBeNull();
+  });
+
+  it('signe un access token que le serveur accepte tel quel', async () => {
+    const auth = await import('../../lib/auth');
+    const jeton = await auth.signAccessToken(OWNER);
+    const charge = await auth.verifyAccessToken(jeton);
+    // C'est le `businessId` du jeton qui porte le cloisonnement (§29) : s'il ne
+    // survivait pas à l'aller-retour, un client natif lirait la mauvaise boutique.
+    expect(charge?.businessId).toBe(OWNER.businessId);
+    expect(charge?.sub).toBe(OWNER.userId);
+    expect(await auth.verifyAccessToken('jeton.forgé.ici')).toBeNull();
+  });
+
+  // ─────────────────────── Cahier de recettes (§42) ────────────────────────
+
+  it('porte les encaissements de vente dans la journée où ils ont eu lieu', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+
+    const cahier = await incomes.takingsBook(OWNER.businessId);
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+
+    expect(cahier.days).toHaveLength(1);
+    expect(cahier.days[0]?.day).toBe(aujourdhui);
+    expect(cahier.days[0]?.salesCount).toBe(1);
+    expect(cahier.salesTotal).toBeGreaterThan(0);
+    expect(cahier.otherTotal).toBe(0);
+    // L'en-tête se retrouve dans les lignes.
+    expect(cahier.total).toBe(cahier.days.reduce((n, j) => n + j.total, 0));
+  });
+
+  it('range une recette au jour de sa date, non au jour de sa saisie', async () => {
+    await incomes.createIncome(OWNER, {
+      category: 'SERVICE',
+      label: 'Découpe de fer',
+      amount: 3000,
+      receivedOn: '2026-01-15',
+    });
+
+    const cahier = await incomes.takingsBook(OWNER.businessId);
+    expect(cahier.days.map((j) => j.day)).toContain('2026-01-15');
+    expect(cahier.otherTotal).toBe(3000);
+  });
+
+  it('fait entrer un remboursement de dette en caisse sans gonfler le chiffre d’affaires', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+
+    const avant = await reports.financialReport(OWNER.businessId);
+    const caisseAvant = await cash.cashJournal(OWNER.businessId);
+
+    await incomes.createIncome(OWNER, {
+      category: 'DEBT_REPAYMENT',
+      label: 'Ardoise de Kodjo',
+      amount: 40000,
+    });
+
+    const apres = await reports.financialReport(OWNER.businessId);
+    const caisseApres = await cash.cashJournal(OWNER.businessId);
+
+    // La vente a été comptée le jour où elle a eu lieu : la recompter ici ferait
+    // vendre deux fois la même marchandise (§42).
+    expect(apres.totals.revenue).toBe(avant.totals.revenue);
+    expect(apres.totals.grossMargin).toBeCloseTo(avant.totals.grossMargin, 2);
+    expect(apres.totals.netProfit).toBeCloseTo(avant.totals.netProfit, 2);
+
+    // Mais l'argent est bien entré dans le tiroir.
+    expect(caisseApres.cashIn).toBeCloseTo(caisseAvant.cashIn + 40000, 2);
+    expect(caisseApres.entries.some((e) => e.kind === 'INCOME')).toBe(true);
+  });
+
+  it('fait d’un service rendu une recette et une marge, sans coût de marchandise', async () => {
+    const vitre = await seedVitre();
+    await sales.createSale(OWNER, {
+      lines: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 4 }],
+    });
+
+    const avant = await reports.financialReport(OWNER.businessId);
+
+    await incomes.createIncome(OWNER, {
+      category: 'SERVICE',
+      label: 'Pose de serrure',
+      amount: 12000,
+    });
+
+    const apres = await reports.financialReport(OWNER.businessId);
+
+    expect(apres.totals.revenue).toBeCloseTo(avant.totals.revenue + 12000, 2);
+    expect(apres.totals.otherRevenue).toBe(12000);
+    // Sans marchandise derrière, la somme passe entière en marge puis en bénéfice.
+    expect(apres.totals.costOfGoods).toBeCloseTo(avant.totals.costOfGoods, 2);
+    expect(apres.totals.grossMargin).toBeCloseTo(avant.totals.grossMargin + 12000, 2);
+    expect(apres.totals.netProfit).toBeCloseTo(avant.totals.netProfit + 12000, 2);
+  });
+
+  it('corrige et supprime une recette', async () => {
+    const recette = await incomes.createIncome(OWNER, {
+      category: 'RENTAL',
+      label: 'Location brouette',
+      amount: 1000,
+    });
+    expect(recette.amount).toBe(1000);
+
+    const corrigee = await incomes.updateIncome(OWNER, recette.id, {
+      category: 'RENTAL',
+      label: 'Location bétonnière',
+      amount: 2500,
+    });
+    expect(corrigee.label).toBe('Location bétonnière');
+    expect(corrigee.amount).toBe(2500);
+
+    await incomes.deleteIncome(OWNER, recette.id);
+    expect(await incomes.listIncomes(OWNER.businessId)).toHaveLength(0);
+    expect((await incomes.takingsBook(OWNER.businessId)).otherTotal).toBe(0);
+  });
+
+  it('ne laisse pas une boutique voir le cahier d’une autre (§29)', async () => {
+    await incomes.createIncome(OWNER, {
+      category: 'SERVICE',
+      label: 'Réparation chez A',
+      amount: 7000,
+    });
+
+    const chezLeVoisin = await incomes.takingsBook(RIVAL.businessId);
+    expect(chezLeVoisin.otherTotal).toBe(0);
+    expect(chezLeVoisin.days).toHaveLength(0);
+    expect(await incomes.listIncomes(RIVAL.businessId)).toHaveLength(0);
   });
 });

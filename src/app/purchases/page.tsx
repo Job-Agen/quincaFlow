@@ -22,7 +22,7 @@ export default function PurchasesPage() {
     <>
       <AppBar back="/dashboard" title="Achats fournisseurs" />
 
-      <main className="page">
+      <main className="page page--fab">
         <SearchField value={search} onChange={setSearch} placeholder="Référence ou fournisseur…" />
 
         {error ? <Notice tone="error">{error.message}</Notice> : null}

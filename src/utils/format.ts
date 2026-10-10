@@ -3,19 +3,38 @@
 /** Ce dont `new Date()` sait partir : une chaîne ISO, un horodatage, une date. */
 type DateLike = string | number | Date;
 
+/**
+ * Remplace le trait d'union de `toLocaleString` par le vrai signe moins.
+ *
+ * Les écrans écrivent déjà « − 51 000 » à la main sur les lignes de déduction.
+ * Sans cela, le bénéfice net — la seule ligne qui passe vraiment au négatif —
+ * s'afficherait avec un autre caractère que les lignes qui le composent.
+ */
+function signeFrancais(texte: string): string {
+  return texte.startsWith('-') ? `\u2212${texte.slice(1)}` : texte;
+}
+
 /** « 19 250 FCFA ». L'espace insécable évite un retour à la ligne avant la devise. */
 export function money(value: unknown, currency = 'FCFA'): string {
   const amount = Number(value);
   const safe = Number.isFinite(amount) ? amount : 0;
-  return `${safe.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} ${currency}`;
+  return `${signeFrancais(safe.toLocaleString('fr-FR', { maximumFractionDigits: 0 }))} ${currency}`;
 }
 
-/** Montant seul, sans devise — pour les tableaux où la devise est en en-tête. */
-export function amount(value: unknown): string {
+/**
+ * Montant seul, sans devise — pour les tuiles et les tableaux où la devise est
+ * en en-tête.
+ *
+ * La précision est réglable parce que c'est la seule raison qu'avaient les
+ * écrans d'appeler `toLocaleString` eux-mêmes ; or ce faisant ils perdaient le
+ * signe moins typographique, et le bénéfice net s'affichait avec un trait
+ * d'union dans sa tuile et un vrai moins deux lignes plus bas.
+ */
+export function amount(value: unknown, maximumFractionDigits = 2): string {
   const parsed = Number(value);
-  return (Number.isFinite(parsed) ? parsed : 0).toLocaleString('fr-FR', {
-    maximumFractionDigits: 2,
-  });
+  return signeFrancais(
+    (Number.isFinite(parsed) ? parsed : 0).toLocaleString('fr-FR', { maximumFractionDigits })
+  );
 }
 
 /** Quantité : entière quand elle l'est, sinon jusqu'à trois décimales. */
@@ -75,6 +94,22 @@ export function time(value: DateLike): string {
 
 export function dateTime(value: DateLike): string {
   return `${shortDate(value)} · ${time(value)}`;
+}
+
+/** « septembre 2026 » — en-tête d'une tranche mensuelle de rapport (§39). */
+export function monthLabel(value: DateLike): string {
+  return new Date(value).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+}
+
+/**
+ * « 24 % », ou « — » quand le taux n'existe pas.
+ *
+ * Un taux absent n'est pas un taux nul : rien n'a été vendu, et afficher 0 %
+ * se lirait comme une vente faite sans marge (§39).
+ */
+export function percent(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return `${value.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
 }
 
 /** « aujourd'hui » / « hier » / date — utilisé pour grouper l'historique. */

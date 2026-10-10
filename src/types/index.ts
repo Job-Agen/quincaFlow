@@ -76,6 +76,20 @@ export interface Profile {
   role: Role;
 }
 
+/**
+ * Jetons rendus dans le corps à un client natif (§41).
+ *
+ * Absents de toute réponse au navigateur, qui les reçoit en cookies `HttpOnly` :
+ * les rendre lisibles par le JavaScript de la page mettrait la session à portée
+ * d'un script injecté, ce que les cookies évitent précisément.
+ */
+export interface IssuedTokens {
+  accessToken: string;
+  refreshToken: string;
+  /** Secondes de validité de l'access token : le client sait quand renouveler. */
+  expiresIn: number;
+}
+
 // ---------------------------------------------------------------------------
 // Produits, conditionnements et stock (§9, §10, §26)
 // ---------------------------------------------------------------------------
@@ -391,4 +405,238 @@ export interface DashboardSummary {
   lowStockCount: number;
   lowStock: ProductRow[];
   recent: HistoryEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Dépenses et rapports financiers (§39)
+// ---------------------------------------------------------------------------
+
+/** Les six postes de dépense d'une quincaillerie (§40). */
+export type ExpenseCategory =
+  | 'RENT'
+  | 'UTILITIES'
+  | 'SALARY'
+  | 'STOCK_PURCHASE'
+  | 'TRANSPORT'
+  | 'OTHER';
+
+export interface ExpenseRow {
+  id: string;
+  business_id: string;
+  category: ExpenseCategory;
+  label: string;
+  amount: Money;
+  /** Date de sortie de l'argent, au format `YYYY-MM-DD` — pas celle de la saisie. */
+  spent_on: string;
+  note: string | null;
+  user_id: string | null;
+  created_at: string;
+  /**
+   * Un justificatif est joint (§40).
+   *
+   * L'image elle-même n'est pas ici : une liste de trente dépenses porterait
+   * trente photos, soit plusieurs mégaoctets sur une connexion de comptoir. Elle
+   * se demande à l'ouverture de la dépense, par `/api/expenses/:id/receipt`.
+   */
+  has_receipt: boolean;
+}
+
+/** Justificatif d'une dépense, image comprise : chargé à l'unité (§40). */
+export interface Receipt {
+  id: string;
+  name: string;
+  /** Image en `data:` URL, réduite côté téléphone avant l'envoi. */
+  url: string;
+  created_at: string;
+}
+
+/** Total d'un poste de dépense sur la période. */
+export interface ExpenseBucket {
+  category: ExpenseCategory;
+  amount: Money;
+  count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Cahier de recettes (§42)
+// ---------------------------------------------------------------------------
+
+/** Les cinq postes d'une recette hors vente (§42). */
+export type IncomeCategory = 'SERVICE' | 'DELIVERY' | 'RENTAL' | 'DEBT_REPAYMENT' | 'OTHER';
+
+export interface IncomeRow {
+  id: string;
+  business_id: string;
+  category: IncomeCategory;
+  label: string;
+  amount: Money;
+  /** Date d'entrée de l'argent, au format `YYYY-MM-DD` — pas celle de la saisie. */
+  received_on: string;
+  note: string | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+/** Total d'un poste de recette sur la période. */
+export interface IncomeBucket {
+  category: IncomeCategory;
+  amount: Money;
+  count: number;
+}
+
+/**
+ * Une journée du cahier (§42).
+ *
+ * `total` est la somme des deux origines. Les garder séparées est ce qui permet
+ * au gérant de voir d'où vient sa journée : vingt mille de ventes et rien
+ * d'autre ne se lit pas comme vingt mille dont quinze de location.
+ */
+export interface TakingsDay {
+  /** Jour au format `YYYY-MM-DD`. */
+  day: string;
+  salesAmount: Money;
+  salesCount: number;
+  otherAmount: Money;
+  otherCount: number;
+  total: Money;
+}
+
+/** Le cahier de recettes d'une période (§42). */
+export interface TakingsBook {
+  from: string | null;
+  to: string | null;
+  /** Encaissements de vente de la période (§14). */
+  salesTotal: Money;
+  /** Recettes hors vente, tous postes confondus. */
+  otherTotal: Money;
+  /** La part des recettes hors vente qui est du chiffre d'affaires (§42). */
+  otherRevenue: Money;
+  total: Money;
+  days: TakingsDay[];
+  byCategory: IncomeBucket[];
+}
+
+/**
+ * Résultat d'une période, du chiffre d'affaires au bénéfice net (§39).
+ *
+ * `marginRate` est `null` quand rien n'a été vendu : afficher 0 % laisserait
+ * croire à une vente sans marge.
+ */
+export interface PeriodTotals {
+  revenue: Money;
+  salesRevenue: Money;
+  outOfStockRevenue: Money;
+  /** Recettes hors vente qui comptent comme chiffre d'affaires (§42). */
+  otherRevenue: Money;
+  costOfGoods: Money;
+  grossMargin: Money;
+  marginRate: number | null;
+  /** Tout ce qui est sorti de la caisse en dépenses sur la période (§40). */
+  expenses: Money;
+  /** La part « achat de stock » : sortie de caisse, mais pas une charge (§39). */
+  stockPurchases: Money;
+  /** Les dépenses réellement déduites du bénéfice : `expenses − stockPurchases`. */
+  operatingExpenses: Money;
+  netProfit: Money;
+}
+
+/** Une tranche du rapport des ventes par période : un jour, ou un mois. */
+export interface PeriodBucket {
+  /** Début de la tranche, en ISO — le libellé est mis en forme à l'affichage. */
+  bucket: string;
+  salesCount: number;
+  outOfStockCount: number;
+  revenue: Money;
+  cost: Money;
+  margin: Money;
+}
+
+/** Découpage du rapport : par jour jusqu'à trois mois, par mois au-delà. */
+export type Granularity = 'day' | 'month';
+
+/**
+ * Rentabilité d'un produit sur la période (§39).
+ *
+ * `quantity` est en unité de base (§10) ; la quantité hors stock est comptée à
+ * part, l'article n'étant jamais entré en stock.
+ */
+export interface ProductProfit {
+  productId: string | null;
+  productName: string;
+  baseUnit: string | null;
+  quantity: Quantity;
+  revenue: Money;
+  cost: Money;
+  margin: Money;
+  marginRate: number | null;
+  outOfStockQuantity: Quantity;
+  outOfStockRevenue: Money;
+  outOfStockMargin: Money;
+}
+
+/** Tout ce que l'écran Rapports affiche, en un seul aller-retour (§35). */
+export interface FinancialReport {
+  from: string | null;
+  to: string | null;
+  granularity: Granularity;
+  totals: PeriodTotals;
+  salesCount: number;
+  outOfStockCount: number;
+  /** Nombre de dépenses composant le total : zéro veut dire « marge brute ». */
+  expenseCount: number;
+  expensesByCategory: ExpenseBucket[];
+  buckets: PeriodBucket[];
+  products: ProductProfit[];
+  /** Produits vendus sur la période ; `products` peut en montrer moins (§39). */
+  productCount: number;
+}
+
+// ---------------------------------------------------------------------------
+// Journal de caisse (§40)
+// ---------------------------------------------------------------------------
+
+/**
+ * Une ligne du journal de caisse.
+ *
+ * `amount` est toujours positif ; c'est `direction` qui dit le sens. Une colonne
+ * signée obligerait chaque lecteur à se souvenir de la convention, et un total
+ * d'entrées calculé sur des montants signés donnerait la différence au lieu de
+ * la somme.
+ */
+export interface CashEntry {
+  id: string;
+  direction: 'IN' | 'OUT';
+  /** `SALE_PAYMENT` encaissement de vente, `INCOME` recette hors vente (§42), `EXPENSE` dépense. */
+  kind: 'SALE_PAYMENT' | 'INCOME' | 'EXPENSE';
+  occurredAt: string;
+  label: string;
+  /** Moyen de paiement pour une entrée, poste de dépense pour une sortie. */
+  detail: string;
+  amount: Money;
+  /** Référence de la vente, pour ouvrir le reçu depuis le journal. */
+  reference: string | null;
+  saleId: string | null;
+}
+
+/** Une ligne du journal, accompagnée du solde après son passage. */
+export interface CashEntryWithBalance extends CashEntry {
+  balance: Money;
+}
+
+/**
+ * Journal de caisse d'une période (§40).
+ *
+ * `balance` est le solde des opérations de la période, non le fond de caisse :
+ * aucun solde d'ouverture n'est demandé en V1, et l'écran doit le dire plutôt
+ * que de laisser croire au contenu réel du tiroir.
+ */
+export interface CashJournal {
+  from: string | null;
+  to: string | null;
+  cashIn: Money;
+  cashOut: Money;
+  balance: Money;
+  entries: CashEntryWithBalance[];
+  /** Vrai si la période compte plus de lignes que le journal n'en rapporte. */
+  truncated: boolean;
 }

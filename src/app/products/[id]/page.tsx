@@ -22,7 +22,7 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { ADJUSTMENT_REASONS, MOVEMENT_LABELS } from '@/domain/stock';
 import { describeStock } from '@/domain/units';
-import { dateTime, money, quantity, withUnit } from '@/utils/format';
+import { amount, dateTime, money, quantity, withUnit } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type { Product, StockMovementRow } from '@/types';
 
@@ -103,9 +103,7 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                 </div>
                 <div className="tile tile--green">
                   <span className="tile__label">Prix de vente</span>
-                  <span className="tile__value num">
-                    {Number(data.selling_price).toLocaleString('fr-FR')}
-                  </span>
+                  <span className="tile__value num">{amount(data.selling_price, 3)}</span>
                   <span className="tile__unit">{currency}</span>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
+import Link from 'next/link';
 import { ExternalLink, FileText, PackageCheck, Paperclip, Share2 } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import {
@@ -24,6 +25,8 @@ import {
   PO_STATUS_LABELS,
   PO_STATUS_TONES,
   canReceive,
+  orderMessageLines,
+  purchaseOrderMessage,
   remainingOf,
 } from '@/domain/purchase';
 import { amount, dateTime, shortDate, money, quantity } from '@/utils/format';
@@ -39,7 +42,7 @@ import type { PurchaseOrder, PurchaseOrderItemRow, PurchaseOrderStatus } from '@
  */
 export default function PurchaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { currency, isOwner } = useSession();
+  const { business, currency, isOwner } = useSession();
   const { data, loading, error, setData } = useResource<PurchaseOrder>(
     `/api/purchase-orders/${id}`
   );
@@ -47,20 +50,30 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
   const [attaching, setAttaching] = useState(false);
   const [issue, setIssue] = useState<string | null>(null);
 
+  /**
+   * Le message part de la fonction du domaine, pas d'ici (§43).
+   *
+   * Cet écran composait sa propre version : un titre, des quantités, aucun
+   * prix, aucune identité de boutique. Le fournisseur recevait une liste sans
+   * savoir qui commandait ni à quel tarif.
+   */
   async function share() {
     if (!data) return;
-    const lines = data.items
-      .map(
-        (item) => `• ${item.product_name} — ${quantity(item.quantity_ordered)} ${item.unit_label}`
-      )
-      .join('\n');
-    const text = `Commande ${data.reference}\nFournisseur : ${data.supplier_name}\n\n${lines}\n\nTotal estimé : ${money(
-      data.total_estimated,
+    const text = purchaseOrderMessage(
+      {
+        reference: data.reference,
+        supplierName: data.supplier_name,
+        createdAt: data.created_at,
+        notes: data.notes,
+        cancelled: data.status === 'CANCELLED',
+      },
+      orderMessageLines(data.items),
+      business,
       currency
-    )}`;
+    );
 
     if (navigator.share) {
-      await navigator.share({ title: `Commande ${data.reference}`, text }).catch(() => {});
+      await navigator.share({ title: `Bon de commande ${data.reference}`, text }).catch(() => {});
     } else {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
     }
@@ -139,6 +152,12 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                 </div>
               </div>
             </Card>
+
+            {/* Le document mis en page, à envoyer au fournisseur (§43). */}
+            <Link href={`/purchases/${id}/document`} className="btn btn--soft btn--block">
+              <FileText size={18} />
+              Voir le bon de commande
+            </Link>
 
             {data.notes ? <Notice>{data.notes}</Notice> : null}
 

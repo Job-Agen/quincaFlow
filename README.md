@@ -15,7 +15,10 @@ vente créée → stock −5 → CA +2 250 → marge calculée → historique �
 
 SaaS multi-tenant, mobile d'abord, en français, en FCFA. Le cahier des charges
 complet est versionné dans [`docs/prd.md`](docs/prd.md) ; les commentaires du code
-y renvoient par numéro de section.
+y renvoient par numéro de section. Pour ajouter quelque chose à l'application une
+fois qu'elle tourne :
+[`docs/ajouter-une-fonctionnalite.md`](docs/ajouter-une-fonctionnalite.md) — la
+marche à suivre, et l'ordre entre la base et le code qu'il ne faut pas inverser.
 
 ## Périmètre du MVP
 
@@ -29,9 +32,18 @@ y renvoient par numéro de section.
 | **Achats fournisseurs** | Commandes, réception partielle, coût moyen pondéré, documents joints. |
 | **Historique** | Flux unifié — ventes, hors stock, commandes, réceptions — filtrable par période et par nature. |
 | **Répertoires** | Clients (optionnels sur une vente) et fournisseurs. |
+| **Rapports financiers** (§39) | Marge brute et bénéfice net d'une période, ventes par jour ou par mois, rentabilité produit par produit. |
+| **Trésorerie** (§40) | Journal de caisse — encaissements et dépenses dans un même flux, avec solde courant —, six postes de dépense, photo du reçu, répartition en anneau. |
 
 Volontairement hors périmètre : IA, marketplace, e-commerce, comptabilité OHADA,
 paie, CRM, fidélité, prévisions, multi-boutiques.
+
+**Rapports ≠ comptabilité.** Le bénéfice net du §39 déduit les dépenses saisies,
+pas davantage : ni amortissement, ni TVA, ni bilan. Deux règles le rendent juste
+plutôt que flatteur — l'achat de stock sort de la caisse sans être déduit du
+bénéfice, la marchandise étant déjà comptée à son coût le jour de la vente ; et
+un bénéfice net calculé sans aucune dépense saisie est annoncé pour ce qu'il
+est, une marge brute.
 
 ## Trois décisions structurantes
 
@@ -103,6 +115,66 @@ d'écrire — le frontend n'est jamais la source de vérité financière.
   d'e-mails, qui n'est pas encore choisi. En l'état, un mot de passe perdu se
   répare à la main en base.
 - **Pages légales** (conditions d'utilisation, confidentialité).
+
+## Mise en service
+
+Deux gestes restent à faire à la main, dans la console de l'hébergeur. Ils ne
+peuvent pas vivre dans ce dépôt : l'un porte un mot de passe, l'autre ouvre le
+site au public.
+
+### 1. La base
+
+La base Neon du projet porte encore le schéma de l'application précédente : dix
+tables en `id, user_id, data jsonb, updated_at`. Cinq d'entre elles s'appellent
+comme les nouvelles — `users`, `products`, `sales`, `expenses`,
+`stock_movements` — sans rien avoir en commun avec elles.
+
+**Rejouer `schema.sql` par-dessus ne suffit donc pas** : `CREATE TABLE IF NOT
+EXISTS` saute ces cinq tables, et l'application échouerait à l'exécution sur des
+colonnes absentes, au lieu de refuser de démarrer. Il faut une base neuve.
+
+1. Console Neon → projet `quincaFlow` → **Databases** → créer une base neuve.
+   Son nom est libre : il n'apparaît nulle part dans le code, seulement dans la
+   chaîne de connexion. L'ancienne reste intacte, consultable.
+2. **Connection string** de cette base → la coller dans Vercel → Settings →
+   Environment Variables → `DATABASE_URL`, pour *Production* **et** *Preview*
+   (elle manque aujourd'hui en Preview).
+3. Vérifier que `JWT_SECRET` est défini dans les mêmes environnements.
+   L'application refuse de démarrer sans lui, plutôt que de signer les sessions
+   avec une valeur connue.
+4. Créer les tables :
+
+   ```bash
+   DATABASE_URL="<la même chaîne>" npm run db:check   # dit ce qui manque
+   DATABASE_URL="<la même chaîne>" npm run db:apply   # le crée
+   ```
+
+   `db:check` compare les colonnes et pas seulement les noms de tables : c'est
+   lui qui refuse d'avancer sur l'ancienne base, dont cinq tables portent le bon
+   nom et la mauvaise forme. À défaut, le **SQL Editor** de Neon exécute
+   `schema.sql` tel quel.
+5. Redéployer.
+
+**Renommer une base ne déplace rien, mais casse les chaînes qui la nomment.**
+Le nom vit dans `DATABASE_URL`, pas dans le code : après un renommage côté Neon,
+il faut reporter le nouveau nom dans la variable, partout où elle est définie —
+Vercel (*Production* et *Preview*) et le `.env.local` de chaque poste. Tant que
+ce n'est pas fait, l'application répond `degraded` sur `/api/health`.
+
+### 2. L'accès au site
+
+Le site répondait par une redirection vers la page de connexion Vercel : la
+protection des déploiements était active, et aucun commerçant ne pouvait ouvrir
+l'application — ni depuis le lien, ni depuis l'APK.
+
+Vercel → projet `quincaflow` → Settings → **Deployment Protection** → *Vercel
+Authentication* → **Disabled**, puis enregistrer. C'est fait depuis le
+2 octobre 2026 : le site s'ouvre sans compte Vercel.
+
+`https://quincaflow.vercel.app/api/health` doit répondre `{"status":"ok"}` sans
+redirection. Attention : cette sonde n'exécute qu'un `SELECT 1`, qui réussit sur
+n'importe quelle base. Elle prouve que la connexion aboutit, pas que le schéma
+est à jour — c'est `npm run db:check` qui le dit.
 
 ## Rôles
 
@@ -216,9 +288,10 @@ glissé dans le rendu statique.
 
 ## Modèle de données
 
-20 tables : les 18 du §28, plus `counters` (numérotation) et `login_attempts`
-(freinage des essais de mot de passe). Toutes portent `business_id` à trois
-exceptions près : `users`, `refresh_tokens` et `login_attempts`.
+21 tables : les 18 du §28, plus `counters` (numérotation), `login_attempts`
+(freinage des essais de mot de passe) et `expenses` (§40). Toutes portent
+`business_id` à trois exceptions près : `users`, `refresh_tokens` et
+`login_attempts`.
 
 ```
 businesses
@@ -230,9 +303,15 @@ businesses
  ├── out_of_stock_sales               n'écrit aucun mouvement de stock
  ├── purchase_orders ─── purchase_order_items
  │        └── purchase_receipts ─── purchase_receipt_items
- ├── documents                        pièces jointes d'une commande
+ ├── expenses                         sorties de caisse, datées du jour du décaissement
+ ├── documents                        pièces jointes d'une commande, et reçus de dépense
  └── counters                         numérotation par boutique
 ```
+
+Une dépense porte `spent_on`, une date civile distincte de `created_at` : le
+gérant note au matin le taxi-bagages de la veille, et la dépense doit peser sur
+le jour où l'argent est sorti. Son justificatif se range dans `documents`, avec
+les pièces des commandes fournisseurs — `reference_type = 'EXPENSE'`.
 
 Références : `VE-0001` (vente), `FA-2026-0001` (facture, remise à zéro chaque
 année), `HS-0001` (hors stock), `PO-0001` (commande), `RC-0001` (réception).
@@ -245,9 +324,86 @@ Accueil | Vendre | Produits | Achats | Historique | Plus
 
 L'accueil vit à `/dashboard` ; `/` y redirige, parce que c'est l'adresse qu'un
 gérant tape ou met en favori. « Plus » regroupe Clients, Fournisseurs et
-Paramètres, auxquels s'ajoutent deux entrées que le PRD décrit sans les
-rattacher à une navigation : Ventes hors stock (§16) et Équipe, sans laquelle le
-rôle SELLER du §5 ne pourrait être attribué à personne.
+Paramètres, auxquels s'ajoutent quatre entrées que le PRD décrit sans les
+rattacher à une navigation : Ventes hors stock (§16), Équipe — sans laquelle le
+rôle SELLER du §5 ne pourrait être attribué à personne —, Rapports financiers
+(§39) et Journal de caisse (§40). Ces deux dernières sont réservées au
+propriétaire : elles donnent les salaires de toute l'équipe et le loyer de la
+boutique.
+
+## Application Android native (§41)
+
+`mobile/` est une application React Native (Expo). Ce n'est pas la page web
+empaquetée : ce sont des écrans natifs qui appellent les mêmes routes d'API.
+
+```bash
+cd mobile && npm install
+npx expo start                      # développement, avec Expo Go
+EXPO_PUBLIC_API_URL=https://… npx expo start
+
+export ANDROID_HOME=/chemin/vers/android-sdk
+npx expo prebuild --platform android
+cd android && ./gradlew assembleRelease \
+  -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+# mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+**`assembleRelease`, et non `assembleDebug`** : un paquet de mise au point ne
+contient pas le JavaScript, il le réclame à un serveur Metro et ne sert donc à
+rien hors du poste de développement.
+
+`reactNativeArchitectures` écarte `x86` et `x86_64`, qui ne servent qu'aux
+émulateurs. Sur un marché où la donnée mobile se paie et où l'APK circule par
+WhatsApp, le poids compte :
+
+| Architectures | Poids | Couverture |
+| --- | --- | --- |
+| `armeabi-v7a` | 28 Mio | Tous les téléphones, sauf les plus récents qui ont abandonné le 32 bits |
+| `arm64-v8a` | 33 Mio | Tous les téléphones depuis 2017 environ |
+| Les deux | 41 Mio | Tout, sans exception |
+
+Ces poids supposent R8 passé. Sa configuration vit dans `app.json`, par
+`expo-build-properties`, et non en options de ligne de commande : `android/`
+étant régénéré par `prebuild`, un réglage passé à la main ne survit à personne.
+Qui l'ignorait obtenait un paquet d'un tiers plus lourd, quatre fichiers `dex`
+au lieu de trois.
+
+Lint réclame plus de Metaspace que n'en accorde le modèle Expo : sur les modules
+Expo générés, `lintVitalAnalyzeRelease` meurt en `OutOfMemoryError: Metaspace`
+avec les 512 Mio par défaut. Portez la ligne à
+
+```properties
+org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1536m
+```
+
+dans `android/gradle.properties` après le `prebuild`. Couper le contrôle
+(`lint { checkReleaseBuilds false }`) ferait passer la compilation en taisant
+une vérification, ce qui n'est pas la même chose que de la faire tenir.
+
+Les permissions sont ramenées à Internet et à la caméra par
+`plugins/withPermissionsMinimales.js` : sans lui, les greffons Expo réclament
+aussi le micro, l'empreinte et l'affichage par-dessus les autres applications —
+que rien n'utilise ici, et qu'un commerçant a raison de refuser.
+
+**Le domaine est partagé, pas recopié.** `metro.config.js` et `tsconfig.json`
+font pointer `@/…` vers le `src/` du dépôt : l'application mobile importe
+`@/domain/sale`, `@/utils/format` et `@/types` — les fichiers mêmes du web. Une
+correction de calcul vaut donc pour les deux, et les mêmes tests la couvrent.
+C'est la raison pour laquelle React Native a été retenu plutôt que Flutter, qui
+aurait imposé une seconde implémentation en Dart des formules monétaires. La CI
+type-vérifie `mobile/` pour que ce partage ne se rompe pas en silence.
+
+`mobile/android` et `mobile/ios` sont générés par `expo prebuild` et ne sont pas
+versionnés : la configuration vit dans `app.json`.
+
+La version de mise au point est signée par la clé de débogage d'Android : elle
+s'installe en autorisant les « sources inconnues » et ne peut pas être publiée.
+Une version de diffusion suppose une clé de signature détenue par le commerçant,
+qui ne doit pas vivre dans ce dépôt.
+
+**L'application ne fonctionne pas hors ligne**, et c'est délibéré : les totaux
+sont calculés côté serveur (§35). Sans réseau, l'écran annonce la coupure plutôt
+que d'afficher un chiffre périmé (§33).
 
 ## Connectivité (§33) et installation (§38)
 

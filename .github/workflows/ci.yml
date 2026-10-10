@@ -36,7 +36,98 @@ jobs:
       # Volontairement sans DATABASE_URL ni JWT_SECRET : le build ne doit
       # dépendre d'aucun secret. S'il commence à en exiger un, c'est qu'une
       # lecture de base a glissé dans le rendu statique — et il faut le savoir ici.
+      #
+      # Le build commence pourtant par `db:deploy`, qui met la base à niveau
+      # (§43). Sans adresse, cette étape le dit et passe son chemin : elle ne
+      # rend donc pas le build dépendant d'un secret, et cette exécution-ci le
+      # vérifie à chaque fois.
       - run: npm run build
+
+      # L'application mobile compile contre `src/domain`, `src/types` et
+      # `src/utils` — les fichiers mêmes du web (§41). C'est ce qui garantit
+      # qu'il n'existe qu'une arithmétique des montants, et cette étape est ce
+      # qui l'empêche de se rompre en silence : une signature changée d'un côté
+      # échoue ici, pas trois semaines plus tard sur le téléphone d'un gérant.
+      - run: npm ci
+        working-directory: mobile
+
+      - run: npx tsc --noEmit
+        working-directory: mobile
+
+  schema:
+    name: Schéma
+    runs-on: ubuntu-latest
+
+    # Le schéma est confronté deux fois : à un PostgreSQL neuf, toujours, pour
+    # vérifier qu'il s'applique et que `db:check` le reconnaît ; puis à la base
+    # de production, quand son adresse est fournie en secret.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: schema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Sur une base vide : `db:apply` doit tout créer, et `db:check` conclure
+      # que plus rien ne manque. C'est ce qui garantit que `schema.sql` et
+      # l'outil qui le lit ne divergent pas.
+      - name: Le schéma s'applique à une base neuve
+        run: npm run db:apply
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/schema_test
+
+      - name: Et se relance sans effet
+        run: |
+          npm run db:apply
+          npm run db:check
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/schema_test
+
+      # Le contrôle qui compte vraiment. Une base de production en retard sur
+      # `schema.sql` est précisément ce qui a mis Dépenses, Rapports et Journal
+      # de caisse en erreur alors que le déploiement était vert et que
+      # `/api/health` répondait « ok » : sa sonde n'exécute qu'un `SELECT 1`,
+      # qui réussit sur n'importe quelle base.
+      #
+      # Sans le secret, la vérification ne peut pas avoir lieu — et une
+      # vérification qui ne tourne pas ne doit jamais ressembler à une
+      # vérification qui passe. Le pas le dit, bruyamment.
+      - name: La base de production est à jour
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::warning title=Base de production non vérifiée::\
+          Le secret PRODUCTION_DATABASE_URL n'est pas défini. Personne ne \
+          vérifie que la base de production porte bien le schéma que ce code \
+          attend. Ajoutez-le dans Settings → Secrets and variables → Actions."
+            {
+              echo "### ⚠️ Base de production non vérifiée"
+              echo
+              echo "Le secret \`PRODUCTION_DATABASE_URL\` est absent."
+              echo "Ce code peut partir vers une base en retard sans que rien ne l'annonce."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          npm run db:check
 
   tests:
     name: Tests unitaires et d'intégration
