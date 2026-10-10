@@ -140,6 +140,62 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expect(rows).toEqual([{ type: 'ADJUSTMENT', q: 80, note: 'Stock initial' }]);
   });
 
+  /**
+   * Un produit créé sans conditionnement ne se vend qu'à l'unité. S'il ne peut
+   * plus en recevoir, le gérant qui écoule sa marchandise en gros est coincé —
+   * c'est ce qui se passait sur le téléphone, faute d'écran de modification.
+   */
+  it('accepte un conditionnement ajouté après coup, et le rend à la vente', async () => {
+    const brut = await products.createProduct(OWNER, {
+      name: 'Tôle bac',
+      baseUnit: 'feuille',
+      purchasePrice: 5000,
+      sellingPrice: 7000,
+      stockQuantity: 60,
+      lowStockThreshold: 5,
+    });
+    expect(brut.units.map((u) => u.label)).toEqual(['feuille']);
+
+    const enrichi = await products.updateProduct(OWNER, brut.id, {
+      name: 'Tôle bac',
+      baseUnit: 'feuille',
+      purchasePrice: 5000,
+      sellingPrice: 7000,
+      stockQuantity: 60,
+      lowStockThreshold: 5,
+      units: [{ label: 'paquet', factor: 10, price: 66000 }],
+    });
+
+    expect(enrichi.units.map((u) => u.label)).toEqual(['feuille', 'paquet']);
+    const paquet = enrichi.units.find((u) => u.label === 'paquet')!;
+    expect(paquet.factor).toBe(10);
+    expect(paquet.price).toBe(66000);
+    expect(paquet.isBase).toBe(false);
+
+    // Et il sort bien dix feuilles du stock, pas une.
+    await sales.createSale(OWNER, {
+      lines: [{ productId: brut.id, unitId: paquet.id, quantity: 1 }],
+      paymentMethod: 'CASH',
+      amountPaid: 66000,
+    });
+    const apres = await products.getProduct(OWNER.businessId, brut.id);
+    expect(apres.stock_quantity).toBe(50);
+  });
+
+  it('retire un conditionnement qu’on ne vend plus', async () => {
+    const vitre = await seedVitre();
+    const sans = await products.updateProduct(OWNER, vitre.id, {
+      name: vitre.name,
+      baseUnit: vitre.base_unit,
+      purchasePrice: vitre.purchase_price,
+      sellingPrice: vitre.selling_price,
+      stockQuantity: vitre.stock_quantity,
+      lowStockThreshold: vitre.low_stock_threshold,
+      units: [],
+    });
+    expect(sans.units.map((u) => u.label)).toEqual(['pièce']);
+  });
+
   it('interdit à une autre quincaillerie de lire le produit', async () => {
     const vitre = await seedVitre();
     await expect(products.getProduct(RIVAL.businessId, vitre.id)).rejects.toThrow(/introuvable/i);

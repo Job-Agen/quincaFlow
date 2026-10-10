@@ -72,6 +72,7 @@ function Garde() {
       <Stack.Screen name="sales/[id]" options={{ title: 'Reçu' }} />
       <Stack.Screen name="products/new" options={{ title: 'Nouveau produit' }} />
       <Stack.Screen name="products/[id]" options={{ title: 'Fiche produit' }} />
+      <Stack.Screen name="products/edit/[id]" options={{ title: 'Modifier le produit' }} />
       <Stack.Screen name="purchases/new" options={{ title: 'Nouvelle commande' }} />
       <Stack.Screen name="purchases/[id]" options={{ title: 'Commande' }} />
       <Stack.Screen name="out-of-stock/index" options={{ title: 'Ventes hors stock' }} />

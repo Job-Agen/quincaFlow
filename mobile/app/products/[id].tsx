@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, CardHead, Chargement, Empty, Field, Notice } from '../../src/ui';
 import { useResource } from '../../src/lib/useResource';
 import { useSession } from '../../src/lib/session';
@@ -22,6 +22,7 @@ import type { Product, StockMovementRow } from '@/types';
  */
 export default function FicheProduit() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { currency, isOwner } = useSession();
   const produit = useResource<Product>(id ? `/api/products/${id}` : null);
   const mouvements = useResource<StockMovementRow[]>(id ? `/api/products/${id}/movements` : null);
@@ -86,7 +87,21 @@ export default function FicheProduit() {
       </Card>
 
       <Card>
-        <CardHead title="Conditionnements" />
+        <CardHead
+          title="Conditionnements"
+          action={
+            isOwner ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Modifier le produit"
+                onPress={() => router.push(`/products/edit/${id}`)}
+                hitSlop={8}
+              >
+                <Text style={styles.lien}>Modifier</Text>
+              </Pressable>
+            ) : null
+          }
+        />
         {article.units.map((unite) => (
           <View key={unite.id} style={styles.ligne}>
             <View style={{ flex: 1 }}>
@@ -100,6 +115,17 @@ export default function FicheProduit() {
             <Text style={styles.montant}>{money(unite.price, currency)}</Text>
           </View>
         ))}
+        {/*
+          Un produit sans conditionnement ne se vend qu'à l'unité, et rien ne le
+          disait : le gérant croyait l'avoir perdu alors qu'il n'avait jamais été
+          saisi. La carte le dit, et donne le chemin pour y remédier.
+        */}
+        {article.units.length < 2 ? (
+          <Text style={styles.aide}>
+            Ce produit ne se vend qu’à l’{article.base_unit}. Pour le vendre en gros — carton, sac,
+            lot —, ajoutez un conditionnement par « Modifier ».
+          </Text>
+        ) : null}
       </Card>
 
       {isOwner ? (
@@ -176,6 +202,8 @@ function Bloc({ libelle, valeur, alerte }: { libelle: string; valeur: string; al
 }
 
 const styles = StyleSheet.create({
+  lien: { fontSize: 13, fontWeight: '700', color: couleurs.blue },
+  aide: { fontSize: 12, lineHeight: 18, color: couleurs.muted },
   page: { padding: 16, gap: 12, paddingBottom: 40 },
   nom: { fontSize: 18, fontWeight: '800', color: couleurs.ink },
   sous: { fontSize: 12, color: couleurs.muted },
