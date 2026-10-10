@@ -23,7 +23,11 @@ export default defineConfig({
         test: {
           name: 'métier',
           environment: 'node',
-          include: ['src/{domain,server,lib,utils}/**/*.test.{ts,tsx}'],
+          include: [
+            'src/{domain,server,lib,utils}/**/*.test.{ts,tsx}',
+            // L'arborescence des routes natives : du `fs`, aucun DOM (§41).
+            'src/test/**/*.test.ts',
+          ],
         },
       },
       {

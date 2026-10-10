@@ -63,6 +63,8 @@ function Garde() {
 
   return (
     <Stack screenOptions={ENTETE}>
+      {/* La racine : elle ne fait que rediriger, et n'a donc pas d'en-tête. */}
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="register" options={{ title: 'Créer ma boutique' }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
