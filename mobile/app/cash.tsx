@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Card, Chargement, Empty, Notice } from '../src/ui';
 import { useResource } from '../src/lib/useResource';
 import { useSession } from '../src/lib/session';

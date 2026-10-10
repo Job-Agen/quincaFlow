@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Chargement, Empty, Notice } from '../../src/ui';
 import { useResource } from '../../src/lib/useResource';
 import { useSession } from '../../src/lib/session';

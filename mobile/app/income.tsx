@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button, Card, CardHead, Chargement, Empty, Field, Notice } from '../src/ui';
 import { useResource } from '../src/lib/useResource';
 import { useSession } from '../src/lib/session';
