@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 import { Button, Card, CardHead, Chargement, Notice } from '../../src/ui';
 import { useResource } from '../../src/lib/useResource';
 import { useSession } from '../../src/lib/session';
@@ -12,6 +15,7 @@ import {
   purchaseOrderMessage,
   remainingOf,
 } from '@/domain/purchase';
+import { purchaseOrderHtml } from '@/domain/purchaseOrderHtml';
 import { dateTime, money, quantity, withUnit } from '@/utils/format';
 import type { PurchaseOrder, PurchaseOrderStatus } from '@/types';
 
@@ -89,18 +93,80 @@ export default function Commande() {
    * même fonction que le web, donc le fournisseur reçoit le même document
    * quel que soit l'appareil du gérant (§41).
    */
-  async function envoyer() {
+  /** L'en-tête du document, identique pour le PDF et pour le message. */
+  function enTete(commande: PurchaseOrder) {
+    return {
+      reference: commande.reference,
+      supplierName: commande.supplier_name,
+      createdAt: commande.created_at,
+      notes: commande.notes,
+      cancelled: commande.status === 'CANCELLED',
+    };
+  }
+
+  /**
+   * Le bon de commande part en PDF A4, pas en texte (§43).
+   *
+   * Un fournisseur attend un papier : il l'imprime, le classe, le ressort à la
+   * livraison. Le message texte ne lui donne rien à ranger. `expo-print` rend la
+   * feuille du domaine en PDF, et la feuille de partage d'Android l'envoie —
+   * WhatsApp y figure comme les autres, sans intégration particulière (§19).
+   */
+  async function envoyerPdf() {
+    if (!data) return;
+    setSouci(null);
+    setOccupe(true);
+    try {
+      const html = purchaseOrderHtml(
+        enTete(data),
+        orderMessageLines(data.items),
+        profil?.business,
+        currency
+      );
+      const { uri } = await Print.printToFileAsync({ html });
+
+      // Le nom du fichier est ce que le fournisseur verra dans sa conversation :
+      // « Bon-de-commande-PO-0042.pdf » se retrouve, « 3f9a2b.pdf » se perd.
+      let aEnvoyer = uri;
+      try {
+        const cible = new File(Paths.cache, `Bon-de-commande-${data.reference}.pdf`);
+        if (cible.exists) cible.delete();
+        new File(uri).copy(cible);
+        aEnvoyer = cible.uri;
+      } catch {
+        // Renommer est un confort : si le cache refuse, on envoie tel quel.
+      }
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(aEnvoyer, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: `Bon de commande ${data.reference}`,
+        });
+      } else {
+        await Share.share({
+          message: purchaseOrderMessage(
+            enTete(data),
+            orderMessageLines(data.items),
+            profil?.business,
+            currency
+          ),
+        });
+      }
+    } catch (erreur) {
+      setSouci(erreur instanceof Error ? erreur.message : 'Document impossible à produire.');
+    } finally {
+      setOccupe(false);
+    }
+  }
+
+  /** Le même bon, en texte : un fournisseur dont le téléphone ne lit pas les PDF. */
+  async function envoyerTexte() {
     if (!data) return;
     try {
       await Share.share({
         message: purchaseOrderMessage(
-          {
-            reference: data.reference,
-            supplierName: data.supplier_name,
-            createdAt: data.created_at,
-            notes: data.notes,
-            cancelled: data.status === 'CANCELLED',
-          },
+          enTete(data),
           orderMessageLines(data.items),
           profil?.business,
           currency
@@ -141,8 +207,11 @@ export default function Commande() {
           <Text style={styles.montant}>{money(data.total_estimated, currency)}</Text>
         </View>
         {data.notes ? <Text style={styles.sous}>{data.notes}</Text> : null}
-        <Button variant="success" onPress={envoyer}>
-          Envoyer le bon de commande
+        <Button variant="success" onPress={envoyerPdf} busy={occupe}>
+          Envoyer le bon de commande (PDF)
+        </Button>
+        <Button variant="ghost" onPress={envoyerTexte}>
+          Envoyer en texte
         </Button>
       </Card>
 
