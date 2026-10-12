@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   costPerBaseUnit,
   describeStock,
+  stockInLots,
   findUnit,
   pricePerBaseUnit,
   toBaseQuantity,
@@ -85,17 +86,62 @@ describe('weightedAverageCost', () => {
   });
 });
 
+/**
+ * Lire son stock en lots (§10).
+ *
+ * Le gérant compte son rayon en cartons. « 1 141 pièces » ne lui dit pas s'il
+ * peut honorer une commande de deux cartons ; « 42 cartons + 7 pièces », si.
+ */
+describe('stockInLots', () => {
+  const units = unitsOf(product, [
+    { id: 'u1', label: 'carton', factor: 40, price: 17000 },
+    { id: 'u2', label: 'palette', factor: 200, price: 80000 },
+  ]);
+
+  it('décompose du plus grand lot au plus petit, reste compris', () => {
+    expect(stockInLots(462, units, 'pièce')).toBe('2 palettes + 1 carton + 22 pièces');
+  });
+
+  it('accorde un libellé que le gérant a déjà écrit au pluriel', () => {
+    // Saisi « Cartons » dans la fiche produit : « Cartonss » serait du charabia.
+    const cartons = unitsOf(product, [{ id: 'u1', label: 'Cartons', factor: 27, price: 23000 }]);
+    expect(stockInLots(1141, cartons, 'pièce')).toBe('42 Cartons + 7 pièces');
+  });
+
+  it('se tait quand aucun lot n’est entier : « 0 carton » n’apprend rien', () => {
+    expect(stockInLots(22, units, 'pièce')).toBe(null);
+  });
+
+  it('tombe juste quand le compte est rond', () => {
+    expect(stockInLots(400, units, 'pièce')).toBe('2 palettes');
+  });
+
+  it('ne descend pas sous zéro sur un stock négatif', () => {
+    expect(stockInLots(-5, units, 'pièce')).toBe(null);
+  });
+});
+
 describe('describeStock', () => {
   const units = unitsOf(product, [
     { id: 'u1', label: 'carton', factor: 40, price: 17000 },
     { id: 'u2', label: 'palette', factor: 200, price: 80000 },
   ]);
 
-  it('décompose du plus grand lot au plus petit', () => {
-    expect(describeStock(462, units, 'pièce')).toBe('462 pièce (2 palettes + 1 carton + 22)');
+  it('donne l’unité de base, puis sa lecture en lots', () => {
+    expect(describeStock(462, units, 'pièce')).toBe(
+      '462 pièces (2 palettes + 1 carton + 22 pièces)'
+    );
+  });
+
+  it('sépare les milliers, comme partout ailleurs', () => {
+    const cartons = unitsOf(product, [{ id: 'u1', label: 'Cartons', factor: 27, price: 23000 }]);
+    // `toLocaleString('fr-FR')` sépare par une espace fine insécable ; la
+    // comparer à une espace ordinaire ferait échouer un texte pourtant juste.
+    const vu = describeStock(1141, cartons, 'pièce').replace(/[\u00a0\u202f\u2009]/g, ' ');
+    expect(vu).toBe('1 141 pièces (42 Cartons + 7 pièces)');
   });
 
   it("n'affiche pas de décomposition quand il n'y a pas de lot entier", () => {
-    expect(describeStock(22, units, 'pièce')).toBe('22 pièce');
+    expect(describeStock(22, units, 'pièce')).toBe('22 pièces');
   });
 });

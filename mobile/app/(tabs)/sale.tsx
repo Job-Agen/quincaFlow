@@ -16,6 +16,7 @@ import { useSession } from '../../src/lib/session';
 import { api } from '../../src/lib/api';
 import { couleurs, rayons, CIBLE_TACTILE } from '../../src/lib/theme';
 import { buildSaleLine, totalsOf, baseQuantitiesByProduct } from '@/domain/sale';
+import { stockInLots } from '@/domain/units';
 import { money, withUnit } from '@/utils/format';
 import type { Product, Sale } from '@/types';
 
@@ -178,6 +179,14 @@ export default function VenteRapide() {
                   <Text style={styles.ligneTitre}>{produit.name}</Text>
                   <Text style={styles.ligneSous}>
                     {withUnit(produit.stock_quantity, produit.base_unit)} en stock
+                    {(() => {
+                      const lots = stockInLots(
+                        produit.stock_quantity,
+                        produit.units,
+                        produit.base_unit
+                      );
+                      return lots ? ` · ${lots}` : '';
+                    })()}
                   </Text>
                 </View>
                 <Text style={styles.montant}>{money(produit.selling_price, currency)}</Text>

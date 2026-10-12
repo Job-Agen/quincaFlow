@@ -14,6 +14,7 @@ import { Chargement, Empty, Notice } from '../../src/ui';
 import { useResource } from '../../src/lib/useResource';
 import { useSession } from '../../src/lib/session';
 import { CIBLE_TACTILE, couleurs, rayons } from '../../src/lib/theme';
+import { stockInLots } from '@/domain/units';
 import { money, withUnit } from '@/utils/format';
 import type { Product } from '@/types';
 
@@ -74,6 +75,13 @@ export default function Produits() {
                   {item.stock_quantity <= 0
                     ? 'Rupture de stock'
                     : `${withUnit(item.stock_quantity, item.base_unit)} en stock`}
+                  {/* Le même stock lu en cartons : c'est ainsi que le rayon se compte (§10). */}
+                  {item.stock_quantity > 0
+                    ? (() => {
+                        const lots = stockInLots(item.stock_quantity, item.units, item.base_unit);
+                        return lots ? ` · ${lots}` : '';
+                      })()
+                    : ''}
                   {item.sku ? ` · ${item.sku}` : ''}
                 </Text>
               </View>

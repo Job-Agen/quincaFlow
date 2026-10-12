@@ -7,6 +7,7 @@ import { useSession } from '../../src/lib/session';
 import { api } from '../../src/lib/api';
 import { couleurs, rayons } from '../../src/lib/theme';
 import { MOVEMENT_LABELS } from '@/domain/stock';
+import { stockInLots } from '@/domain/units';
 import { dateTime, money, quantity, withUnit } from '@/utils/format';
 import type { Product, StockMovementRow } from '@/types';
 
@@ -74,9 +75,15 @@ export default function FicheProduit() {
         {article.description ? <Text style={styles.sous}>{article.description}</Text> : null}
 
         <View style={styles.chiffres}>
+          {/*
+            Le gérant compte son rayon en cartons : savoir qu'il reste 1 141
+            pièces ne lui dit pas s'il peut honorer une commande de deux
+            cartons. Les deux lectures tiennent dans la même tuile (§10).
+          */}
           <Bloc
             libelle="En stock"
             valeur={withUnit(article.stock_quantity, article.base_unit)}
+            precision={stockInLots(article.stock_quantity, article.units, article.base_unit)}
             alerte={article.stock_quantity <= article.low_stock_threshold}
           />
           <Bloc libelle="Prix de vente" valeur={money(article.selling_price, currency)} />
@@ -192,11 +199,23 @@ export default function FicheProduit() {
   );
 }
 
-function Bloc({ libelle, valeur, alerte }: { libelle: string; valeur: string; alerte?: boolean }) {
+function Bloc({
+  libelle,
+  valeur,
+  precision,
+  alerte,
+}: {
+  libelle: string;
+  valeur: string;
+  /** Le même chiffre dit autrement — le stock en cartons, par exemple. */
+  precision?: string | null;
+  alerte?: boolean;
+}) {
   return (
     <View style={[styles.bloc, alerte ? { backgroundColor: couleurs.redSoft } : null]}>
       <Text style={styles.blocLibelle}>{libelle}</Text>
       <Text style={[styles.blocValeur, alerte ? { color: couleurs.red } : null]}>{valeur}</Text>
+      {precision ? <Text style={styles.blocPrecision}>{precision}</Text> : null}
     </View>
   );
 }
@@ -216,6 +235,7 @@ const styles = StyleSheet.create({
     backgroundColor: couleurs.surface2,
     gap: 2,
   },
+  blocPrecision: { fontSize: 11, color: couleurs.muted, marginTop: 2 },
   blocLibelle: { fontSize: 11, color: couleurs.muted },
   blocValeur: { fontSize: 14, fontWeight: '800', color: couleurs.ink },
   ligne: {

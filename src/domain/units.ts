@@ -1,3 +1,4 @@
+import { withUnit } from '../utils/format';
 import { round2, round3, toNumber } from '../utils/money';
 import type { Money, ProductRow, ProductUnitRow, Quantity, Unit } from '@/types';
 
@@ -130,14 +131,25 @@ export function weightedAverageCost(
 }
 
 /**
- * Décompose un stock sur les conditionnements, du plus grand au plus petit :
- * « 2 cartons + 22 ». Ne compte que les lots entiers.
+ * Le stock lu en lots : « 42 cartons + 7 pièces ».
+ *
+ * Le gérant compte son rayon en cartons, pas en pièces : savoir qu'il reste
+ * 1 141 pièces ne lui dit pas s'il peut honorer une commande de deux cartons.
+ * Seuls les lots entiers sont comptés, du plus grand conditionnement au plus
+ * petit, et le reste repart dans l'unité de base.
+ *
+ * `withUnit` fait l'accord : un libellé déjà au pluriel — « Cartons », tel que
+ * le gérant l'a saisi — ne doit pas devenir « Cartonss », et « 1141 » s'écrit
+ * « 1 141 ». La règle d'accord est au formateur, une seule fois, et non
+ * réinventée ici.
+ *
+ * Rend `null` quand il n'y a aucun lot entier : « 0 carton » n'apprend rien.
  */
-export function describeStock(
+export function stockInLots(
   baseQty: unknown,
   units: Pick<Unit, 'factor' | 'label'>[],
   baseLabel: string
-): string {
+): string | null {
   const qty = Math.max(0, toNumber(baseQty));
   const lots = units.filter((unit) => unit.factor > 1).sort((a, b) => b.factor - a.factor);
 
@@ -146,13 +158,23 @@ export function describeStock(
   lots.forEach((unit) => {
     const count = Math.floor(left / unit.factor);
     if (count > 0) {
-      parts.push(`${count} ${unit.label}${count > 1 ? 's' : ''}`);
+      parts.push(withUnit(count, unit.label));
       left = round3(left - count * unit.factor);
     }
   });
 
-  const base = `${qty} ${baseLabel}`;
-  if (parts.length === 0) return base;
-  if (left > 0) parts.push(String(left));
-  return `${base} (${parts.join(' + ')})`;
+  if (parts.length === 0) return null;
+  if (left > 0) parts.push(withUnit(left, baseLabel));
+  return parts.join(' + ');
+}
+
+/** Le stock en unité de base, suivi de sa lecture en lots quand il y en a. */
+export function describeStock(
+  baseQty: unknown,
+  units: Pick<Unit, 'factor' | 'label'>[],
+  baseLabel: string
+): string {
+  const base = withUnit(Math.max(0, toNumber(baseQty)), baseLabel);
+  const lots = stockInLots(baseQty, units, baseLabel);
+  return lots ? `${base} (${lots})` : base;
 }
