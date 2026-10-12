@@ -27,6 +27,7 @@ import {
   PAYMENT_METHOD_LABELS,
 } from '@/domain/sale';
 import { amount, money, quantity as fmtQuantity, withUnit } from '@/utils/format';
+import { describeStock } from '@/domain/units';
 import BarcodeScanner from '@/components/products/BarcodeScanner';
 import { errorMessage } from '@/utils/errors';
 import type { CatalogEntry, ContactRow, PaymentMethod, PricedLine, Product, Sale } from '@/types';
@@ -482,9 +483,11 @@ function ProductPicker({
           >
             <div className="list__body">
               <div className="list__title">{product.name}</div>
+              {/* Le vendeur choisit dans la même lecture que celle du rayon :
+                pièces et lots (§10), comme sur le téléphone. */}
               <div className="list__sub">
                 {product.sku ? `${product.sku} · ` : ''}
-                Stock : {withUnit(product.stock_quantity, product.base_unit)}
+                Stock : {describeStock(product.stock_quantity, product.units, product.base_unit)}
               </div>
             </div>
             <div className="list__end">

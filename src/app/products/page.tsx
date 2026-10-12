@@ -20,7 +20,8 @@ import {
 } from '@/components/ui';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { money, withUnit } from '@/utils/format';
+import { money } from '@/utils/format';
+import { describeStock } from '@/domain/units';
 import type { Product } from '@/types';
 
 /**
@@ -120,8 +121,13 @@ function ProductsView() {
                       <div className="list__body">
                         <div className="list__title">{product.name}</div>
                         <div className="list__sub">{product.sku || 'Sans référence'}</div>
+                        {/* Le stock se lit dans les deux unités : en unité de base, parce
+                          que c'est elle qui se vend, et en lots, parce que c'est ainsi
+                          que le rayon se compte (§10). L'écran natif dit déjà les deux ;
+                          le web ne disait que les pièces. */}
                         <div className="list__sub">
-                          Stock : {withUnit(product.stock_quantity, product.base_unit)}
+                          Stock :{' '}
+                          {describeStock(product.stock_quantity, product.units, product.base_unit)}
                         </div>
                         {/* Le badge d'alerte partage la dernière ligne plutôt que la
                           colonne de droite : en colonne, il rétrécissait le texte
