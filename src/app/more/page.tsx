@@ -8,6 +8,7 @@ import {
   LineChart,
   LogOut,
   Settings,
+  Smartphone,
   Truck,
   UserCog,
   Users,
@@ -50,6 +51,10 @@ const LINKS: readonly MoreLink[] = [
   { href: '/settings', label: 'Paramètres', icon: Settings },
   { href: '/out-of-stock', label: 'Ventes hors stock', icon: ArrowLeftRight },
   { href: '/team', label: 'Équipe', icon: UserCog, ownerOnly: true },
+  // Depuis l'ordinateur, c'est d'ici que le gérant récupère l'application du
+  // comptoir ; depuis le téléphone, c'est d'ici qu'il la fait installer à son
+  // vendeur (§44).
+  { href: '/telecharger', label: 'Installer sur Android', icon: Smartphone },
 ];
 
 export default function MorePage() {

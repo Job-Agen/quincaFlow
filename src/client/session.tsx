@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { api, ApiError } from './api';
+import { isEntryRoute, isPublicRoute } from './routes';
 import type { BusinessRow, Profile, Role, UserRow } from '@/types';
 
 /**
@@ -40,8 +41,6 @@ export interface SessionValue {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
-const PUBLIC_ROUTES = ['/login', '/register'];
-
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{
     status: SessionValue['status'];
@@ -73,9 +72,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // appliquée partout, évite qu'un écran oublié reste accessible sans session.
   useEffect(() => {
     if (state.status === 'loading') return;
-    const isPublic = PUBLIC_ROUTES.includes(pathname);
-    if (state.status === 'anonymous' && !isPublic) router.replace('/login');
-    if (state.status === 'authenticated' && isPublic) router.replace('/dashboard');
+    if (state.status === 'anonymous' && !isPublicRoute(pathname)) router.replace('/login');
+    if (state.status === 'authenticated' && isEntryRoute(pathname)) router.replace('/dashboard');
   }, [state.status, pathname, router]);
 
   const value = useMemo<SessionValue>(

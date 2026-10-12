@@ -10,7 +10,11 @@
   "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#0b4e86",
-  "categories": ["business", "productivity", "finance"],
+  "categories": [
+    "business",
+    "productivity",
+    "finance"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -55,6 +59,22 @@
           "type": "image/png"
         }
       ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/images/apercu-ordinateur.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Tableau de bord sur ordinateur"
+    },
+    {
+      "src": "/images/apercu-telephone.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Catalogue et stock sur téléphone"
     }
   ]
 }

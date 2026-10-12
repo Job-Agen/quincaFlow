@@ -1308,3 +1308,145 @@ select.input {
     animation: none;
   }
 }
+
+/* ──────────────────── Page publique de téléchargement ───────────────── */
+
+/*
+ * Elle vit hors de la coque : pas de barre d'onglets, pas de session. Sa mise
+ * en page est donc la sienne, et elle doit tenir aussi bien sur le téléphone
+ * d'un gérant qui la découvre que sur l'écran d'un ordinateur.
+ */
+.telecharger {
+  min-height: 100dvh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 32px;
+}
+
+.telecharger__entete {
+  width: 100%;
+  padding: 32px 20px 28px;
+  background: linear-gradient(110deg, #09568f, #094a82);
+  color: #fff;
+  text-align: center;
+}
+
+.telecharger__entete h1 {
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.telecharger__entete p {
+  margin-top: 6px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.telecharger__corps {
+  width: 100%;
+  max-width: 620px;
+  padding: 18px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.telecharger__bloc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.telecharger__titre {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Le geste principal de la page : il reste reconnaissable sans être lu. */
+.telecharger__bouton {
+  min-height: 56px;
+  font-size: 16px;
+}
+
+.telecharger__fiche {
+  margin-top: -4px;
+  text-align: center;
+}
+
+.telecharger__etapes {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  list-style: none;
+}
+
+.telecharger__etapes li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.telecharger__numero {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-full);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * L'empreinte se compare caractère par caractère : chasse fixe, et retour à la
+ * ligne *entre* les groupes de huit — jamais au milieu de l'un d'eux. Couper
+ * « 6350b633 » en deux lignes ferait perdre le compte à celui qui compare, ce
+ * qui est précisément l'usage de cet affichage.
+ */
+.telecharger__empreinte {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  word-break: normal;
+  overflow-wrap: break-word;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  color: var(--ink-2);
+}
+
+.telecharger__pied {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 24px 16px 0;
+}
+
+.telecharger__pied a {
+  color: var(--blue);
+  font-weight: 600;
+}
+
+@media (min-width: 900px) {
+  .telecharger__entete {
+    padding: 56px 20px 48px;
+  }
+
+  .telecharger__entete h1 {
+    font-size: 32px;
+  }
+
+  .telecharger__corps {
+    max-width: 680px;
+    padding-top: 24px;
+  }
+}

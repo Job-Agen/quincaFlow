@@ -104,6 +104,14 @@ export default function LoginPage() {
             S&apos;inscrire
           </Link>
         </p>
+
+        {/* La porte d'entrée de l'application Android : c'est la page que
+          consulte quelqu'un à qui on vient de donner l'adresse du site (§44). */}
+        <p className="small muted" style={{ textAlign: 'center' }}>
+          <Link href="/telecharger" className="link">
+            Installer l&apos;application sur Android
+          </Link>
+        </p>
       </form>
     </div>
   );

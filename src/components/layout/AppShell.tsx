@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Home, ShoppingCart, Gift, History, Receipt, Menu, Store, WifiOff } from 'lucide-react';
 import { useSession } from '@/client/session';
+import { isPublicRoute } from '@/client/routes';
 import type { ReactNode } from 'react';
 
 /**
@@ -17,8 +18,6 @@ import type { ReactNode } from 'react';
  * À partir de 900 px la même liste devient une colonne latérale : une seule
  * définition de navigation, deux présentations.
  */
-
-const PUBLIC_ROUTES = ['/login', '/register'];
 
 /** Les six destinations du §6, dans son ordre. */
 const TABS = [
@@ -48,8 +47,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { status, reload } = useSession();
 
-  // Connexion et inscription occupent tout l'écran, et n'attendent aucune session.
-  if (PUBLIC_ROUTES.includes(pathname)) return children;
+  // Connexion, inscription et téléchargement occupent tout l'écran, et
+  // n'attendent aucune session (voir `client/routes.ts`).
+  if (isPublicRoute(pathname)) return children;
 
   // Le serveur est injoignable : on le dit, et on n'affiche rien d'autre. Pas de
   // chiffre venu du cache, pas de renvoi vers la connexion — la session du gérant

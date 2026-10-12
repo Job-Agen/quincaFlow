@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "db:check": "node scripts/db.mjs check",
     "db:apply": "node scripts/db.mjs apply",
-    "db:deploy": "node scripts/db.mjs deploy"
+    "db:deploy": "node scripts/db.mjs deploy",
+    "apk:publish": "node scripts/apk.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

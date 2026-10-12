@@ -54,6 +54,12 @@ self.addEventListener('fetch', (event) => {
   // Données métier et authentification : toujours le réseau, jamais le cache.
   if (url.pathname.startsWith('/api/')) return;
 
+  // L'APK : jamais intercepté, jamais mis en cache. Vingt-quatre mébioctets
+  // dans le stockage du navigateur ne servent à rien — le fichier part aussitôt
+  // vers le dossier Téléchargements — et peuvent faire échouer l'écriture du
+  // cache pour tout le reste.
+  if (url.pathname.startsWith('/telechargements/')) return;
+
   // Navigation : le réseau d'abord, pour que l'écran serve la version du jour ;
   // le cache ne prend le relais que si la requête échoue vraiment.
   if (request.mode === 'navigate') {

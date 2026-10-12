@@ -41,7 +41,7 @@ body {
 }
 .page {
   gap: 18px;
-  max-width: 760px;
+  max-width: var(--page-w, 760px);
   padding: 20px 18px calc(var(--nav-h) + 24px + env(safe-area-inset-bottom));
 }
 .card {
@@ -1126,4 +1126,81 @@ body {
   width: 100%;
   border-radius: var(--r-sm);
   border: 1px solid var(--line);
+}
+
+/* ═══════════════════ Version bureau (écran large) ══════════════════
+ *
+ * L'application est née pour le comptoir : un pouce, un écran de 390 px. Sur un
+ * ordinateur, elle garde les mêmes écrans — même code, même navigation — mais
+ * cesse de les présenter comme sur un téléphone posé au milieu de la page.
+ *
+ * Trois choses changent, et seulement trois :
+ *
+ *   1. la colonne de lecture s'élargit à partir de 1 200 px ;
+ *   2. les lignes de liste se lisent alors en colonnes, comme un tableau — un
+ *      nom suivi de trois lignes empilées sur un mètre de large se lit mal ;
+ *   3. le bouton flottant revient contre la colonne, au lieu de rester collé
+ *      au bord de la fenêtre à trente centimètres de ce qu'il complète.
+ *
+ * Tout le reste — couleurs, cartes, tailles de texte — est délibérément
+ * identique : c'est la même application, et un gérant qui passe du téléphone à
+ * l'ordinateur ne doit pas avoir à réapprendre où se trouvent les choses.
+ */
+
+@media (min-width: 1200px) {
+  :root {
+    --page-w: 1040px;
+  }
+
+  /* Quatre tuiles de front : le tableau de bord tient alors sur une ligne, et
+     se lit d'un coup d'œil au lieu d'être parcouru. */
+  .tiles {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  /* En deux colonnes, une cinquième tuile seule sur sa ligne s'étalait sur
+     toute la largeur pour ne pas laisser de trou. En quatre, cet étalement
+     donne une tuile quatre fois plus large que ses voisines, qui n'annonce
+     pourtant rien de plus important : elle reprend sa taille. */
+  .page--dashboard .tiles > :last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  /*
+   * Lignes de liste en colonnes.
+   *
+   * Les enfants de `.list__body` sont déjà, partout dans l'application, un
+   * titre suivi d'une à trois précisions. Empilés, ils laissent les deux tiers
+   * droits de la ligne vides ; répartis, ils forment les colonnes d'un tableau
+   * sans qu'aucun écran n'ait à être réécrit. Le titre garde la part du lion,
+   * les précisions se partagent le reste.
+   */
+  .list__body {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 2.2fr);
+    align-items: center;
+    column-gap: 18px;
+  }
+
+  .list__body > .list__sub {
+    margin: 0;
+  }
+}
+
+@media (min-width: 900px) {
+  /*
+   * Le bouton flottant suit la colonne.
+   *
+   * `right: 18px` le colle au bord de la fenêtre : sur un écran large, il se
+   * retrouvait à plusieurs centaines de pixels du contenu qu'il prolonge, et
+   * rien ne le reliait plus à la liste qu'il complète. On le ramène contre le
+   * bord droit de la colonne — la moitié de l'espace libre, à droite du menu
+   * latéral, sépare l'une de l'autre.
+   */
+  .fab {
+    right: calc(18px + max(0px, (100vw - 220px - var(--page-w, 760px)) / 2));
+    bottom: 28px;
+  }
 }

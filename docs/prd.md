@@ -1651,3 +1651,69 @@ d'autre.
 7. Une commande annulée porte le filigrane sur le document et un avertissement
    en tête du message.
 8. Le message est rendu par la même fonction sur le web et sur l'Android (§41).
+
+## 44. Deux versions, une application
+
+**Objectif**
+
+L'application existe en deux formes depuis le §41 : le site, écrit pour un
+téléphone tenu à une main, et l'Android natif, compilé depuis le même domaine
+métier. Il manquait à chacune ce qui la rend réellement utilisable.
+
+Au site, l'écran large. Les maquettes tiennent dans 760 pixels — c'est le
+comptoir, et c'est bien. Mais le gérant qui fait ses comptes le soir ne les
+fait pas sur son téléphone : il les fait sur l'ordinateur de l'arrière-boutique,
+où ces 760 pixels laissaient les deux tiers de l'écran vides et une liste de
+produits en colonne unique là où un tableau se lisait d'un coup d'œil.
+
+À l'Android, un moyen de l'obtenir. Le fichier d'installation n'existait que
+dans une conversation : chaque gérant, chaque vendeur, chaque téléphone de
+rechange supposait qu'on lui envoie l'APK à la main. Une application qu'on ne
+peut pas télécharger n'est pas distribuée, elle est prêtée.
+
+**F20 — La version bureau**
+
+À partir de 1 200 px, et à ces conditions seulement :
+
+- la colonne de lecture passe à 1 040 px ;
+- les lignes de liste se répartissent en colonnes — nom, référence, stock,
+  prix — au lieu de s'empiler ;
+- le tableau de bord aligne ses tuiles sur une seule ligne ;
+- le bouton flottant revient contre la colonne.
+
+Rien d'autre ne change : mêmes écrans, mêmes couleurs, même navigation. Un
+gérant qui passe du téléphone à l'ordinateur ne réapprend rien. Le menu latéral
+du §6, lui, apparaît dès 900 px et ne change pas.
+
+L'installation sur ordinateur passe par le manifeste du §38 : Chrome et Edge
+posent l'application dans le menu Démarrer, avec sa fenêtre et son icône. La
+page de téléchargement propose l'installation quand le navigateur l'autorise,
+et explique le geste manuel sinon.
+
+**F21 — La page de téléchargement**
+
+`/telecharger`, servie sans session — on ne demande pas de se connecter pour
+obtenir l'application qui sert à se connecter.
+
+Elle porte le fichier, les quatre gestes de l'installation hors Play Store
+(autoriser la source, passer l'avertissement Play Protect), ce que la mise à
+jour ne détruit pas, et l'empreinte SHA-256 du fichier pour qui l'aurait reçu
+par WhatsApp plutôt que depuis le site.
+
+L'APK est compilé pour les deux familles de processeurs ARM, 32 et 64 bits : la
+version 64 bits seule pèse six mébioctets de moins et refuse de s'installer sur
+les téléphones d'entrée de gamme encore très répandus.
+
+**Critères d'acceptation**
+
+1. `/telecharger` s'affiche sans session, et ne renvoie pas vers la connexion.
+2. Un gérant connecté qui l'ouvre depuis « Plus » y trouve un retour vers son
+   tableau de bord.
+3. La version, la taille, l'empreinte et l'Android minimal annoncés sont ceux
+   du fichier servi — ils sont relevés sur l'APK, jamais saisis.
+4. Le fichier s'installe sur un téléphone 32 bits comme sur un 64 bits.
+5. Chaque publication porte un `versionCode` supérieur au précédent, faute de
+   quoi Android refuse la mise à jour.
+6. Le téléchargement n'est ni intercepté ni mis en cache par le service worker.
+7. À 1 200 px, la liste des produits se lit en colonnes ; à 390 px, elle reste
+   celle du §6, inchangée.
