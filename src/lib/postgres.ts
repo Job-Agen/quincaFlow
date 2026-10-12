@@ -3,15 +3,23 @@ import pg from 'pg';
 /**
  * Adaptateur node-postgres présentant l'interface du pilote HTTP de Neon.
  *
- * Les tests d'intégration ont besoin d'un vrai Postgres, mais
- * `@neondatabase/serverless` ne parle qu'au proxy HTTP de Neon. Plutôt que de
- * tordre le code de production pour le rendre testable, on remplace le pilote
- * par cet adaptateur qui expose exactement les trois capacités utilisées :
- * le tagged template, `unsafe()` et `transaction()`.
+ * `@neondatabase/serverless` ne parle qu'au proxy HTTP de Neon. Un PostgreSQL
+ * ordinaire — celui d'un poste de développement, celui de la CI, celui d'un
+ * autre hébergeur — ne le comprend pas. Cet adaptateur expose exactement les
+ * trois capacités que l'application utilise — le tagged template, `unsafe()` et
+ * `transaction()` — au-dessus de `pg`.
  *
- * La conséquence est que le code testé est bien le code livré, jusqu'au texte
- * SQL envoyé — c'est le seul moyen de vérifier qu'une transaction est réellement
- * atomique et qu'une contrainte rejette bien une survente.
+ * Il sert deux usages, et c'est délibéré :
+ *
+ *   • les tests d'intégration, qui ont besoin d'un vrai Postgres ;
+ *   • l'application elle-même, quand `DATABASE_URL` ne désigne pas Neon
+ *     (voir `isNeonUrl` dans `db.ts`).
+ *
+ * La conséquence du premier usage est que le code testé est bien le code livré,
+ * jusqu'au texte SQL envoyé. Celle du second est qu'on peut lancer
+ * l'application en local, contre un Postgres de poste, sans secret de
+ * production ni accès réseau — c'est ce qui a permis de vérifier la mise en
+ * page sur écran large autrement qu'en déployant.
  */
 
 /** Fragment interpolé tel quel, pour les listes de colonnes. */

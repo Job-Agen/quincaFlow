@@ -1,8 +1,13 @@
 import { neon, type NeonQueryFunction, type NeonQueryPromise } from '@neondatabase/serverless';
 import { ApiError } from './http';
+import { createNeonOverPg } from './postgres';
 
 /**
- * Accès Neon Serverless Postgres.
+ * Accès Postgres.
+ *
+ * `DATABASE_URL` décide du pilote : une adresse Neon passe par le proxy HTTP de
+ * `@neondatabase/serverless`, toute autre par `pg` en TCP (voir `postgres.ts`).
+ * L'application ne voit qu'une interface, et le SQL envoyé est le même.
  *
  * Le pilote HTTP est utilisé partout, y compris pour les transactions :
  * `sql.transaction([...])` envoie un tableau de requêtes exécutées en un seul
@@ -31,6 +36,24 @@ export type Query = NeonQueryPromise<false, false, Record<string, unknown>[]>;
 let cached: { url: string; sql: Sql } | null = null;
 
 /**
+ * Vrai si l'adresse désigne une base Neon.
+ *
+ * Neon est le seul à parler le protocole HTTP de `@neondatabase/serverless` ;
+ * tout le reste est un PostgreSQL ordinaire, qu'on joint en TCP. Le test porte
+ * sur l'hôte et non sur le schéma d'URL, parce que les deux s'écrivent
+ * `postgresql://`. `scripts/db.mjs` reconnaît ses bases de la même façon : une
+ * seule règle, pour que le script de schéma et l'application ne puissent pas
+ * aboutir à des conclusions différentes sur la même adresse.
+ */
+export function isNeonUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.endsWith('.neon.tech');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Client SQL Neon, en tagged template : sql`SELECT … WHERE id = ${id}`.
  * Les valeurs interpolées sont toujours envoyées en paramètres liés, jamais
  * concaténées — c'est la protection contre l'injection SQL (§34).
@@ -39,13 +62,26 @@ export function getSql(): Sql {
   const url = databaseUrl();
   if (!url) {
     throw new Error(
-      'DATABASE_URL non configurée. Renseignez la chaîne de connexion Neon dans .env.local.'
+      'DATABASE_URL non configurée. Renseignez la chaîne de connexion Postgres dans .env.local.'
     );
   }
   if (!cached || cached.url !== url) {
-    cached = { url, sql: neon(url) };
+    cached = { url, sql: driverFor(url) };
   }
   return cached.sql;
+}
+
+/**
+ * Le pilote qui convient à l'adresse donnée.
+ *
+ * L'adaptateur `pg` n'a pas le type du pilote Neon : il n'en implémente que la
+ * part utilisée, ce qui est le point. L'assertion est donc ici, à l'unique
+ * frontière entre les deux, et nulle part ailleurs dans l'application — tout le
+ * reste du code ne connaît que `Sql`.
+ */
+function driverFor(url: string): Sql {
+  if (isNeonUrl(url)) return neon(url);
+  return createNeonOverPg(url) as unknown as Sql;
 }
 
 /**

@@ -22,7 +22,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 const CONNECTION = process.env.TEST_DATABASE_URL;
 
 vi.mock('@neondatabase/serverless', async () => {
-  const { createNeonOverPg: create } = await import('../../test/neonOverPg');
+  const { createNeonOverPg: create } = await import('../../lib/postgres');
   return { neon: (url: string) => create(url) };
 });
 
