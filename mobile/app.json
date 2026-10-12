@@ -47,6 +47,7 @@
         }
       ],
       "./plugins/withPermissionsMinimales",
+      "./plugins/withSignatureDePublication",
       "expo-sharing"
     ],
     "experiments": {
