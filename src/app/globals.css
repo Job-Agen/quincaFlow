@@ -1450,3 +1450,91 @@ select.input {
     padding-top: 24px;
   }
 }
+
+/* ───────────────── Classement des débiteurs (§45) ──────────────────── */
+
+/*
+ * Une ligne, trois informations : le nom, le montant, et la barre qui les
+ * compare. La grille les tient alignés d'une ligne à l'autre — sans quoi les
+ * montants, de longueurs inégales, danseraient et l'œil ne pourrait plus les
+ * empiler.
+ */
+.debtors {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  /* Deux pixels entre deux barres : collées, elles se liraient comme une seule. */
+  gap: 14px;
+}
+
+.debtors__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+
+.debtors__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debtors__amount {
+  font-weight: 700;
+}
+
+.debtors__track {
+  grid-column: 1 / -1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.debtors__bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--blue);
+}
+
+.debtors__age {
+  grid-column: 1 / -1;
+}
+
+/* ─────────────────────── Fiche client (§45) ────────────────────────── */
+
+.account__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.account__initial {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  font-weight: 800;
+  font-size: 19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * Le bouton de relance porte les couleurs de WhatsApp, et c'est délibéré : il
+ * ouvre une autre application, et le gérant doit le savoir avant d'appuyer.
+ */
+.btn--whatsapp {
+  background: #1f8f4e;
+  color: #fff;
+}
+
+.btn--whatsapp:active {
+  background: #19743f;
+}

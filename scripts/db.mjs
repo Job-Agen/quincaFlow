@@ -18,11 +18,20 @@
  * base déjà à jour ne fait rien, et sur une base en retard ne crée que le
  * manquant. Aucune donnée n'est lue, modifiée ni supprimée.
  *
- * Une réserve, et elle est importante : si la base porte une table du *même nom*
- * mais d'une *autre forme* — c'est le cas de l'ancienne base de QuincaFlow, dont
- * `users`, `products`, `sales`, `expenses` et `stock_movements` sont en
- * `id, user_id, data jsonb` —, `IF NOT EXISTS` la saute en silence.
- * `db:check` le dit, car il compare les colonnes et pas seulement les noms.
+ * `IF NOT EXISTS` saute une table existante sans regarder sa forme : une colonne
+ * ajoutée au schéma après coup n'arriverait donc jamais en production. C'est
+ * pourquoi `apply` fait un second passage et ajoute, par `ALTER TABLE … ADD
+ * COLUMN IF NOT EXISTS`, les colonnes que la table n'a pas encore. L'ajout est
+ * le seul geste permis : rien n'est renommé, retypé ni supprimé.
+ *
+ * Une réserve demeure. Une colonne à la fois obligatoire et sans valeur par
+ * défaut ne peut pas être ajoutée à une table qui porte déjà des lignes :
+ * Postgres n'aurait rien à y mettre. Le script refuse alors, et le dit. De
+ * même, une table du *même nom* mais d'une *autre forme* — c'est le cas de
+ * l'ancienne base de QuincaFlow, dont `users`, `products`, `sales`, `expenses`
+ * et `stock_movements` sont en `id, user_id, data jsonb` — ne se répare pas
+ * ainsi : `db:check` le dit, car il compare les colonnes et pas seulement les
+ * noms.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -75,7 +84,13 @@ function instructions(sql) {
     .filter(Boolean);
 }
 
-/** Les tables attendues, et pour chacune ses colonnes, lues depuis `schema.sql`. */
+/**
+ * Les tables attendues, et pour chacune ses colonnes, lues depuis `schema.sql`.
+ *
+ * La *définition* entière est retenue, pas seulement le nom : c'est elle qui
+ * permet d'ajouter une colonne manquante à une table déjà en service, sans la
+ * recréer ni la vider.
+ */
 function attendu(sql) {
   const tables = new Map();
   const motif = /CREATE TABLE IF NOT EXISTS (\w+)\s*\(([\s\S]*?)\n\)/g;
@@ -99,10 +114,22 @@ function attendu(sql) {
       colonnes
         .map((une) => une.trim())
         .filter((une) => une && !/^(UNIQUE|CONSTRAINT|PRIMARY|CHECK|FOREIGN)\b/i.test(une))
-        .map((une) => une.split(/\s+/)[0])
+        .map((une) => ({ nom: une.split(/\s+/)[0], definition: une.replace(/\s+/g, ' ') }))
     );
   }
   return tables;
+}
+
+/**
+ * Vrai si la colonne peut être ajoutée à une table qui porte déjà des lignes.
+ *
+ * Postgres remplit la colonne nouvelle avec son DEFAULT, ou avec NULL. Une
+ * colonne à la fois obligatoire et sans défaut n'a donc aucune valeur à
+ * prendre, et l'ALTER échouerait — mieux vaut le dire avant.
+ */
+function ajoutable(colonne) {
+  const texte = colonne.definition.toUpperCase();
+  return !/\bNOT NULL\b/.test(texte) || /\bDEFAULT\b/.test(texte);
 }
 
 async function etatDeLaBase(sql) {
@@ -139,7 +166,7 @@ async function examiner(sql, texte, action) {
       absentes.push(table);
       continue;
     }
-    const manquantes = colonnes.filter((colonne) => !trouvee.has(colonne));
+    const manquantes = colonnes.filter((colonne) => !trouvee.has(colonne.nom));
     if (manquantes.length) incompletes.push({ table, manquantes });
   }
 
@@ -147,7 +174,11 @@ async function examiner(sql, texte, action) {
   if (absentes.length) console.log(`\nTables absentes : ${absentes.join(', ')}`);
   for (const { table, manquantes } of incompletes) {
     console.log(`\nTable « ${table} » présente mais d’une autre forme.`);
-    console.log(`  colonnes manquantes : ${manquantes.join(', ')}`);
+    console.log(`  colonnes manquantes : ${manquantes.map((c) => c.nom).join(', ')}`);
+    const refusees = manquantes.filter((colonne) => !ajoutable(colonne));
+    if (refusees.length) {
+      console.log(`  dont impossibles à ajouter : ${refusees.map((c) => c.nom).join(', ')}`);
+    }
   }
 
   if (!absentes.length && !incompletes.length) {
@@ -155,15 +186,17 @@ async function examiner(sql, texte, action) {
     return 0;
   }
 
-  if (incompletes.length) {
-    // Une table du bon nom et de la mauvaise forme ne se répare pas par
-    // `CREATE … IF NOT EXISTS` : il faudrait la renommer ou la déplacer, et ce
+  const bloquantes = incompletes.filter(({ manquantes }) =>
+    manquantes.some((colonne) => !ajoutable(colonne))
+  );
+  if (bloquantes.length) {
+    // Une colonne obligatoire et sans valeur par défaut ne s'ajoute pas à une
+    // table qui porte déjà des lignes : Postgres ne saurait quoi y mettre. Ce
     // geste-là appartient à celui qui connaît ses données.
     console.error(
-      '\nCes tables existent sous le bon nom mais ne portent pas les bonnes\n' +
-        'colonnes. `db:apply` les sauterait en silence et l’application\n' +
-        'échouerait à l’exécution. Renommez-les, ou pointez l’application sur\n' +
-        'une base neuve, avant de poursuivre.'
+      '\nCes colonnes ne peuvent pas être ajoutées à une table déjà en service :\n' +
+        'elles sont obligatoires et sans valeur par défaut. Donnez-leur un\n' +
+        'DEFAULT dans schema.sql, ou migrez la table à la main.'
     );
     return 1;
   }
@@ -181,8 +214,28 @@ async function examiner(sql, texte, action) {
   }
   console.log(`${creees} instructions exécutées.`);
 
+  // Les colonnes venues après la création de la table. `CREATE … IF NOT EXISTS`
+  // saute une table existante sans regarder sa forme : sans ce passage, une
+  // colonne ajoutée au schéma n'arriverait jamais en production, et le code qui
+  // s'en sert échouerait à l'exécution. L'ajout est le seul geste permis — rien
+  // n'est renommé, retypé ni supprimé.
+  for (const { table, manquantes } of incompletes) {
+    for (const colonne of manquantes) {
+      await sql.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${colonne.definition}`);
+      console.log(`  colonne ajoutée : ${table}.${colonne.nom}`);
+    }
+  }
+
   const apres = await etatDeLaBase(sql);
-  const restantes = [...voulues.keys()].filter((table) => !apres.has(table));
+  const restantes = [];
+  for (const [table, colonnes] of voulues) {
+    const trouvee = apres.get(table);
+    if (!trouvee) restantes.push(table);
+    else {
+      const absentes = colonnes.filter((colonne) => !trouvee.has(colonne.nom));
+      if (absentes.length) restantes.push(`${table} (${absentes.map((c) => c.nom).join(', ')})`);
+    }
+  }
   if (restantes.length) {
     console.error(`\nIl manque encore : ${restantes.join(', ')}`);
     return 1;

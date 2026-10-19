@@ -79,6 +79,24 @@ describe('routes natives', () => {
     expect(declares.filter((n) => !connus.has(n))).toEqual([]);
   });
 
+  /**
+   * Le menu « Plus » est la seule porte vers deux tiers des écrans. Une entrée
+   * qui ne mène nulle part y produit exactement la panne que ce fichier
+   * existe pour empêcher : un écran présent et inatteignable, que ni `tsc` ni
+   * eslint ne signalent — `href` n'est qu'une chaîne.
+   */
+  it('ne propose dans « Plus » que des adresses réellement servies', () => {
+    const more = readFileSync(join(RACINE, '(tabs)', 'more.tsx'), 'utf8');
+    const servies = new Set(ecrans.map(adresse));
+    const proposees = [...more.matchAll(/href: '([^']+)'/g)].map((m) => m[1] as string);
+    expect(proposees.length).toBeGreaterThan(0);
+    expect(proposees.filter((chemin) => !servies.has(chemin))).toEqual([]);
+  });
+
+  it('sert la fiche d’un client, où se tient son carnet de crédit (§45)', () => {
+    expect(ecrans.map(adresse)).toContain('/customers/[id]');
+  });
+
   it('porte les six onglets du §6', () => {
     const onglets = ecrans
       .filter((r) => r.startsWith('(tabs)/'))

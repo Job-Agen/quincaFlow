@@ -86,13 +86,43 @@ export async function listContacts(
   const sql = getSql();
   const spec = specOf(kind);
   const term = search.trim() ? `%${search.trim()}%` : null;
+  const plafond = Math.min(limit, 500);
+
+  /*
+   * Le répertoire des clients porte leur ardoise (§45).
+   *
+   * Elle est jointe ici plutôt que demandée fiche par fiche : un gérant qui
+   * ouvre son carnet veut voir d'un coup qui lui doit, et vingt requêtes pour
+   * vingt clients sur une connexion de marché ne sont pas une option (§35).
+   * La somme ne retient que les ventes non annulées : une vente annulée (§25)
+   * a rendu l'argent.
+   */
+  if (kind === 'customers') {
+    return rows<ContactRow>(
+      await sql`
+        SELECT c.id, c.name, c.phone, c.address, c.notes, c.created_at,
+               COALESCE(SUM(
+                 CASE WHEN s.status = 'COMPLETED' AND s.amount_paid < s.total
+                      THEN s.total - s.amount_paid ELSE 0 END
+               ), 0)::float8 AS owed
+          FROM customers c
+          LEFT JOIN sales s ON s.customer_id = c.id AND s.business_id = c.business_id
+         WHERE c.business_id = ${businessId}
+           AND (${term}::text IS NULL OR c.name ILIKE ${term} OR c.phone ILIKE ${term})
+         GROUP BY c.id, c.name, c.phone, c.address, c.notes, c.created_at
+         ORDER BY c.name
+         LIMIT ${plafond}
+      `
+    );
+  }
+
   return rows<ContactRow>(
     await sql`
     SELECT ${sql.unsafe(spec.columns)} FROM ${sql.unsafe(kind)}
      WHERE business_id = ${businessId}
        AND (${term}::text IS NULL OR name ILIKE ${term} OR phone ILIKE ${term})
      ORDER BY name
-     LIMIT ${Math.min(limit, 500)}
+     LIMIT ${plafond}
   `
   );
 }

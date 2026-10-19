@@ -190,6 +190,16 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export type SaleStatus = 'COMPLETED' | 'CANCELLED';
 
+/**
+ * Nature d'un encaissement (§45).
+ *
+ * `SALE` : payé au comptoir, avec la vente. `REPAYMENT` : rapporté plus tard,
+ * contre une ardoise. C'est le même argent et la même table ; la distinction ne
+ * sert qu'à nommer juste la ligne du journal de caisse et à relire un carnet.
+ */
+export const PAYMENT_KINDS = ['SALE', 'REPAYMENT'] as const;
+export type PaymentKind = (typeof PAYMENT_KINDS)[number];
+
 /** Ligne telle que le panier l'envoie : des identifiants et des quantités (§35). */
 export interface SaleLineInput {
   productId: string;
@@ -376,6 +386,57 @@ export interface ContactRow {
   notes: string | null;
   archived: boolean;
   created_at: string;
+  /** Ardoise en cours (§45) : seul le répertoire des clients la porte. */
+  owed?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Carnet de crédit (§45)
+// ---------------------------------------------------------------------------
+
+/** Une vente, telle que la fiche d'un client la montre. */
+export interface CustomerSaleRow {
+  id: string;
+  reference: string;
+  invoice_reference: string;
+  total: number;
+  amount_paid: number;
+  payment_status: PaymentStatus;
+  status: SaleStatus;
+  created_at: string;
+}
+
+/** Un encaissement, tel que l'historique d'une dette le montre. */
+export interface CustomerPaymentRow {
+  id: string;
+  amount: number;
+  method: PaymentMethod;
+  kind: PaymentKind;
+  note: string | null;
+  created_at: string;
+  sale_reference: string;
+}
+
+/** La fiche complète d'un client : achats, dette, et histoire des versements. */
+export interface CustomerAccount {
+  customer: ContactRow;
+  /** Somme des ventes non annulées. Les ventes hors stock (§16) en sont exclues. */
+  spent: number;
+  owed: number;
+  openCount: number;
+  /** Date de la plus ancienne vente impayée, ou null. */
+  oldestOpenAt: string | null;
+  sales: CustomerSaleRow[];
+  payments: CustomerPaymentRow[];
+}
+
+/** Un débiteur tel que l'agrégat SQL le rend. */
+export interface DebtorRow {
+  id: string;
+  name: string;
+  phone: string | null;
+  owed: number;
+  oldest_days: number | null;
 }
 
 // ---------------------------------------------------------------------------

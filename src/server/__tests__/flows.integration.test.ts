@@ -39,6 +39,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let history: typeof import('../history');
   let cash: typeof import('../cash');
   let incomes: typeof import('../incomes');
+  let credit: typeof import('../credit');
 
   const OWNER: Session = {
     userId: 'usr_owner',
@@ -59,6 +60,12 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     // continue de refuser de démarrer sans le sien plutôt que d'en inventer un.
     process.env.JWT_SECRET ||= 'secret-de-test-quincaflow-32-caracteres-minimum';
     pool = new pg.Pool({ connectionString: CONNECTION });
+    // Table rase avant d'appliquer le schéma. `CREATE TABLE IF NOT EXISTS` saute
+    // une table existante sans regarder sa forme : une base de test laissée
+    // d'une version précédente gardait l'ancienne table et faisait échouer les
+    // tests sur une colonne manquante, loin de la cause. La base désignée par
+    // TEST_DATABASE_URL est jetable — ces tests la vident déjà à chaque cas.
+    await pool.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public');
     await pool.query(readFileSync(resolve(process.cwd(), 'schema.sql'), 'utf8'));
 
     products = await import('../products');
@@ -70,6 +77,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     history = await import('../history');
     cash = await import('../cash');
     incomes = await import('../incomes');
+    credit = await import('../credit');
   });
 
   afterAll(async () => {
@@ -428,6 +436,126 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
     expect(received.status).toBe('RECEIVED');
     expect(await stockOf(vitre.id)).toBe(50);
+  });
+
+  // ──────────────────────────── Carnet de crédit ───────────────────────
+
+  describe('carnet de crédit (§45)', () => {
+    /** Deux ventes à crédit au même client, la plus ancienne d'abord. */
+    async function seedArdoise() {
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name, phone) VALUES
+        ('cus_maco', $1, 'Kodjo maçon', '90 00 00 00')`,
+        [OWNER.businessId]
+      );
+      const vitre = await seedVitre(200);
+
+      const ancienne = await sales.createSale(OWNER, {
+        customerId: 'cus_maco',
+        lines: [{ productId: vitre.id, quantity: 20 }],
+        amountPaid: 2000,
+      });
+      // Le temps ne passe pas entre deux appels : l'imputation se fait sur la
+      // date, il faut donc vieillir la première vente pour que « la plus
+      // ancienne d'abord » veuille dire quelque chose.
+      await pool.query(`UPDATE sales SET created_at = now() - interval '20 days' WHERE id = $1`, [
+        ancienne.id,
+      ]);
+      const recente = await sales.createSale(OWNER, {
+        customerId: 'cus_maco',
+        lines: [{ productId: vitre.id, quantity: 10 }],
+        amountPaid: 0,
+      });
+      return { ancienne, recente, vitre };
+    }
+
+    it('calcule l’ardoise d’un client, et la solde par la plus vieille vente', async () => {
+      const { ancienne, recente } = await seedArdoise();
+      // 20 × 450 − 2 000 = 7 000 dus, plus 10 × 450 = 4 500.
+      const avant = await credit.customerAccount(OWNER.businessId, 'cus_maco');
+      expect(avant.spent).toBe(13500);
+      expect(avant.owed).toBe(11500);
+      expect(avant.openCount).toBe(2);
+
+      const apres = await credit.recordRepayment(OWNER, 'cus_maco', {
+        amount: 9000,
+        method: 'MOBILE_MONEY',
+        note: 'Vente de sa récolte',
+      });
+
+      expect(apres.owed).toBe(2500);
+      const soldee = apres.sales.find((vente) => vente.id === ancienne.id);
+      const entamee = apres.sales.find((vente) => vente.id === recente.id);
+      expect(soldee).toMatchObject({ amount_paid: 9000, payment_status: 'PAID' });
+      expect(entamee).toMatchObject({ amount_paid: 2000, payment_status: 'PARTIAL' });
+    });
+
+    it('garde la trace du motif, et nomme le remboursement dans le journal de caisse', async () => {
+      const { ancienne } = await seedArdoise();
+      await credit.recordRepayment(OWNER, 'cus_maco', {
+        amount: 3000,
+        method: 'CASH',
+        note: 'Avance sur chantier',
+      });
+
+      const compte = await credit.customerAccount(OWNER.businessId, 'cus_maco');
+      const versement = compte.payments.find((une) => une.kind === 'REPAYMENT');
+      expect(versement).toMatchObject({
+        amount: 3000,
+        note: 'Avance sur chantier',
+        sale_reference: ancienne.reference,
+      });
+
+      // L'argent entre en caisse le jour du remboursement, sous son vrai nom :
+      // « Vente VE-0001 » ferait chercher une vente vieille de trois semaines.
+      const journal = await cash.cashJournal(OWNER.businessId, {});
+      const ligne = journal.entries.find((une) => une.amount === 3000);
+      expect(ligne?.label).toBe(`Remboursement ${ancienne.reference}`);
+    });
+
+    it('refuse un versement supérieur à la dette, et n’écrit rien', async () => {
+      await seedArdoise();
+      await expect(
+        credit.recordRepayment(OWNER, 'cus_maco', { amount: 11501, method: 'CASH' })
+      ).rejects.toThrow(/dépasse la dette/i);
+
+      const { rows } = await pool.query<{ n: string }>(
+        `SELECT COUNT(*) AS n FROM payments WHERE kind = 'REPAYMENT'`
+      );
+      expect(Number(rows[0]!.n)).toBe(0);
+    });
+
+    it('classe les débiteurs, et ignore les ventes annulées', async () => {
+      const { vitre } = await seedArdoise();
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name) VALUES
+        ('cus_abandon', $1, 'Client parti')`,
+        [OWNER.businessId]
+      );
+      const annulee = await sales.createSale(OWNER, {
+        customerId: 'cus_abandon',
+        lines: [{ productId: vitre.id, quantity: 5 }],
+        amountPaid: 0,
+      });
+      await sales.cancelSale(OWNER, annulee.id);
+
+      const classement = await credit.debtors(OWNER.businessId, 5);
+      expect(classement.debtors.map((un) => un.name)).toEqual(['Kodjo maçon']);
+      expect(classement.totalOwed).toBe(11500);
+      // Une vente annulée a rendu l'argent et la marchandise (§25) : elle ne
+      // laisse aucune dette derrière elle.
+      expect(classement.debtorCount).toBe(1);
+    });
+
+    it('n’ouvre pas la fiche d’un client d’une autre quincaillerie', async () => {
+      await seedArdoise();
+      await expect(credit.customerAccount(RIVAL.businessId, 'cus_maco')).rejects.toThrow(
+        /client introuvable/i
+      );
+      await expect(
+        credit.recordRepayment(RIVAL, 'cus_maco', { amount: 1000, method: 'CASH' })
+      ).rejects.toThrow(/client introuvable/i);
+    });
   });
 
   // ───────────────────────────── Hors stock ────────────────────────────

@@ -81,7 +81,15 @@ export async function cashJournal(
     WITH caisse AS (
       SELECT p.id, 'IN' AS direction, 'SALE_PAYMENT' AS kind,
              p.created_at AS occurred_at,
-             COALESCE('Vente ' || s.reference, 'Encaissement') AS label,
+             -- Un remboursement de dette (§45) est un encaissement comme un
+             -- autre, mais il ne se lit pas comme une vente du jour : le dire
+             -- « Vente VE-0004 » ferait chercher une vente qui date de trois
+             -- semaines.
+             COALESCE(
+               CASE WHEN p.kind = 'REPAYMENT' THEN 'Remboursement ' || s.reference
+                    ELSE 'Vente ' || s.reference END,
+               'Encaissement'
+             ) AS label,
              p.method AS code, p.amount::float8 AS amount,
              s.reference, s.id AS sale_id
         FROM payments p

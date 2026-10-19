@@ -1717,3 +1717,104 @@ les téléphones d'entrée de gamme encore très répandus.
 6. Le téléchargement n'est ni intercepté ni mis en cache par le service worker.
 7. À 1 200 px, la liste des produits se lit en colonnes ; à 390 px, elle reste
    celle du §6, inchangée.
+
+## 45. Carnet de crédit
+
+**Objectif**
+
+Le §14 posait une limite : « la gestion complète du crédit client ne doit pas
+devenir un mini-système bancaire dans la première version ». Elle a été tenue —
+trop bien. L'application savait enregistrer une vente à moitié payée, et plus
+rien ensuite. La dette restait ouverte pour toujours : aucun écran ne la
+montrait, aucun geste ne la soldait, et le gérant continuait de tenir son vrai
+carnet sur un cahier à côté du téléphone.
+
+Or à Lomé, la dette n'est pas une option du logiciel, c'est le quotidien. Le
+maçon prend ses sacs le lundi et paie le vendredi, quand son propre client l'a
+payé. Un logiciel de quincaillerie qui ne sait pas tenir l'ardoise ne remplace
+pas le cahier : il s'y ajoute.
+
+**Le choix de fond**
+
+Une dette n'est pas une écriture à part : c'est une vente dont le montant
+encaissé est inférieur au total. Rien n'est créé en parallèle, et c'est ce qui
+garantit trois choses.
+
+- La dette ne peut pas diverger de la vente qui l'a produite, puisqu'elle s'en
+  déduit.
+- Un remboursement est un encaissement comme un autre : il entre dans la même
+  table que le paiement du comptoir, donc dans le journal de caisse (§40) le
+  jour où l'argent est entré.
+- Le chiffre d'affaires (§39) ne bouge pas quand une vieille ardoise est
+  soldée : il compte les ventes, pas les encaissements. Le compter là serait le
+  compter deux fois.
+
+**F22 — La fiche client**
+
+Nom, téléphone, total acheté, solde dû. Puis, dans cet ordre : les achats non
+soldés avec leur reste à payer, les versements reçus, et le reste des achats.
+
+C'est l'ordre des questions qu'on se pose quand le client entre : combien
+me doit-il, depuis quand, qu'a-t-il acheté ? Le solde est donc en tête, et non
+calculé de tête en faisant défiler des ventes.
+
+Le total acheté ne compte que les ventes du §12. Les ventes hors stock (§16) en
+sont absentes à dessein : elles n'enregistrent aucun encaissement et peuvent
+n'avoir jamais été livrées.
+
+**F23 — Le remboursement**
+
+Le gérant saisit une somme, jamais une répartition : au comptoir, le client pose
+un billet sur le carnet, il ne désigne pas une facture. Le versement s'impute
+donc à la plus ancienne ardoise d'abord, puis déborde sur la suivante — la règle
+du cahier, celle que le gérant applique de tête.
+
+Partiel ou total, avec un motif libre — « vente de sa récolte », « avance sur
+chantier » — qui est ce qui rend un carnet relisible trois mois plus tard. Un
+raccourci « tout solder » remplit le montant exact, parce que c'est le cas le
+plus fréquent et que retaper 47 500 de tête est le meilleur moyen de taper
+4 750.
+
+Un versement supérieur à la dette est refusé plutôt que transformé en avoir :
+l'avance client est un autre sujet, que cette section ne traite pas.
+
+**F24 — Le classement des débiteurs**
+
+En tête du répertoire client, les cinq plus grosses ardoises en barres
+proportionnelles, de la plus longue à la plus courte, avec le nom, le montant et
+l'ancienneté. Une seule teinte : il n'y a qu'une grandeur mesurée. La barre ne
+porte aucune information seule — nom et montant sont écrits sur chaque ligne.
+
+La carte disparaît quand personne ne doit rien.
+
+**F25 — La relance WhatsApp**
+
+Un bouton, sur la fiche du client, qui ouvre WhatsApp sur un brouillon :
+salutation, nom de la boutique, nombre d'achats non soldés, montant dû, et une
+porte ouverte — « un règlement en plusieurs fois est possible ».
+
+Pas de menace, pas de date butoir, pas de majuscules : le débiteur est un client
+qu'on veut garder, souvent un voisin. Le message est un brouillon modifiable,
+jamais un envoi : qui veut être sec l'écrira lui-même.
+
+Le numéro est normalisé pour WhatsApp — « 90 00 00 00 », « +228 90-00-00-00 » et
+« 00228 90000000 » mènent à la même conversation. Un numéro trop court ne
+déclenche rien : ouvrir une conversation avec un inconnu est pire que ne rien
+proposer.
+
+**Critères d'acceptation**
+
+1. La fiche d'un client montre son total acheté et son solde dû, et le
+   répertoire porte l'ardoise de chacun.
+2. Un remboursement solde la plus ancienne vente impayée d'abord, puis déborde
+   sur la suivante ; la somme imputée vaut exactement la somme versée.
+3. Un versement supérieur à la dette est refusé, et n'écrit rien.
+4. Un remboursement apparaît dans le journal de caisse le jour où l'argent est
+   entré, sous le nom « Remboursement », jamais « Vente ».
+5. Le chiffre d'affaires du §39 ne change pas quand une dette est soldée.
+6. Une vente annulée (§25) ne laisse aucune dette derrière elle.
+7. Le classement ne montre que des clients qui doivent, et la plus longue barre
+   occupe la pleine largeur.
+8. La relance ouvre WhatsApp sur un brouillon portant le montant dû ; sans
+   numéro utilisable, le bouton n'apparaît pas.
+9. Tout cela existe sur le web et sur l'Android (§41), depuis les mêmes règles.

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { router } from 'expo-router';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -17,6 +18,7 @@ import { useResource } from '../lib/useResource';
 import { useSession } from '../lib/session';
 import { api } from '../lib/api';
 import { CIBLE_TACTILE, couleurs, rayons } from '../lib/theme';
+import { money } from '@/utils/format';
 import type { ContactRow } from '@/types';
 
 /**
@@ -35,6 +37,8 @@ export default function ContactsScreen({
   avecWhatsapp,
   videHint,
   proprietaireSeul = false,
+  ficheDe,
+  entete,
 }: {
   kind: 'customers' | 'suppliers';
   titreAjout: string;
@@ -42,8 +46,16 @@ export default function ContactsScreen({
   videHint: string;
   /** Réserve l'écriture au propriétaire : vrai pour les fournisseurs (§5). */
   proprietaireSeul?: boolean;
+  /**
+   * Route de la fiche détaillée. Les clients en ont une — leur carnet de crédit
+   * (§45) — et la ligne doit l'ouvrir ; les fournisseurs n'en ont pas, et la
+   * ligne ouvre alors directement le formulaire.
+   */
+  ficheDe?: (contact: ContactRow) => string;
+  /** Posé au-dessus de la recherche : le classement des débiteurs, pour les clients. */
+  entete?: ReactNode;
 }) {
-  const { isOwner } = useSession();
+  const { isOwner, currency } = useSession();
   const [recherche, setRecherche] = useState('');
   const [edition, setEdition] = useState<EnEdition | null>(null);
   const { data, loading, error, reload } = useResource<ContactRow[]>(`/api/${kind}`, {
@@ -58,6 +70,7 @@ export default function ContactsScreen({
 
   return (
     <View style={styles.page}>
+      {entete}
       <TextInput
         accessibilityLabel="Rechercher"
         placeholder="Nom ou téléphone…"
@@ -77,8 +90,8 @@ export default function ContactsScreen({
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"
-            disabled={!peutEcrire}
-            onPress={() => setEdition(item)}
+            disabled={!peutEcrire && !ficheDe}
+            onPress={() => (ficheDe ? router.push(ficheDe(item)) : setEdition(item))}
             style={styles.ligne}
           >
             <View style={styles.avatar}>
@@ -88,7 +101,12 @@ export default function ContactsScreen({
               <Text style={styles.titre}>{item.name}</Text>
               {item.phone ? <Text style={styles.sous}>{item.phone}</Text> : null}
             </View>
-            {peutEcrire ? (
+            {/* L'ardoise se lit depuis le répertoire : c'est la première chose
+              qu'on y cherche quand le client est devant soi (§45). */}
+            {item.owed && item.owed > 0 ? (
+              <Text style={styles.ardoise}>{money(item.owed, currency)}</Text>
+            ) : null}
+            {peutEcrire || ficheDe ? (
               <Ionicons name="chevron-forward" size={18} color={couleurs.faint} />
             ) : null}
           </Pressable>
@@ -240,6 +258,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarTexte: { fontSize: 16, fontWeight: '800', color: couleurs.blueDark },
+  ardoise: {
+    backgroundColor: couleurs.amberSoft,
+    color: couleurs.amber,
+    fontWeight: '700',
+    fontSize: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: rayons.full,
+    overflow: 'hidden',
+  },
   titre: { fontSize: 14, fontWeight: '700', color: couleurs.ink },
   sous: { fontSize: 12, color: couleurs.muted },
   fab: {

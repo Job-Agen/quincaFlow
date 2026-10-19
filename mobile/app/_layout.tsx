@@ -78,7 +78,8 @@ function Garde() {
       <Stack.Screen name="out-of-stock/index" options={{ title: 'Ventes hors stock' }} />
       <Stack.Screen name="out-of-stock/new" options={{ title: 'Vente hors stock' }} />
       <Stack.Screen name="out-of-stock/[id]" options={{ title: 'Suivi hors stock' }} />
-      <Stack.Screen name="customers" options={{ title: 'Clients' }} />
+      <Stack.Screen name="customers/index" options={{ title: 'Clients' }} />
+      <Stack.Screen name="customers/[id]" options={{ title: 'Fiche client' }} />
       <Stack.Screen name="suppliers" options={{ title: 'Fournisseurs' }} />
       <Stack.Screen name="team" options={{ title: 'Équipe' }} />
       <Stack.Screen name="settings" options={{ title: 'Paramètres' }} />

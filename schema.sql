@@ -211,16 +211,27 @@ CREATE TABLE IF NOT EXISTS sale_items (
 
 CREATE INDEX IF NOT EXISTS sale_items_sale_idx ON sale_items (sale_id);
 
+-- Un encaissement. Celui du comptoir (`kind = 'SALE'`) et celui que le client
+-- rapporte des jours plus tard (`kind = 'REPAYMENT'`, §45) sont la même chose :
+-- de l'argent entré contre une vente. Les distinguer ne sert qu'à les nommer
+-- justement dans le journal de caisse — « Vente VE-0003 » n'est pas
+-- « Remboursement VE-0003 » — et à retrouver l'historique d'une dette.
 CREATE TABLE IF NOT EXISTS payments (
   id          text PRIMARY KEY,
   business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
   sale_id     text REFERENCES sales (id) ON DELETE CASCADE,
   method      text NOT NULL DEFAULT 'CASH',
   amount      numeric(14, 2) NOT NULL,
+  kind        text NOT NULL DEFAULT 'SALE',
+  -- Le motif du remboursement, tel que le gérant l'écrit : « vente de sa
+  -- récolte », « avance sur chantier ». C'est ce qui rend le carnet relisible.
+  note        text,
+  user_id     text REFERENCES users (id) ON DELETE SET NULL,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS payments_sale_idx ON payments (sale_id);
+CREATE INDEX IF NOT EXISTS payments_business_date_idx ON payments (business_id, created_at DESC);
 
 -- ────────────────────────── Ventes hors stock (§16) ────────────────────────
 --

@@ -1,30 +1,15 @@
 'use client';
 
-import { useState, type ChangeEvent } from 'react';
+import { useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { Phone, Plus, Users } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
-import {
-  Button,
-  Card,
-  Empty,
-  Notice,
-  SearchField,
-  Sheet,
-  Skeleton,
-  TextAreaField,
-  TextField,
-} from '@/components/ui';
-import { api } from '@/client/api';
+import { Badge, Card, Empty, Notice, SearchField, Skeleton } from '@/components/ui';
+import ContactSheet, { type EditingContact } from '@/components/contacts/ContactSheet';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
+import { money } from '@/utils/format';
 import type { ContactRow } from '@/types';
-import { errorMessage } from '@/utils/errors';
-
-/**
- * Fiche en cours d'édition. `isNew` n'existe qu'à l'écran : il distingue une
- * création d'une modification, là où la fiche n'a pas encore d'identifiant.
- */
-type EditingContact = Partial<ContactRow> & { isNew?: boolean };
 
 /**
  * Écran de répertoire, partagé par les clients et les fournisseurs (§18, §23).
@@ -40,6 +25,8 @@ export default function ContactsScreen({
   withWhatsapp,
   emptyHint,
   ownerOnly = false,
+  hrefFor,
+  header,
 }: {
   kind: 'customers' | 'suppliers';
   title: string;
@@ -48,12 +35,20 @@ export default function ContactsScreen({
   emptyHint?: string;
   /** Réserve l'écriture au propriétaire : vrai pour les fournisseurs (§5). */
   ownerOnly?: boolean;
+  /**
+   * Destination d'une ligne. Les clients ont une fiche à eux (§45), et la
+   * toucher doit l'ouvrir ; les fournisseurs n'en ont pas, et la ligne ouvre
+   * alors directement le formulaire.
+   */
+  hrefFor?: (contact: ContactRow) => string;
+  /** Inséré avant la recherche : le classement des débiteurs, pour les clients. */
+  header?: ReactNode;
 }) {
   const [search, setSearch] = useState('');
   // `null` : aucune fiche ouverte. Un objet vide : création d'une nouvelle fiche.
   const [editing, setEditing] = useState<EditingContact | null>(null);
   const { data, loading, error, reload } = useResource<ContactRow[]>(`/api/${kind}`, { search });
-  const { isOwner } = useSession();
+  const { isOwner, currency } = useSession();
 
   // Un vendeur inscrit un client au comptoir, mais ne touche pas au répertoire
   // fournisseurs : c'est avec eux que l'argent sort. L'écran est le même, le
@@ -65,6 +60,7 @@ export default function ContactsScreen({
       <AppBar back="/more" title={title} />
 
       <main className="page">
+        {header}
         <SearchField value={search} onChange={setSearch} placeholder="Nom ou téléphone…" />
 
         {error ? <Notice tone="error">{error.message}</Notice> : null}
@@ -80,27 +76,50 @@ export default function ContactsScreen({
               />
             ) : (
               <div className="list">
-                {data.map((contact) => (
-                  <button
-                    key={contact.id}
-                    type="button"
-                    className="list__row"
-                    disabled={!canEdit}
-                    onClick={() => setEditing(contact)}
-                  >
-                    <span className="thumb" style={{ fontWeight: 800, color: 'var(--blue-dark)' }}>
-                      {contact.name.charAt(0).toUpperCase()}
-                    </span>
-                    <div className="list__body">
-                      <div className="list__title">{contact.name}</div>
-                      {contact.phone ? (
-                        <div className="list__sub">
-                          <Phone size={12} style={{ verticalAlign: -1 }} /> {contact.phone}
+                {data.map((contact) => {
+                  const corps = (
+                    <>
+                      <span
+                        className="thumb"
+                        style={{ fontWeight: 800, color: 'var(--blue-dark)' }}
+                      >
+                        {contact.name.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="list__body">
+                        <div className="list__title">{contact.name}</div>
+                        {contact.phone ? (
+                          <div className="list__sub">
+                            <Phone size={12} style={{ verticalAlign: -1 }} /> {contact.phone}
+                          </div>
+                        ) : null}
+                      </div>
+                      {/* L'ardoise se lit depuis le répertoire : c'est la première
+                        chose qu'on y cherche quand le client est devant soi (§45). */}
+                      {contact.owed && contact.owed > 0 ? (
+                        <div className="list__end">
+                          <Badge tone="amber">{money(contact.owed, currency)}</Badge>
                         </div>
                       ) : null}
-                    </div>
-                  </button>
-                ))}
+                    </>
+                  );
+
+                  const destination = hrefFor?.(contact);
+                  return destination ? (
+                    <Link key={contact.id} href={destination} className="list__row">
+                      {corps}
+                    </Link>
+                  ) : (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      className="list__row"
+                      disabled={!canEdit}
+                      onClick={() => setEditing(contact)}
+                    >
+                      {corps}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -132,76 +151,5 @@ export default function ContactsScreen({
         />
       ) : null}
     </>
-  );
-}
-
-function ContactSheet({
-  kind,
-  contact,
-  withWhatsapp,
-  addLabel,
-  onClose,
-  onSaved,
-}: {
-  kind: 'customers' | 'suppliers';
-  contact: EditingContact;
-  withWhatsapp?: boolean;
-  addLabel: string;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [form, setForm] = useState({
-    name: contact.name || '',
-    phone: contact.phone || '',
-    whatsapp: contact.whatsapp || '',
-    address: contact.address || '',
-    notes: contact.notes || '',
-  });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const set =
-    (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setForm({ ...form, [field]: event.target.value });
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      if (contact.isNew) await api.post(`/api/${kind}`, form);
-      else await api.patch(`/api/${kind}/${contact.id}`, form);
-      onSaved();
-    } catch (issue) {
-      setError(errorMessage(issue));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Sheet open title={contact.isNew ? addLabel : form.name} onClose={onClose}>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      <TextField label="Nom" value={form.name} onChange={set('name')} required />
-      <TextField
-        label="Téléphone"
-        type="tel"
-        inputMode="tel"
-        value={form.phone}
-        onChange={set('phone')}
-      />
-      {withWhatsapp ? (
-        <TextField
-          label="WhatsApp"
-          type="tel"
-          inputMode="tel"
-          value={form.whatsapp}
-          onChange={set('whatsapp')}
-        />
-      ) : null}
-      <TextField label="Adresse" value={form.address} onChange={set('address')} />
-      <TextAreaField label="Notes" rows={2} value={form.notes} onChange={set('notes')} />
-      <Button block disabled={busy || !form.name.trim()} onClick={save}>
-        {busy ? 'Enregistrement…' : 'Enregistrer'}
-      </Button>
-    </Sheet>
   );
 }
