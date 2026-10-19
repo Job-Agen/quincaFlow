@@ -30,6 +30,22 @@ export async function register(body: Record<string, unknown>) {
   const existing = one(await sql`SELECT id FROM users WHERE email = ${input.email} LIMIT 1`);
   if (existing) throw conflict('Un compte existe déjà avec cette adresse e-mail.');
 
+  /*
+   * Le téléphone est unique lui aussi, et il manquait à ce contrôle.
+   *
+   * L'identifiant de connexion accepte l'e-mail *ou* le téléphone (§7) : deux
+   * comptes au même numéro rendraient la connexion ambiguë, d'où l'index
+   * unique. Mais seule la collision d'e-mail était annoncée ; celle du
+   * téléphone remontait de la contrainte Postgres, traduite en « Cette
+   * référence est déjà utilisée » — un message qui parle d'une référence
+   * produit à quelqu'un qui crée un compte. Le cas est réel : dans une boutique
+   * familiale, deux personnes donnent le même numéro.
+   */
+  if (input.phone) {
+    const memeNumero = one(await sql`SELECT id FROM users WHERE phone = ${input.phone} LIMIT 1`);
+    if (memeNumero) throw conflict('Un compte existe déjà avec ce numéro de téléphone.');
+  }
+
   const userId = newId('usr');
   const businessId = newId('biz');
 

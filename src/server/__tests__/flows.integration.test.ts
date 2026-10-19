@@ -811,6 +811,30 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     ).rejects.toThrow(/existe déjà/i);
   });
 
+  it('dit lequel des deux identifiants est déjà pris', async () => {
+    await accounts.register({
+      ownerName: 'Ama',
+      businessName: 'Quincaillerie Ama',
+      email: 'ama@test.tg',
+      phone: '+228 90 11 22 33',
+      password: 'motdepasse123',
+    });
+
+    // Le téléphone sert d'identifiant de connexion au même titre que l'e-mail
+    // (§7) : il est unique. Sa collision remontait de la contrainte Postgres,
+    // traduite en « Cette référence est déjà utilisée » — un message qui parle
+    // de référence produit à quelqu'un qui crée un compte.
+    await expect(
+      accounts.register({
+        ownerName: 'Kossi',
+        businessName: 'Autre boutique',
+        email: 'kossi-le-second@test.tg',
+        phone: '+228 90 11 22 33',
+        password: 'motdepasse123',
+      })
+    ).rejects.toThrow(/numéro de téléphone/i);
+  });
+
   it('rejette un mot de passe faux comme un compte inconnu', async () => {
     await accounts.register({
       ownerName: 'Ama',
