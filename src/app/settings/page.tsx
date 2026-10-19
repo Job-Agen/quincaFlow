@@ -4,6 +4,7 @@ import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { KeyRound, Store } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Button, Card, CardHead, Notice, TextField } from '@/components/ui';
+import ZoneDeDanger from '@/components/settings/ZoneDeDanger';
 import { api } from '@/client/api';
 import { useSession } from '@/client/session';
 import { errorMessage } from '@/utils/errors';
@@ -114,6 +115,10 @@ export default function SettingsPage() {
         </form>
 
         <PasswordCard />
+
+        {/* Tout en bas, et seulement pour le propriétaire : fermer la boutique
+          n'est pas un réglage, c'est une fin (§46). */}
+        {isOwner ? <ZoneDeDanger /> : null}
       </main>
     </>
   );

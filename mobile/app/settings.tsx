@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import Constants from 'expo-constants';
 import { Button, Card, CardHead, Field, Notice } from '../src/ui';
+import ZoneDeDanger from '../src/ui/ZoneDeDanger';
 import { useSession } from '../src/lib/session';
 import { api } from '../src/lib/api';
 import { BASE_URL } from '../src/lib/api';
@@ -125,7 +127,8 @@ export default function Parametres() {
         <Card>
           <CardHead title="À propos" />
           <Text style={styles.aide}>
-            MaQuincaillerie 1.0.0 — application Android native.{'\n'}
+            MaQuincaillerie {Constants.expoConfig?.version ?? '—'} — application Android native.
+            {'\n'}
             Serveur : {BASE_URL}
           </Text>
           <Text style={styles.aide}>
@@ -133,6 +136,10 @@ export default function Parametres() {
             chiffre affiché hors ligne serait un chiffre périmé présenté comme certain.
           </Text>
         </Card>
+
+        {/* Tout en bas, et seulement pour le propriétaire : fermer la boutique
+          n'est pas un réglage, c'est une fin (§46). */}
+        {isOwner ? <ZoneDeDanger /> : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );

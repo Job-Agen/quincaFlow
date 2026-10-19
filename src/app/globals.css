@@ -1538,3 +1538,22 @@ select.input {
 .btn--whatsapp:active {
   background: #19743f;
 }
+
+/* ───────────────── Zone de danger des paramètres (§46) ─────────────── */
+
+/*
+ * La liste de ce qui va disparaître. Les puces sont gardées — c'est bien une
+ * énumération, et les retirer ferait lire un paragraphe là où il faut compter.
+ */
+.danger-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-2);
+}
+
+.danger-list strong {
+  color: var(--ink);
+}

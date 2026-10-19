@@ -835,6 +835,160 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     ).rejects.toThrow(/numéro de téléphone/i);
   });
 
+  describe('suppression d’une boutique (§46)', () => {
+    /** Une boutique garnie, avec son propriétaire et un vendeur. */
+    async function seedBoutique() {
+      const proprio = await accounts.register({
+        ownerName: 'Ama',
+        businessName: 'Quincaillerie Le Bâtisseur',
+        email: 'ama@test.tg',
+        password: 'motdepasse123',
+      });
+      const members = await import('../members');
+      await members.addSeller(proprio, {
+        name: 'Kodjo vendeur',
+        email: 'kodjo.vendeur@test.tg',
+        password: 'motdepasse123',
+      });
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name) VALUES ('cus_x', $1, 'Afi')`,
+        [proprio.businessId]
+      );
+      const vitre = await products.createProduct(proprio, {
+        name: 'Vitre 60 cm',
+        baseUnit: 'pièce',
+        sellingPrice: 450,
+        stockQuantity: 10,
+      });
+      await sales.createSale(proprio, { lines: [{ productId: vitre.id, quantity: 2 }] });
+      return proprio;
+    }
+
+    /** Ce qui reste en base, toutes tables confondues, pour cette boutique. */
+    async function resteDe(businessId: string) {
+      const { rows: lignes } = await pool.query<{ n: string }>(
+        `SELECT (SELECT COUNT(*) FROM businesses WHERE id = $1)
+              + (SELECT COUNT(*) FROM products WHERE business_id = $1)
+              + (SELECT COUNT(*) FROM sales WHERE business_id = $1)
+              + (SELECT COUNT(*) FROM sale_items WHERE business_id = $1)
+              + (SELECT COUNT(*) FROM payments WHERE business_id = $1)
+              + (SELECT COUNT(*) FROM customers WHERE business_id = $1)
+              + (SELECT COUNT(*) FROM stock_movements WHERE business_id = $1)
+              + (SELECT COUNT(*) FROM business_members WHERE business_id = $1) AS n`,
+        [businessId]
+      );
+      return Number(lignes[0]!.n);
+    }
+
+    it('annonce le poids de ce qui sera effacé', async () => {
+      const proprio = await seedBoutique();
+      await expect(accounts.businessWeight(proprio)).resolves.toMatchObject({
+        businessName: 'Quincaillerie Le Bâtisseur',
+        products: 1,
+        sales: 1,
+        customers: 1,
+        members: 2,
+      });
+    });
+
+    it('efface la boutique, tout ce qu’elle contient, et les comptes qui n’en tenaient qu’elle', async () => {
+      const proprio = await seedBoutique();
+      const resume = await accounts.deleteBusiness(proprio, {
+        password: 'motdepasse123',
+        // Sans l'accent : le clavier d'un téléphone le donne mal, et la règle
+        // le pardonne tant que le nom entier est tapé.
+        confirmation: 'quincaillerie le batisseur',
+      });
+
+      expect(resume).toMatchObject({ sales: 1, products: 1, accountsRemoved: 2 });
+      expect(await resteDe(proprio.businessId)).toBe(0);
+
+      // Le propriétaire et son vendeur ne tenaient que cette boutique : leurs
+      // comptes partent avec elle. Les comptes des autres boutiques restent.
+      const { rows: comptes } = await pool.query(
+        `SELECT email FROM users WHERE email IN ('ama@test.tg', 'kodjo.vendeur@test.tg')`
+      );
+      expect(comptes).toHaveLength(0);
+    });
+
+    it('refuse un mot de passe faux, et n’efface rien', async () => {
+      const proprio = await seedBoutique();
+      await expect(
+        accounts.deleteBusiness(proprio, {
+          password: 'ce-n-est-pas-le-bon',
+          confirmation: 'Quincaillerie Le Bâtisseur',
+        })
+      ).rejects.toThrow(/mot de passe incorrect/i);
+      expect(await resteDe(proprio.businessId)).toBeGreaterThan(0);
+    });
+
+    it('refuse un nom mal retapé, et n’efface rien', async () => {
+      const proprio = await seedBoutique();
+      await expect(
+        accounts.deleteBusiness(proprio, {
+          password: 'motdepasse123',
+          confirmation: 'Quincaillerie',
+        })
+      ).rejects.toThrow(/tapez le nom exact/i);
+      expect(await resteDe(proprio.businessId)).toBeGreaterThan(0);
+    });
+
+    it('garde le compte de qui tient encore une autre boutique', async () => {
+      const premiere = await accounts.register({
+        ownerName: 'Ama',
+        businessName: 'Quincaillerie Une',
+        email: 'ama@test.tg',
+        password: 'motdepasse123',
+      });
+      // La même personne ouvre une seconde boutique : son compte y reste
+      // rattaché, et la fermeture de la première ne doit pas l'emporter.
+      await pool.query(
+        `INSERT INTO businesses (id, name) VALUES ('biz_deux', 'Quincaillerie Deux')`
+      );
+      await pool.query(
+        `INSERT INTO business_members (business_id, user_id, role) VALUES ('biz_deux', $1, 'OWNER')`,
+        [premiere.userId]
+      );
+
+      const resume = await accounts.deleteBusiness(premiere, {
+        password: 'motdepasse123',
+        confirmation: 'Quincaillerie Une',
+      });
+      expect(resume.accountsRemoved).toBe(0);
+
+      const { rows: reste } = await pool.query(`SELECT id FROM users WHERE id = $1`, [
+        premiere.userId,
+      ]);
+      expect(reste).toHaveLength(1);
+    });
+
+    it('ne touche pas à la boutique d’à côté', async () => {
+      const proprio = await seedBoutique();
+      const voisine = await accounts.register({
+        ownerName: 'Kossi',
+        businessName: 'Quincaillerie Voisine',
+        email: 'kossi.voisin@test.tg',
+        password: 'motdepasse123',
+      });
+      const vitre = await products.createProduct(voisine, {
+        name: 'Vitre voisine',
+        baseUnit: 'pièce',
+        sellingPrice: 500,
+        stockQuantity: 5,
+      });
+
+      await accounts.deleteBusiness(proprio, {
+        password: 'motdepasse123',
+        confirmation: 'Quincaillerie Le Bâtisseur',
+      });
+
+      await expect(products.getProduct(voisine.businessId, vitre.id)).resolves.toMatchObject({
+        name: 'Vitre voisine',
+      });
+      expect(await resteDe(voisine.businessId)).toBeGreaterThan(0);
+    });
+  });
+
   it('rejette un mot de passe faux comme un compte inconnu', async () => {
     await accounts.register({
       ownerName: 'Ama',

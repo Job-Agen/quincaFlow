@@ -78,5 +78,14 @@ export const api = {
   // doit donner le même résultat, un seul reçu (§40).
   put: <T>(path: string, body?: unknown) =>
     send<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }),
-  delete: <T>(path: string) => send<T>(path, { method: 'DELETE' }),
+  /**
+   * Le corps est facultatif, mais il existe : la suppression d'une boutique
+   * (§46) envoie le mot de passe et le nom retapé, et ces deux-là n'ont rien à
+   * faire dans une adresse — une URL se retrouve dans les journaux du serveur.
+   */
+  delete: <T>(path: string, body?: unknown) =>
+    send<T>(path, {
+      method: 'DELETE',
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
 };

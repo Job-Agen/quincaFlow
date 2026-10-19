@@ -1,8 +1,9 @@
-import { getSql, one, runTransaction } from '../lib/db';
+import { getSql, one, rows, runTransaction } from '../lib/db';
 import { newId } from '../lib/ids';
 import { badRequest, conflict, unauthorized, notFound } from '../lib/http';
 import { str, email as emailField } from '../lib/validate';
 import { ROLES, hashPassword, verifyPassword } from '../lib/auth';
+import { confirmsBusinessName } from '../domain/business';
 import type { BusinessRow, Profile, Role, Session, UserRow } from '@/types';
 
 /**
@@ -166,6 +167,106 @@ export async function changePassword(session: Session, body: Record<string, unkn
        WHERE user_id = ${session.userId} AND revoked_at IS NULL
     `,
   ]);
+}
+
+/**
+ * Ce qu'une suppression de boutique emporte, compté avant de l'exécuter.
+ *
+ * Le gérant doit voir le poids de ce qu'il efface — « 184 ventes » n'est pas
+ * « 2 ventes » — et l'écran le lui montre avant de lui demander de taper le nom.
+ */
+export interface BusinessDeletion {
+  businessName: string;
+  products: number;
+  sales: number;
+  customers: number;
+  suppliers: number;
+  members: number;
+  accountsRemoved: number;
+}
+
+/** Ce que la boutique contient, pour l'annoncer avant de l'effacer (§46). */
+export async function businessWeight(
+  session: Session
+): Promise<Omit<BusinessDeletion, 'accountsRemoved'>> {
+  const sql = getSql();
+  const ligne = one<Omit<BusinessDeletion, 'accountsRemoved'>>(
+    await sql`
+      SELECT b.name AS "businessName",
+             (SELECT COUNT(*) FROM products p WHERE p.business_id = b.id)::int AS products,
+             (SELECT COUNT(*) FROM sales s WHERE s.business_id = b.id)::int AS sales,
+             (SELECT COUNT(*) FROM customers c WHERE c.business_id = b.id)::int AS customers,
+             (SELECT COUNT(*) FROM suppliers f WHERE f.business_id = b.id)::int AS suppliers,
+             (SELECT COUNT(*) FROM business_members m WHERE m.business_id = b.id)::int AS members
+        FROM businesses b
+       WHERE b.id = ${session.businessId}
+    `
+  );
+  if (!ligne) throw notFound('Boutique introuvable.');
+  return ligne;
+}
+
+/**
+ * Supprime la boutique, et avec elle tout ce qu'elle contient (§46).
+ *
+ * Trois verrous, et chacun arrête une erreur différente. Le rôle — seul le
+ * propriétaire peut le faire, et c'est la route qui l'impose (§5). Le mot de
+ * passe — il arrête le téléphone resté déverrouillé sur le comptoir. Le nom de
+ * la boutique à retaper — il arrête le propriétaire lui-même, celui qui a le
+ * mot de passe et qui appuie trop vite.
+ *
+ * Rien n'est désactivé ni archivé : la table part, et ses dépendances avec elle
+ * par les clés étrangères. Un « archivage » laisserait croire à un retour en
+ * arrière qui n'existe pas, et on ne fait pas croire ça à quelqu'un qui efface
+ * ses ventes.
+ *
+ * Les comptes ne disparaissent pas tous. Un utilisateur n'appartient pas à une
+ * boutique ; seuls partent ceux qui n'en tiennent plus aucune — le propriétaire
+ * et ses vendeurs, dans le cas ordinaire. Celui qui gère une seconde
+ * quincaillerie garde son compte et y reste.
+ */
+export async function deleteBusiness(
+  session: Session,
+  body: Record<string, unknown>
+): Promise<BusinessDeletion> {
+  const password = str(body.password, 'mot de passe', { max: 200 });
+  const confirmation = str(body.confirmation, 'nom de la boutique', { max: 200 });
+
+  const sql = getSql();
+  const user = one<{ password_hash: string }>(
+    await sql`SELECT password_hash FROM users WHERE id = ${session.userId}`
+  );
+  if (!user) throw notFound('Compte introuvable.');
+  if (!(await verifyPassword(password, user.password_hash))) {
+    throw badRequest('Mot de passe incorrect.');
+  }
+
+  const poids = await businessWeight(session);
+  if (!confirmsBusinessName(confirmation, poids.businessName)) {
+    throw badRequest(`Pour confirmer, tapez le nom exact : ${poids.businessName}`);
+  }
+
+  // Relevés avant la suppression : une fois la boutique partie, l'appartenance
+  // qui permettait de les reconnaître aura disparu avec elle.
+  const orphelins = rows<{ id: string }>(
+    await sql`
+      SELECT u.id
+        FROM users u
+        JOIN business_members m ON m.user_id = u.id
+       WHERE m.business_id = ${session.businessId}
+         AND NOT EXISTS (
+           SELECT 1 FROM business_members autre
+            WHERE autre.user_id = u.id AND autre.business_id <> ${session.businessId}
+         )
+    `
+  );
+
+  await runTransaction([
+    sql`DELETE FROM businesses WHERE id = ${session.businessId}`,
+    sql`DELETE FROM users WHERE id = ANY(${orphelins.map((o) => o.id)}::text[])`,
+  ]);
+
+  return { ...poids, accountsRemoved: orphelins.length };
 }
 
 /** Coordonnées de la boutique — elles figurent en tête des factures (§15). */

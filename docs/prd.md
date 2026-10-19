@@ -1818,3 +1818,74 @@ proposer.
 8. La relance ouvre WhatsApp sur un brouillon portant le montant dû ; sans
    numéro utilisable, le bouton n'apparaît pas.
 9. Tout cela existe sur le web et sur l'Android (§41), depuis les mêmes règles.
+
+## 46. Fermer sa boutique
+
+**Objectif**
+
+L'application savait tout créer et rien effacer. Une quincaillerie ouverte par
+erreur, une boutique d'essai, un commerce qui ferme : dans les trois cas la
+donnée restait, et le seul moyen de s'en défaire était d'écrire du SQL dans la
+console de l'hébergeur — c'est-à-dire, pour un gérant, aucun moyen.
+
+C'est aussi une question de respect : des ventes, des clients et des dettes
+appartiennent à celui qui les a saisis. S'il veut les retirer, il doit pouvoir
+le faire lui-même, sans demander la permission à personne.
+
+**F26 — Trois verrous, et pas un de plus**
+
+Chacun arrête une erreur différente, et c'est pourquoi aucun ne suffit seul.
+
+- **Le rôle.** Seul le propriétaire peut fermer la boutique (§5). Un vendeur
+  qui tape le bon mot de passe n'y arrive pas davantage : la route exige le
+  rôle avant de lire quoi que ce soit.
+- **Le mot de passe.** Il arrête le téléphone resté déverrouillé sur le
+  comptoir pendant que le gérant sert un client.
+- **Le nom de la boutique, retapé.** Il arrête le propriétaire lui-même —
+  celui qui a le mot de passe et qui appuie trop vite. Une case à cocher se
+  coche du pouce ; un nom se tape.
+
+La comparaison du nom ignore la casse, les accents et les espaces en trop.
+« Quincaillerie Le Bâtisseur » demande un accent circonflexe que le clavier
+d'un téléphone d'entrée de gamme ne donne pas sans peine, et punir
+l'orthographe n'ajoute aucune sécurité : il faut toujours avoir tapé le nom
+entier.
+
+**F27 — Dire le poids avant d'effacer**
+
+Avant de demander quoi que ce soit, l'écran compte et montre : tant de ventes,
+tant de produits, tant de clients, tant de fournisseurs, tant de comptes. « 184
+ventes » ne se lit pas comme « 2 ventes », et c'est précisément ce que le
+gérant doit peser.
+
+Rien n'est archivé ni désactivé : la boutique part, et ses dépendances avec
+elle par les clés étrangères. Un « archivage » laisserait croire à un retour en
+arrière qui n'existe pas, et on ne fait pas croire cela à quelqu'un qui efface
+ses ventes.
+
+**F28 — Les comptes, eux, ne partent pas tous**
+
+Un utilisateur n'appartient pas à une boutique. Ne sont supprimés que ceux qui
+n'en tiennent plus aucune — le propriétaire et ses vendeurs, dans le cas
+ordinaire. Celui qui gère une seconde quincaillerie garde son compte et y
+reste connecté.
+
+Côté client, la session est fermée dans la foulée : le jeton désigne un compte
+qui vient peut-être de disparaître, et le laisser dans le navigateur ne mènerait
+qu'à des refus incompréhensibles.
+
+**Critères d'acceptation**
+
+1. Un vendeur ne voit pas la zone de danger, et la route lui refuse la
+   suppression.
+2. L'écran annonce le nombre de ventes, produits, clients, fournisseurs et
+   comptes avant toute saisie.
+3. Un mot de passe faux refuse la suppression, et n'efface rien.
+4. Un nom mal retapé refuse la suppression, et n'efface rien.
+5. Le nom se confirme à la casse et aux accents près, mais pas en abrégé.
+6. La suppression efface la boutique, ses produits, ses ventes, ses lignes de
+   vente, ses encaissements, ses clients et ses mouvements de stock.
+7. Les comptes qui ne tenaient que cette boutique sont supprimés ; celui qui en
+   tient une autre est conservé.
+8. La boutique voisine n'est pas touchée (§29).
+9. La session est fermée et l'écran revient à la connexion.

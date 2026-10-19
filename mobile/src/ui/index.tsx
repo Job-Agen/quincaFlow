@@ -41,7 +41,8 @@ export function Button({
   children: ReactNode;
   onPress: () => void;
   disabled?: boolean;
-  variant?: 'primary' | 'success' | 'ghost';
+  /** `danger` n'existe que pour les gestes irréversibles (§46). */
+  variant?: 'primary' | 'success' | 'ghost' | 'danger';
   busy?: boolean;
 }) {
   const inactif = disabled || busy;
@@ -54,6 +55,7 @@ export function Button({
       style={({ pressed }) => [
         styles.bouton,
         variant === 'success' && { backgroundColor: couleurs.green },
+        variant === 'danger' && { backgroundColor: couleurs.red },
         variant === 'ghost' && styles.boutonGhost,
         inactif && styles.boutonInactif,
         // Un retour tactile immédiat : sur un téléphone d'entrée de gamme, la
