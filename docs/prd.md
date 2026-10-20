@@ -1889,3 +1889,47 @@ qu'à des refus incompréhensibles.
    tient une autre est conservé.
 8. La boutique voisine n'est pas touchée (§29).
 9. La session est fermée et l'écran revient à la connexion.
+
+## 47. Page d'accueil publique
+
+**Objectif**
+
+La racine du site renvoyait au tableau de bord, donc — pour qui n'a pas de
+compte — à l'écran de connexion. Quelqu'un à qui on dicte l'adresse de
+l'application tombait sur un formulaire, sans savoir ce qu'elle fait ni comment
+l'installer. C'était le seul chemin d'entrée, et il ne menait nulle part.
+
+Le §44 avait donné une page de téléchargement, mais il faut en connaître
+l'adresse. Il manquait la porte.
+
+**F29 — Ce qu'elle dit, et dans quel ordre**
+
+Trois choses, et rien d'autre.
+
+1. **Ce que l'application fait** : vendre au comptoir, compter en sacs et en
+   cartons, tenir l'ardoise, commander chez le fournisseur, savoir ce qui
+   reste, vendre ce qu'on n'a pas. Six capacités, décrites par ce qu'elles
+   changent pour le gérant, pas par leur nom technique.
+2. **Où la télécharger** : le bouton porte la taille réelle du fichier et la
+   version, relevées sur l'APK (§44). Jamais un chiffre écrit à la main.
+3. **Comment l'essayer sans rien installer** : le navigateur suffit, et c'est
+   le même compte.
+
+Pas de témoignages, pas de chiffres d'adoption, pas de prix barrés. Un gérant
+qui envisage d'y mettre sa caisse a besoin de savoir ce qu'elle sait faire.
+
+**F30 — Deux captures, et elles sont vraies**
+
+Une du téléphone, une de l'ordinateur, prises dans l'application en
+fonctionnement avec des chiffres du jour — pas des maquettes, pas un tableau de
+bord à zéro. Ce sont les mêmes images que l'installation sur ordinateur (§44)
+présente au navigateur : elles ne coûtent rien de plus.
+
+**Critères d'acceptation**
+
+1. La racine s'affiche sans session, et ne renvoie pas vers la connexion.
+2. Un gérant déjà connecté qui ouvre la racine arrive sur son tableau de bord.
+3. Le bouton de téléchargement sert l'APK publié, avec sa taille et sa version
+   réelles.
+4. La page tient à 390 px comme à 1 440 px, sans défilement horizontal.
+5. Aucune capture ne montre l'indicateur de développement ni un écran vide.

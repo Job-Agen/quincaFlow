@@ -8,7 +8,8 @@ import { ENTRY_ROUTES, PUBLIC_ROUTES, isEntryRoute, isPublicRoute } from '../rou
  * seulement sur le contenu d'une liste.
  */
 describe('écrans sans session', () => {
-  it('laisse voir la connexion, l’inscription et le téléchargement', () => {
+  it('laisse voir l’accueil, la connexion, l’inscription et le téléchargement', () => {
+    expect(isPublicRoute('/')).toBe(true);
     expect(isPublicRoute('/login')).toBe(true);
     expect(isPublicRoute('/register')).toBe(true);
     expect(isPublicRoute('/telecharger')).toBe(true);
@@ -28,6 +29,9 @@ describe('écrans sans session', () => {
 
 describe('écrans d’entrée', () => {
   it('renvoient au tableau de bord une session déjà ouverte', () => {
+    // La racine comprise : un gérant connecté qui tape l'adresse de son site
+    // veut sa boutique, pas la page qui présente l'application (§47).
+    expect(isEntryRoute('/')).toBe(true);
     expect(isEntryRoute('/login')).toBe(true);
     expect(isEntryRoute('/register')).toBe(true);
   });

@@ -1557,3 +1557,203 @@ select.input {
 .danger-list strong {
   color: var(--ink);
 }
+
+/* ──────────────────── Page d'accueil publique (§47) ─────────────────── */
+
+/*
+ * Elle vit hors de la coque : ni barre d'onglets, ni menu latéral, ni session.
+ * Sa mise en page est donc la sienne — mais elle emprunte les mêmes jetons que
+ * le reste, pour que le gérant qui s'inscrit ne change pas d'application en
+ * passant de la page au logiciel.
+ */
+.accueil {
+  min-height: 100dvh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.accueil__hero {
+  background: linear-gradient(110deg, #09568f, #094a82);
+  color: #fff;
+  padding: 44px 16px 40px;
+}
+
+.accueil__bloc {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.accueil__hero h1 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.accueil__promesse {
+  font-size: 16px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.accueil__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* Le geste principal reste reconnaissable sans être lu. */
+.accueil__bouton {
+  min-height: 54px;
+  font-size: 16px;
+}
+
+.accueil__mention {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.accueil__lien,
+.accueil__mention .accueil__lien {
+  color: inherit;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.accueil__corps {
+  flex: 1;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.accueil__section h2 {
+  font-size: 19px;
+  font-weight: 800;
+  margin-bottom: 14px;
+}
+
+.accueil__grille {
+  display: grid;
+  gap: 12px;
+}
+
+.accueil__carte {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accueil__carte h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.accueil__icone {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r);
+  background: var(--blue-soft);
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * Les captures sont posées dans un cadre qui les borde et les arrondit : sans
+ * lui, une capture d'écran blanche sur un fond clair n'a plus de contour, et
+ * l'on ne sait plus où commence l'application.
+ */
+.accueil__apercus {
+  display: grid;
+  gap: 16px;
+}
+
+.accueil__apercus figure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accueil__apercus img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  background: #fff;
+}
+
+.accueil__essai {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.accueil__pied {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 16px 32px;
+}
+
+.accueil__pied .accueil__lien {
+  color: var(--blue);
+}
+
+@media (min-width: 760px) {
+  .accueil__hero {
+    padding: 72px 20px 64px;
+  }
+
+  .accueil__hero h1 {
+    font-size: 42px;
+  }
+
+  .accueil__promesse {
+    font-size: 18px;
+    max-width: 34ch;
+  }
+
+  /* Les deux gestes côte à côte : il y a la place, et les empiler sur un écran
+     large les ferait paraître successifs alors qu'ils sont alternatifs. */
+  .accueil__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .accueil__bouton {
+    flex: 0 1 auto;
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .accueil__grille {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /*
+   * Le téléphone est bridé à 240 px, l'ordinateur prend le reste.
+   * À largeurs égales, un portrait de 390×844 posé à côté d'un paysage de
+   * 1280×800 fait deux fois sa hauteur : la colonne de droite se terminait au
+   * milieu de la gauche, et la section paraissait bancale.
+   */
+  .accueil__apercus {
+    grid-template-columns: 240px minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+  }
+}

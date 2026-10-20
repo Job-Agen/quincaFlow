@@ -20,10 +20,16 @@
  */
 
 /** Écrans qui s'affichent sans session. */
-export const PUBLIC_ROUTES: readonly string[] = ['/login', '/register', '/telecharger'];
+export const PUBLIC_ROUTES: readonly string[] = ['/', '/login', '/register', '/telecharger'];
 
-/** Écrans d'entrée : une session ouverte y est renvoyée au tableau de bord. */
-export const ENTRY_ROUTES: readonly string[] = ['/login', '/register'];
+/**
+ * Écrans d'entrée : une session ouverte y est renvoyée au tableau de bord.
+ *
+ * La racine en fait partie. Elle présente l'application à qui ne la connaît
+ * pas (§47) ; un gérant déjà connecté qui tape l'adresse de son site veut sa
+ * boutique, pas une page de présentation.
+ */
+export const ENTRY_ROUTES: readonly string[] = ['/', '/login', '/register'];
 
 export function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.includes(pathname);
