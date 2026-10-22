@@ -3,11 +3,13 @@
 import { use, useState } from 'react';
 import { Printer, Share2, XCircle, FileDown, MessageCircle } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
-import { Badge, Button, Notice, Sheet, Skeleton, TextField } from '@/components/ui';
+import { Badge, Button, Notice, Segmented, Sheet, Skeleton, TextField } from '@/components/ui';
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { PAYMENT_STATUS_LABELS, paymentLabel } from '@/domain/sale';
+import { PRINT_FORMAT_LABELS, TICKET_WIDTHS, isTicket, readFormat } from '@/domain/ticket';
+import { printWith, usePrintFormat } from '@/client/print';
 import { amount, dateTime, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import Letterhead from '@/components/documents/Letterhead';
@@ -26,6 +28,7 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
   const { business, currency, isOwner } = useSession();
   const { data: sale, loading, error, setData } = useResource<Sale>(`/api/sales/${id}`);
   const [cancelling, setCancelling] = useState(false);
+  const [format, choisirFormat] = usePrintFormat();
   const cancelled = sale?.status === 'CANCELLED';
 
   async function share(target: 'native' | 'whatsapp' = 'native') {
@@ -176,21 +179,38 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
               )}
             </article>
 
+            {/* Le format d'impression, choisi une fois et retenu : une boutique
+              a une imprimante, pas trois (§54). */}
+            <div className="field no-print">
+              <span className="field__label">Format d&apos;impression</span>
+              <Segmented
+                options={[
+                  { value: 'A4', label: PRINT_FORMAT_LABELS.A4 ?? 'Facture A4' },
+                  ...TICKET_WIDTHS.map((largeur) => ({
+                    value: String(largeur),
+                    label: PRINT_FORMAT_LABELS[String(largeur)] ?? `Ticket ${largeur} mm`,
+                  })),
+                ]}
+                value={String(format)}
+                onChange={(valeur) => choisirFormat(readFormat(valeur))}
+              />
+            </div>
+
             <div className="invoice-actions no-print">
               <Button variant="success" onClick={() => share('whatsapp')}>
                 <MessageCircle size={23} />
                 Partager WhatsApp
               </Button>
               <Button
-                onClick={() => window.print()}
+                onClick={() => printWith(format)}
                 title="Choisissez Enregistrer au format PDF dans la fenêtre d’impression"
               >
                 <FileDown size={23} />
                 Télécharger PDF
               </Button>
-              <Button variant="soft" onClick={() => window.print()}>
+              <Button variant="soft" onClick={() => printWith(format)}>
                 <Printer size={23} />
-                Imprimer
+                {isTicket(format) ? `Imprimer le ticket ${format} mm` : 'Imprimer'}
               </Button>
             </div>
 

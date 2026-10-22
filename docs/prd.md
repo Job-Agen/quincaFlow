@@ -2296,3 +2296,59 @@ la réponse du serveur pour un vendeur. Il porte des prix d'achat (§5), et un
 7. Le règlement apparaît en sortie du journal de caisse, jamais en entrée.
 8. Un vendeur ne reçoit pas la dette fournisseur.
 9. Rien de tout cela ne franchit la frontière d'une boutique (§29).
+
+## 54. Le ticket de caisse
+
+**Objectif**
+
+Deux imprimantes coexistent dans une quincaillerie. Celle du bureau sort du A4
+— la facture qu'on remet à une entreprise, qu'elle classe et passe en charge.
+Celle du comptoir est une thermique à rouleau, 58 ou 80 mm de large, qui sort
+le ticket que le client met dans sa poche.
+
+L'application ne connaissait que la première. Imprimer sa mise en page sur un
+rouleau de 58 mm ne donne pas un ticket plus petit : le navigateur met la page
+à l'échelle, et le total devient illisible.
+
+**F50 — Trois formats, un choix retenu**
+
+Facture A4, ticket 80 mm, ticket 58 mm. Le choix est mémorisé : une boutique a
+une imprimante, pas trois, et le gérant n'a à choisir qu'une fois. Le stockage
+du navigateur peut être vide, refusé ou vidé — toute lecture douteuse rend le
+A4, le format qu'on ne peut pas rater.
+
+**F51 — La feuille porte la largeur du rouleau**
+
+La règle `@page` est fabriquée puis injectée le temps de l'impression. Deux
+pièges s'y cachent, et tous deux ne se voient qu'une fois le papier sorti :
+
+- **`size: 58mm auto` n'est pas du CSS valide.** C'est pourtant la description
+  juste d'un rouleau. `size` accepte une longueur, deux, ou `auto`, jamais un
+  mélange : les navigateurs jettent la règle entière et impriment une A4
+  écrasée sur 58 mm. La hauteur est donc déclarée — 200 mm, de quoi tenir une
+  vingtaine de lignes ; l'imprimante thermique, elle, déroule jusqu'à la fin du
+  contenu et coupe là.
+- **Le ménage attend `afterprint`, et rien d'autre.** Ni la ligne qui suit
+  `print()` — dans plusieurs navigateurs elle s'exécute pendant que l'aperçu
+  est encore ouvert —, ni un délai de secours : le gérant laisse volontiers la
+  fenêtre d'impression ouverte plus de deux secondes, et la règle disparaîtrait
+  sous ses yeux. Là où `afterprint` ne se déclenche pas, c'est l'impression
+  suivante qui nettoie la précédente.
+
+**F52 — La mise en page se resserre**
+
+Marges, colonnes et titres se réduisent : une imprimante thermique n'ajuste
+rien, elle imprime point par point sur la largeur du rouleau. Et sur 58 mm, la
+colonne « Prix » disparaît — il n'y a pas la place pour le prix unitaire *et*
+le total de ligne, et c'est le total que le client vérifie.
+
+**Critères d'acceptation**
+
+1. Les trois formats sont proposés sur la facture, et le choix est retenu d'une
+   impression à l'autre.
+2. La règle de page porte deux longueurs, jamais `auto`.
+3. Un ticket de 58 mm sort sur une page de 58 mm, et de 80 sur 80.
+4. Après impression, ni la règle ni la mise en page étroite ne subsistent.
+5. Le ticket 58 mm n'affiche pas la colonne des prix unitaires.
+6. L'en-tête du §51 — logo, numéro fiscal — figure sur le ticket comme sur la
+   facture.

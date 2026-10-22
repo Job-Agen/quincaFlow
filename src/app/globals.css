@@ -1200,6 +1200,60 @@ select.input {
     border: none;
     box-shadow: none;
   }
+
+  /* ── Ticket de caisse, 58 ou 80 mm (§54) ──
+     Une imprimante thermique ne met pas une page à l'échelle : elle imprime
+     point par point sur la largeur du rouleau. Tout ce qui suppose une feuille
+     — marges confortables, colonnes larges, gros titres — doit se resserrer,
+     sinon le total se retrouve coupé au bord du papier. */
+  html[data-ticket] .page {
+    padding: 0;
+  }
+
+  html[data-ticket] .invoice {
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  html[data-ticket] .invoice__logo {
+    max-width: 90px;
+    max-height: 32px;
+  }
+
+  html[data-ticket] .invoice__name {
+    font-size: 13px;
+  }
+
+  html[data-ticket] .invoice__title {
+    font-size: 14px;
+    margin: 6px 0;
+  }
+
+  /* Le tableau perd ses marges intérieures : sur 58 mm, deux fois 12 px de
+     rembourrage laissent moins de place au libellé qu'au vide. */
+  html[data-ticket] .table th,
+  html[data-ticket] .table td {
+    padding: 3px 2px;
+    font-size: 11px;
+  }
+
+  html[data-ticket] .table-wrap {
+    overflow: visible;
+  }
+
+  html[data-ticket] .invoice__total,
+  html[data-ticket] .total-line--grand {
+    font-size: 13px;
+  }
+
+  /* Un rouleau de 58 mm n'a pas la place d'une colonne « Prix » en plus du
+     total de ligne : la quantité et le prix unitaire se lisent dans la même
+     cellule, comme sur un vrai ticket. */
+  html[data-ticket='58'] .invoice .table th:nth-child(3),
+  html[data-ticket='58'] .invoice .table td:nth-child(3) {
+    display: none;
+  }
 }
 
 /* ─────────────────────── Écran de connexion (§1) ───────────────────── */
