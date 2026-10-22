@@ -3,7 +3,9 @@ import {
   baseQuantitiesByProduct,
   buildSaleLine,
   grossMargin,
+  paymentLabel,
   paymentStatusOf,
+  providerFor,
   totalsOf,
 } from '../sale';
 import { unitsOf } from '../units';
@@ -125,5 +127,31 @@ describe('baseQuantitiesByProduct', () => {
     expect(totals.get('p1')).toBe(85);
     expect(totals.get('p2')).toBe(3);
     expect(totals.size).toBe(2);
+  });
+});
+
+describe('moyen de paiement et opérateur (§50)', () => {
+  it('nomme l’opérateur derrière un paiement Mobile Money', () => {
+    expect(paymentLabel('MOBILE_MONEY', 'FLOOZ')).toBe('Mobile Money · Flooz');
+    expect(paymentLabel('MOBILE_MONEY', 'TMONEY')).toBe('Mobile Money · T-Money');
+  });
+
+  it('n’accroche pas d’opérateur à un autre moyen de paiement', () => {
+    // Une vente en espèces à laquelle on collerait « Flooz » ferait lire un
+    // virement qui n'a pas eu lieu.
+    expect(paymentLabel('CASH', 'FLOOZ')).toBe('Espèces');
+    expect(paymentLabel('CARD', 'WAVE')).toBe('Carte bancaire');
+  });
+
+  it('se lit comme avant sur une vente saisie sans opérateur', () => {
+    expect(paymentLabel('MOBILE_MONEY', null)).toBe('Mobile Money');
+    expect(paymentLabel('MOBILE_MONEY')).toBe('Mobile Money');
+  });
+
+  it('ne retient l’opérateur que derrière Mobile Money', () => {
+    expect(providerFor('MOBILE_MONEY', 'WAVE')).toBe('WAVE');
+    expect(providerFor('MOBILE_MONEY', null)).toBeNull();
+    expect(providerFor('CASH', 'WAVE')).toBeNull();
+    expect(providerFor('BANK', 'TMONEY')).toBeNull();
   });
 });

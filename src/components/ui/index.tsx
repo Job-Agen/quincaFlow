@@ -204,13 +204,16 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  wrap = false,
 }: {
   options: readonly { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
+  /** Vrai : les options passent à la ligne au lieu de défiler horizontalement. */
+  wrap?: boolean;
 }) {
   return (
-    <div className="segmented" role="tablist">
+    <div className={wrap ? 'segmented segmented--wrap' : 'segmented'} role="tablist">
       {options.map((option) => (
         <button
           key={option.value}

@@ -11,6 +11,7 @@ import {
   Empty,
   Notice,
   SearchField,
+  Segmented,
   SelectField,
   Sheet,
   Skeleton,
@@ -23,6 +24,8 @@ import {
   baseQuantitiesByProduct,
   buildSaleLine,
   totalsOf,
+  MOBILE_MONEY_PROVIDERS,
+  MOBILE_MONEY_PROVIDER_LABELS,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
 } from '@/domain/sale';
@@ -30,7 +33,15 @@ import { amount, money, quantity as fmtQuantity, withUnit } from '@/utils/format
 import { describeStock } from '@/domain/units';
 import BarcodeScanner from '@/components/products/BarcodeScanner';
 import { errorMessage } from '@/utils/errors';
-import type { CatalogEntry, ContactRow, PaymentMethod, PricedLine, Product, Sale } from '@/types';
+import type {
+  CatalogEntry,
+  ContactRow,
+  MobileMoneyProvider,
+  PaymentMethod,
+  PricedLine,
+  Product,
+  Sale,
+} from '@/types';
 
 /**
  * Ligne du panier telle que l'écran la tient.
@@ -57,6 +68,8 @@ interface PricedCartLine extends PricedLine {
 /** Ce que la feuille d'encaissement remonte à la validation. */
 interface CheckoutPayment {
   paymentMethod: PaymentMethod;
+  /** L'opérateur, derrière un paiement Mobile Money seulement (§50). */
+  paymentProvider: MobileMoneyProvider | null;
   /** `null` : le client règle le montant exact ; le serveur le déduit du total. */
   amountPaid: number | null;
 }
@@ -526,6 +539,7 @@ function CheckoutSheet({
   onConfirm: (payment: CheckoutPayment) => void;
 }) {
   const [method, setMethod] = useState<PaymentMethod>('CASH');
+  const [provider, setProvider] = useState<MobileMoneyProvider>('TMONEY');
   const [received, setReceived] = useState('');
 
   const change = received === '' ? null : Number(received) - total;
@@ -554,6 +568,24 @@ function CheckoutSheet({
         </div>
       </div>
 
+      {/* L'opérateur n'apparaît que s'il sert : demander « Flooz ou T-Money ? »
+        à chaque vente en espèces ajouterait un geste à l'opération la plus
+        fréquente du comptoir (§50). */}
+      {method === 'MOBILE_MONEY' ? (
+        <div className="field">
+          <span className="field__label">Opérateur</span>
+          <Segmented
+            wrap
+            options={MOBILE_MONEY_PROVIDERS.map((value) => ({
+              value,
+              label: MOBILE_MONEY_PROVIDER_LABELS[value],
+            }))}
+            value={provider}
+            onChange={setProvider}
+          />
+        </div>
+      ) : null}
+
       <TextField
         label="Montant reçu (optionnel)"
         type="number"
@@ -579,6 +611,7 @@ function CheckoutSheet({
         onClick={() =>
           onConfirm({
             paymentMethod: method,
+            paymentProvider: method === 'MOBILE_MONEY' ? provider : null,
             amountPaid: received === '' ? null : Math.min(Number(received), total),
           })
         }

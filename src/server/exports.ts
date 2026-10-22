@@ -4,8 +4,8 @@ import { round2 } from '../utils/money';
 import { marginRate } from '../domain/report';
 import { isLowStock, isOutOfStock } from '../domain/stock';
 import { toCsv, type CsvColumn } from '../domain/csv';
-import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS } from '../domain/sale';
-import type { PaymentMethod, PaymentStatus, Session } from '@/types';
+import { PAYMENT_STATUS_LABELS, paymentLabel } from '../domain/sale';
+import type { MobileMoneyProvider, PaymentMethod, PaymentStatus, Session } from '@/types';
 
 /**
  * Exports comptables et sauvegarde (§48).
@@ -94,6 +94,7 @@ interface LigneVente {
   customer_name: string | null;
   status: string;
   payment_method: PaymentMethod;
+  payment_provider: MobileMoneyProvider | null;
   payment_status: PaymentStatus;
   sale_total: number;
   discount: number;
@@ -117,7 +118,7 @@ export async function salesRows(businessId: string): Promise<LigneVente[]> {
   return rows<LigneVente>(
     await getSql()`
       SELECT s.reference, s.invoice_reference, s.created_at, s.customer_name, s.status,
-             s.payment_method, s.payment_status,
+             s.payment_method, s.payment_provider, s.payment_status,
              s.total::float8 AS sale_total, s.discount::float8 AS discount,
              s.amount_paid::float8 AS amount_paid,
              i.product_name, i.unit_label,
@@ -167,7 +168,7 @@ const COLONNES_VENTES: CsvColumn<LigneVente>[] = [
   { title: 'Total vente', value: (l) => l.sale_total },
   { title: 'Encaissé', value: (l) => l.amount_paid },
   { title: 'Reste dû', value: (l) => round2(Math.max(0, l.sale_total - l.amount_paid)) },
-  { title: 'Règlement', value: (l) => PAYMENT_METHOD_LABELS[l.payment_method] ?? l.payment_method },
+  { title: 'Règlement', value: (l) => paymentLabel(l.payment_method, l.payment_provider) },
   {
     title: 'Statut paiement',
     value: (l) => PAYMENT_STATUS_LABELS[l.payment_status] ?? l.payment_status,

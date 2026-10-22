@@ -17,10 +17,12 @@ import type {
   StockMovementType,
 } from '@/types';
 import {
+  MOBILE_MONEY_PROVIDERS,
   PAYMENT_METHODS,
   baseQuantitiesByProduct,
   buildSaleLine,
   paymentStatusOf,
+  providerFor,
   totalsOf,
 } from '../domain/sale';
 
@@ -129,6 +131,14 @@ export async function createSale(session: Session, body: Record<string, unknown>
     'mode de paiement',
     PAYMENT_METHODS
   );
+  // L'opérateur n'a de sens que derrière un paiement Mobile Money : rattaché à
+  // des espèces, il ferait lire un virement qui n'a pas eu lieu (§50).
+  const paymentProvider = providerFor(
+    paymentMethod,
+    body.paymentProvider
+      ? enumValue(body.paymentProvider, 'opérateur', MOBILE_MONEY_PROVIDERS)
+      : null
+  );
   // Sans montant précisé, la vente est réputée réglée intégralement : c'est le
   // cas de très loin le plus courant au comptoir.
   const amountPaid =
@@ -165,7 +175,7 @@ export async function createSale(session: Session, body: Record<string, unknown>
       INSERT INTO sales (
         id, business_id, reference, invoice_reference, customer_id, customer_name, user_id,
         subtotal, discount, total, cost_of_goods,
-        payment_method, amount_paid, payment_status, status, note
+        payment_method, payment_provider, amount_paid, payment_status, status, note
       ) VALUES (
         ${saleId}, ${session.businessId},
         ${saleRef.prefix}::text
@@ -174,7 +184,8 @@ export async function createSale(session: Session, body: Record<string, unknown>
           || lpad((SELECT value FROM numero_facture)::text, ${invoiceRef.pad}::int, '0'),
         ${customerId}, ${customerName},
         ${session.userId}, ${totals.subtotal}, ${totals.discount}, ${totals.total},
-        ${totals.costOfGoods}, ${paymentMethod}, ${amountPaid}, ${paymentStatus},
+        ${totals.costOfGoods}, ${paymentMethod}, ${paymentProvider}, ${amountPaid},
+        ${paymentStatus},
         'COMPLETED', ${str(body.note, 'note', { required: false, max: 500 })}
       )
     `,
@@ -194,8 +205,9 @@ export async function createSale(session: Session, body: Record<string, unknown>
 
   if (amountPaid > 0) {
     queries.push(sql`
-      INSERT INTO payments (id, business_id, sale_id, method, amount)
-      VALUES (${newId('pay')}, ${session.businessId}, ${saleId}, ${paymentMethod}, ${amountPaid})
+      INSERT INTO payments (id, business_id, sale_id, method, provider, amount)
+      VALUES (${newId('pay')}, ${session.businessId}, ${saleId}, ${paymentMethod},
+              ${paymentProvider}, ${amountPaid})
     `);
   }
 
@@ -222,7 +234,7 @@ const SALE_COLUMNS = `
   id, business_id, reference, invoice_reference, customer_id, customer_name, user_id,
   subtotal::float8 AS subtotal, discount::float8 AS discount, total::float8 AS total,
   cost_of_goods::float8 AS cost_of_goods, amount_paid::float8 AS amount_paid,
-  payment_method, payment_status, status, note, created_at, updated_at
+  payment_method, payment_provider, payment_status, status, note, created_at, updated_at
 `;
 
 export async function getSale(businessId: string, saleId: string): Promise<Sale> {

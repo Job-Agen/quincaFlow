@@ -10,7 +10,7 @@ import { Badge, Button, Card, CardHead, Empty, Notice, Skeleton } from '@/compon
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { reminderMessage, saleBalance, whatsappLink } from '@/domain/credit';
-import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS } from '@/domain/sale';
+import { PAYMENT_STATUS_LABELS, paymentLabel } from '@/domain/sale';
 import { amount, dateTime, money, shortDate } from '@/utils/format';
 import type { CustomerAccount } from '@/types';
 
@@ -191,7 +191,7 @@ export default function CustomerAccountPage({ params }: { params: Promise<{ id: 
                         </div>
                         <div className="list__sub">
                           {dateTime(versement.created_at)} ·{' '}
-                          {PAYMENT_METHOD_LABELS[versement.method]}
+                          {paymentLabel(versement.method, versement.provider)}
                         </div>
                         {versement.note ? <div className="list__sub">{versement.note}</div> : null}
                       </div>

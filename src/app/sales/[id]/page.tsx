@@ -7,7 +7,7 @@ import { Badge, Button, Notice, Sheet, Skeleton, TextField } from '@/components/
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS } from '@/domain/sale';
+import { PAYMENT_STATUS_LABELS, paymentLabel } from '@/domain/sale';
 import { amount, dateTime, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type { Sale } from '@/types';
@@ -160,7 +160,9 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
               </div>
 
               <div className="total-line small">
-                <span className="muted">{PAYMENT_METHOD_LABELS[sale.payment_method]}</span>
+                <span className="muted">
+                  {paymentLabel(sale.payment_method, sale.payment_provider)}
+                </span>
                 {/*
                   Sur une vente annulée, « Payée » en vert affirme quelque chose
                   de faux : l'encaissement a été rendu. Le statut d'origine est

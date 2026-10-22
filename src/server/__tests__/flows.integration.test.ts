@@ -535,6 +535,118 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
   });
 
+  // ──────────────── Opérateur Mobile Money et carte (§50) ──────────────
+
+  describe('moyen de paiement (§50)', () => {
+    it('garde l’opérateur sur la vente et sur son encaissement', async () => {
+      const vitre = await seedVitre();
+      const vente = await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        paymentMethod: 'MOBILE_MONEY',
+        paymentProvider: 'FLOOZ',
+      });
+
+      expect(vente.payment_method).toBe('MOBILE_MONEY');
+      expect(vente.payment_provider).toBe('FLOOZ');
+      const { rows: encaissements } = await pool.query<{ method: string; provider: string | null }>(
+        'SELECT method, provider FROM payments WHERE sale_id = $1',
+        [vente.id]
+      );
+      expect(encaissements[0]).toMatchObject({ method: 'MOBILE_MONEY', provider: 'FLOOZ' });
+    });
+
+    it('n’attache pas d’opérateur à un paiement qui n’en a pas', async () => {
+      const vitre = await seedVitre();
+      // Le client paie en espèces : « Flooz » sur cette ligne ferait chercher
+      // un versement sur un relevé qui ne le contient pas.
+      const especes = await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 1 }],
+        paymentMethod: 'CASH',
+        paymentProvider: 'FLOOZ',
+      });
+      expect(especes.payment_provider).toBeNull();
+
+      const carte = await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 1 }],
+        paymentMethod: 'CARD',
+      });
+      expect(carte.payment_method).toBe('CARD');
+      expect(carte.payment_provider).toBeNull();
+    });
+
+    it('refuse un opérateur inconnu', async () => {
+      const vitre = await seedVitre();
+      await expect(
+        sales.createSale(OWNER, {
+          lines: [{ productId: vitre.id, quantity: 1 }],
+          paymentMethod: 'MOBILE_MONEY',
+          paymentProvider: 'BITCOIN',
+        })
+      ).rejects.toThrow(/opérateur/i);
+    });
+
+    it('distingue les portefeuilles dans le journal de caisse', async () => {
+      const vitre = await seedVitre();
+      await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        paymentMethod: 'MOBILE_MONEY',
+        paymentProvider: 'TMONEY',
+      });
+      await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 1 }],
+        paymentMethod: 'MOBILE_MONEY',
+        paymentProvider: 'FLOOZ',
+      });
+      await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 1 }],
+        paymentMethod: 'CASH',
+      });
+
+      const journal = await cash.cashJournal(OWNER.businessId);
+      const details = journal.entries.map((ligne) => ligne.detail);
+
+      // Le soir, le gérant compare son relevé T-Money et son relevé Flooz :
+      // deux portefeuilles distincts, qu'un seul libellé rendrait irréconciliables.
+      expect(details).toContain('Mobile Money · T-Money');
+      expect(details).toContain('Mobile Money · Flooz');
+      expect(details).toContain('Espèces');
+    });
+
+    it('garde l’opérateur d’un remboursement de dette', async () => {
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name, phone)
+         VALUES ('cus_mm', $1, 'Yao', '90 00 00 05')`,
+        [OWNER.businessId]
+      );
+      const vitre = await seedVitre();
+      await sales.createSale(OWNER, {
+        customerId: 'cus_mm',
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 0,
+      });
+
+      const fiche = await credit.recordRepayment(OWNER, 'cus_mm', {
+        amount: 400,
+        method: 'MOBILE_MONEY',
+        provider: 'WAVE',
+      });
+
+      expect(fiche.payments[0]).toMatchObject({ method: 'MOBILE_MONEY', provider: 'WAVE' });
+    });
+
+    it('nomme l’opérateur dans l’export des ventes', async () => {
+      const vitre = await seedVitre();
+      await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 1 }],
+        paymentMethod: 'MOBILE_MONEY',
+        paymentProvider: 'ORANGE',
+      });
+      expect(await exports_.EXPORTS.ventes(OWNER.businessId)).toContain(
+        'Mobile Money · Orange Money'
+      );
+    });
+  });
+
   // ─────────────────── Tableau de bord enrichi (§49) ───────────────────
 
   describe('tableau de bord (§49)', () => {

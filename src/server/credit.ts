@@ -3,7 +3,12 @@ import { badRequest, conflict } from '../lib/http';
 import { newId } from '../lib/ids';
 import { enumValue, num, str } from '../lib/validate';
 import { allocateRepayment, rankDebtors, saleBalance, tooMuch, totalOwed } from '../domain/credit';
-import { PAYMENT_METHODS, paymentStatusOf } from '../domain/sale';
+import {
+  MOBILE_MONEY_PROVIDERS,
+  PAYMENT_METHODS,
+  paymentStatusOf,
+  providerFor,
+} from '../domain/sale';
 import { getContact } from './contacts';
 import { round2 } from '../utils/money';
 import type { OpenSale } from '../domain/credit';
@@ -85,7 +90,7 @@ export async function customerAccount(
     ),
     rows<CustomerPaymentRow>(
       await sql`
-        SELECT p.id, p.amount::float8 AS amount, p.method, p.kind, p.note,
+        SELECT p.id, p.amount::float8 AS amount, p.method, p.provider, p.kind, p.note,
                p.created_at, s.reference AS sale_reference
           FROM payments p
           JOIN sales s ON s.id = p.sale_id
@@ -134,6 +139,12 @@ export async function recordRepayment(
 ): Promise<CustomerAccount> {
   const amount = round2(num(body.amount, 'montant', { min: 0.01 }));
   const method = enumValue(body.method || 'CASH', 'moyen de paiement', PAYMENT_METHODS);
+  // L'opérateur Mobile Money, le cas échéant : un remboursement rapporté par
+  // Flooz doit se retrouver sur le relevé Flooz et nulle part ailleurs (§50).
+  const provider = providerFor(
+    method,
+    body.provider ? enumValue(body.provider, 'opérateur', MOBILE_MONEY_PROVIDERS) : null
+  );
   const note = str(body.note, 'motif', { required: false, max: 300 });
 
   await getContact(session.businessId, 'customers', customerId);
@@ -166,9 +177,11 @@ export async function recordRepayment(
            WHERE id = ${part.saleId} AND business_id = ${session.businessId}
         `,
         sql`
-          INSERT INTO payments (id, business_id, sale_id, method, amount, kind, note, user_id)
+          INSERT INTO payments (
+            id, business_id, sale_id, method, provider, amount, kind, note, user_id
+          )
           VALUES (${newId('pay')}, ${session.businessId}, ${part.saleId}, ${method},
-                  ${part.amount}, 'REPAYMENT', ${note}, ${session.userId})
+                  ${provider}, ${part.amount}, 'REPAYMENT', ${note}, ${session.userId})
         `,
       ];
     })

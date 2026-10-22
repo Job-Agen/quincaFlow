@@ -4,11 +4,16 @@ import { useState } from 'react';
 import { Button, Notice, Segmented, Sheet, TextAreaField, TextField } from '@/components/ui';
 import { api } from '@/client/api';
 import { tooMuch } from '@/domain/credit';
-import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/domain/sale';
+import {
+  MOBILE_MONEY_PROVIDERS,
+  MOBILE_MONEY_PROVIDER_LABELS,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+} from '@/domain/sale';
 import { money } from '@/utils/format';
 import { toNumber } from '@/utils/money';
 import { errorMessage } from '@/utils/errors';
-import type { CustomerAccount, PaymentMethod } from '@/types';
+import type { CustomerAccount, MobileMoneyProvider, PaymentMethod } from '@/types';
 
 /**
  * Saisie d'un remboursement (§45).
@@ -39,6 +44,7 @@ export default function RepaymentSheet({
 }) {
   const [montant, setMontant] = useState('');
   const [methode, setMethode] = useState<PaymentMethod>('CASH');
+  const [operateur, setOperateur] = useState<MobileMoneyProvider>('TMONEY');
   const [motif, setMotif] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +61,7 @@ export default function RepaymentSheet({
         await api.post<CustomerAccount>(`/api/customers/${customerId}/repayments`, {
           amount: verse,
           method: methode,
+          provider: methode === 'MOBILE_MONEY' ? operateur : null,
           note: motif,
         })
       );
@@ -102,6 +109,23 @@ export default function RepaymentSheet({
         value={methode}
         onChange={setMethode}
       />
+
+      {/* L'opérateur ne se demande que s'il sert : un remboursement en espèces
+        n'a rien à rapprocher d'un relevé (§50). */}
+      {methode === 'MOBILE_MONEY' ? (
+        <>
+          <span className="field__label">Opérateur</span>
+          <Segmented
+            wrap
+            options={MOBILE_MONEY_PROVIDERS.map((operateurPossible) => ({
+              value: operateurPossible,
+              label: MOBILE_MONEY_PROVIDER_LABELS[operateurPossible],
+            }))}
+            value={operateur}
+            onChange={setOperateur}
+          />
+        </>
+      ) : null}
 
       <TextAreaField
         label="Motif (facultatif)"

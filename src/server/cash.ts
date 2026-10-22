@@ -1,6 +1,6 @@
 import { getSql, one, rows } from '../lib/db';
 import { round2 } from '../utils/money';
-import { PAYMENT_METHOD_LABELS } from '../domain/sale';
+import { paymentLabel } from '../domain/sale';
 import { EXPENSE_CATEGORY_LABELS } from '../domain/report';
 import { INCOME_CATEGORY_LABELS } from '../domain/income';
 import type {
@@ -9,6 +9,7 @@ import type {
   CashJournal,
   ExpenseCategory,
   IncomeCategory,
+  MobileMoneyProvider,
   PaymentMethod,
 } from '@/types';
 
@@ -42,6 +43,8 @@ interface CashRow {
   label: string;
   /** Moyen de paiement ou poste de dépense, à traduire en libellé lisible. */
   code: string;
+  /** L'opérateur Mobile Money, sur une ligne d'encaissement seulement (§50). */
+  provider: string | null;
   amount: number;
   reference: string | null;
   sale_id: string | null;
@@ -50,7 +53,12 @@ interface CashRow {
 /** Libellé du moyen ou du poste, sans jamais afficher un code brut au gérant. */
 function detailOf(row: CashRow): string {
   if (row.kind === 'SALE_PAYMENT') {
-    return PAYMENT_METHOD_LABELS[row.code as PaymentMethod] ?? 'Encaissement';
+    // Avec l'opérateur : c'est lui qui permet de rapprocher le total du jour
+    // d'un relevé Flooz ou T-Money, que « Mobile Money » seul ne désigne pas.
+    return paymentLabel(
+      row.code as PaymentMethod,
+      row.provider as MobileMoneyProvider | null
+    );
   }
   if (row.kind === 'INCOME') {
     return INCOME_CATEGORY_LABELS[row.code as IncomeCategory] ?? 'Divers';
@@ -90,7 +98,7 @@ export async function cashJournal(
                     ELSE 'Vente ' || s.reference END,
                'Encaissement'
              ) AS label,
-             p.method AS code, p.amount::float8 AS amount,
+             p.method AS code, p.provider, p.amount::float8 AS amount,
              s.reference, s.id AS sale_id
         FROM payments p
         JOIN sales s ON s.id = p.sale_id
@@ -107,7 +115,7 @@ export async function cashJournal(
       -- caisse —, même s'il ne compte pas au chiffre d'affaires du §39.
       SELECT i.id, 'IN', 'INCOME',
              (i.received_on + i.created_at::time)::timestamptz,
-             i.label, i.category, i.amount::float8,
+             i.label, i.category, NULL, i.amount::float8,
              NULL, NULL
         FROM incomes i
        WHERE i.business_id = ${businessId}
@@ -119,7 +127,7 @@ export async function cashJournal(
       -- ne sert qu'à départager deux dépenses du même jour.
       SELECT e.id, 'OUT', 'EXPENSE',
              (e.spent_on + e.created_at::time)::timestamptz,
-             e.label, e.category, e.amount::float8,
+             e.label, e.category, NULL, e.amount::float8,
              NULL, NULL
         FROM expenses e
        WHERE e.business_id = ${businessId}

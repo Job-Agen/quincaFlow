@@ -2064,3 +2064,50 @@ autres ne valent quelque chose en rayon.
 6. Aucun de ces chiffres ne traverse la frontière d'une boutique (§29).
 7. La valeur du stock ignore les produits archivés et les produits à zéro, et
    n'est lisible que par le propriétaire.
+
+## 50. Carte bancaire et opérateur Mobile Money
+
+**Objectif**
+
+« Mobile Money » ne se rapproche de rien. Le soir, le gérant ouvre son relevé
+Flooz, puis son relevé T-Money : deux portefeuilles, deux soldes. Un total qui
+les mélange ne tombe juste ni sur l'un ni sur l'autre, et il faut reprendre la
+journée vente par vente pour savoir laquelle était sur quel compte.
+
+La carte bancaire manquait aussi. Rare au comptoir d'une quincaillerie de
+quartier, elle ne l'est pas pour un chantier réglé par une entreprise, et la
+ranger dans « Autre » efface l'information au lieu de l'enregistrer.
+
+**F38 — L'opérateur derrière le Mobile Money**
+
+Six choix : T-Money, Flooz, Orange Money, MTN MoMo, Wave, Autre. Les deux
+premiers sont ceux du Togo ; les suivants permettent à la même application de
+servir un commerçant d'un pays voisin sans modification.
+
+Le choix n'apparaît que lorsqu'il sert. Demander « Flooz ou T-Money ? » à chaque
+vente en espèces ajouterait un geste à l'opération la plus fréquente du
+comptoir. Et l'opérateur n'est retenu que derrière un paiement Mobile Money :
+accroché à des espèces, il ferait lire un virement qui n'a pas eu lieu.
+
+Il suit l'argent partout où il va : la vente, son encaissement, un
+remboursement de dette rapporté des semaines plus tard (§45), le journal de
+caisse (§40) et l'export des ventes (§48).
+
+**F39 — Les lignes déjà saisies restent lisibles**
+
+Une vente enregistrée avant cette version ne porte pas d'opérateur, et
+continue de se lire « Mobile Money ». Il lui manque seulement de quoi se
+rapprocher d'un relevé — rien n'est faux, rien n'est à corriger.
+
+**Critères d'acceptation**
+
+1. Les cinq moyens de paiement sont proposés : espèces, Mobile Money, carte
+   bancaire, virement, autre.
+2. Le choix de l'opérateur n'apparaît qu'après avoir choisi Mobile Money.
+3. Un opérateur envoyé avec un autre moyen de paiement est ignoré, pas
+   enregistré.
+4. Un opérateur inconnu est refusé par le serveur.
+5. L'opérateur suit la vente, son encaissement et un remboursement de dette.
+6. Le journal de caisse distingue « Mobile Money · Flooz » de
+   « Mobile Money · T-Money ».
+7. Une ligne sans opérateur se lit « Mobile Money », sans mention vide.

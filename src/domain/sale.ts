@@ -1,5 +1,6 @@
 import { round2, round3, toNumber } from '../utils/money';
 import type {
+  MobileMoneyProvider,
   Money,
   PaymentMethod,
   PaymentStatus,
@@ -22,16 +23,67 @@ import { findUnit, toBaseQuantity } from './units';
  * quantités, jamais un total que le serveur reprendrait tel quel.
  */
 
-export const PAYMENT_METHODS: readonly PaymentMethod[] = ['CASH', 'MOBILE_MONEY', 'BANK', 'OTHER'];
+export const PAYMENT_METHODS: readonly PaymentMethod[] = [
+  'CASH',
+  'MOBILE_MONEY',
+  'CARD',
+  'BANK',
+  'OTHER',
+];
 export const PAYMENT_STATUSES: readonly PaymentStatus[] = ['PAID', 'PARTIAL', 'UNPAID'];
 export const SALE_STATUSES: readonly SaleStatus[] = ['COMPLETED', 'CANCELLED'];
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   CASH: 'Espèces',
   MOBILE_MONEY: 'Mobile Money',
+  CARD: 'Carte bancaire',
   BANK: 'Virement / banque',
   OTHER: 'Autre',
 };
+
+export const MOBILE_MONEY_PROVIDERS: readonly MobileMoneyProvider[] = [
+  'TMONEY',
+  'FLOOZ',
+  'ORANGE',
+  'MTN',
+  'WAVE',
+  'OTHER',
+];
+
+export const MOBILE_MONEY_PROVIDER_LABELS: Record<MobileMoneyProvider, string> = {
+  TMONEY: 'T-Money',
+  FLOOZ: 'Flooz',
+  ORANGE: 'Orange Money',
+  MTN: 'MTN MoMo',
+  WAVE: 'Wave',
+  OTHER: 'Autre',
+};
+
+/**
+ * Le moyen de paiement, tel qu'il se lit (§50).
+ *
+ * L'opérateur ne s'affiche que derrière un paiement Mobile Money : collé à des
+ * espèces, il ferait croire à un virement qui n'a pas eu lieu. Les anciennes
+ * lignes, saisies avant que l'opérateur existe, n'en portent pas et se lisent
+ * comme avant.
+ */
+export function paymentLabel(
+  method: PaymentMethod,
+  provider?: MobileMoneyProvider | null
+): string {
+  const base = PAYMENT_METHOD_LABELS[method] ?? 'Encaissement';
+  if (method !== 'MOBILE_MONEY' || !provider) return base;
+  const operateur = MOBILE_MONEY_PROVIDER_LABELS[provider];
+  return operateur ? `${base} · ${operateur}` : base;
+}
+
+/** L'opérateur retenu pour un encaissement : rien hors Mobile Money (§50). */
+export function providerFor(
+  method: PaymentMethod,
+  provider: MobileMoneyProvider | null | undefined
+): MobileMoneyProvider | null {
+  return method === 'MOBILE_MONEY' ? (provider ?? null) : null;
+}
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   PAID: 'Payée',

@@ -182,8 +182,25 @@ export interface StockMovementRow {
 // Ventes (§11 à §15, §25)
 // ---------------------------------------------------------------------------
 
-export const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'BANK', 'OTHER'] as const;
+export const PAYMENT_METHODS = ['CASH', 'MOBILE_MONEY', 'CARD', 'BANK', 'OTHER'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/**
+ * L'opérateur derrière un paiement Mobile Money (§50).
+ *
+ * « Mobile Money » seul ne se rapproche de rien : le soir, le gérant compare
+ * son relevé Flooz à son relevé T-Money, deux portefeuilles distincts. Un total
+ * qui les mélange ne tombe jamais juste sur ni l'un ni l'autre.
+ */
+export const MOBILE_MONEY_PROVIDERS = [
+  'TMONEY',
+  'FLOOZ',
+  'ORANGE',
+  'MTN',
+  'WAVE',
+  'OTHER',
+] as const;
+export type MobileMoneyProvider = (typeof MOBILE_MONEY_PROVIDERS)[number];
 
 export const PAYMENT_STATUSES = ['PAID', 'PARTIAL', 'UNPAID'] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
@@ -252,6 +269,8 @@ export interface SaleRow {
   total: Money;
   cost_of_goods: Money;
   payment_method: PaymentMethod;
+  /** L'opérateur, pour un paiement Mobile Money seulement ; null sinon (§50). */
+  payment_provider: MobileMoneyProvider | null;
   amount_paid: Money;
   payment_status: PaymentStatus;
   status: SaleStatus;
@@ -411,6 +430,7 @@ export interface CustomerPaymentRow {
   id: string;
   amount: number;
   method: PaymentMethod;
+  provider: MobileMoneyProvider | null;
   kind: PaymentKind;
   note: string | null;
   created_at: string;

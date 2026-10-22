@@ -180,6 +180,10 @@ CREATE TABLE IF NOT EXISTS sales (
   -- bougera, la marge historique de cette vente, non.
   cost_of_goods  numeric(14, 2) NOT NULL DEFAULT 0,
   payment_method text NOT NULL DEFAULT 'CASH',
+  -- L'opérateur Mobile Money (§50). Nul partout ailleurs, et nul sur les ventes
+  -- antérieures : « Mobile Money » seul reste lisible, il manque seulement de
+  -- quoi rapprocher le total d'un relevé Flooz ou T-Money.
+  payment_provider text,
   amount_paid    numeric(14, 2) NOT NULL DEFAULT 0,
   payment_status text NOT NULL DEFAULT 'PAID',
   status         text NOT NULL DEFAULT 'COMPLETED',
@@ -221,6 +225,8 @@ CREATE TABLE IF NOT EXISTS payments (
   business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
   sale_id     text REFERENCES sales (id) ON DELETE CASCADE,
   method      text NOT NULL DEFAULT 'CASH',
+  -- L'opérateur, pour un encaissement Mobile Money seulement (§50).
+  provider    text,
   amount      numeric(14, 2) NOT NULL,
   kind        text NOT NULL DEFAULT 'SALE',
   -- Le motif du remboursement, tel que le gérant l'écrit : « vente de sa

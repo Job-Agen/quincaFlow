@@ -584,6 +584,19 @@ select.input {
   display: none;
 }
 
+/* Un choix court dont toutes les options comptent : on les montre toutes
+   plutôt que d'en cacher la moitié derrière un défilement horizontal. Les
+   options gardent leur largeur naturelle — étirées, les deux dernières d'une
+   rangée incomplète formeraient deux boutons démesurés. */
+.segmented--wrap {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+.segmented--wrap .segmented__item {
+  flex: 0 0 auto;
+}
+
 .segmented__item {
   padding: 8px 16px;
   border-radius: var(--r-full);
