@@ -1933,3 +1933,66 @@ présente au navigateur : elles ne coûtent rien de plus.
    réelles.
 4. La page tient à 390 px comme à 1 440 px, sans défilement horizontal.
 5. Aucune capture ne montre l'indicateur de développement ni un écran vide.
+
+## 48. Exports comptables et sauvegarde
+
+**Objectif**
+
+Le gérant n'est pas le seul à regarder ses chiffres : il y a le comptable en
+fin d'exercice, l'associé, parfois la banque. Aucun d'eux n'ouvrira
+l'application — ils veulent un fichier. Jusqu'ici il n'en existait aucun, et
+des années de ventes étaient prisonnières de l'écran.
+
+**F31 — Trois fichiers, trois questions**
+
+Ce que je détiens, ce que j'ai vendu, ce qu'on me doit. Un seul fichier qui les
+mélangerait obligerait à les démêler dans le tableur.
+
+- **Inventaire** — référence, produit, prix d'achat et de vente, marge unitaire
+  et taux, stock, seuil, état (Rupture / Stock bas / OK), valeur au coût et à
+  la vente, conditionnements.
+- **Ventes** — une ligne par article vendu, avec le coût et la marge de la
+  ligne, puis l'en-tête de la vente répété : total, encaissé, reste dû, mode de
+  règlement, statut, et si la vente a été annulée. Une ligne par vente perdrait
+  le détail des articles ; une ligne par article est la forme qu'un tableur
+  sait regrouper.
+- **Clients et dettes** — total acheté, solde dû, nombre d'achats non soldés,
+  date de la plus ancienne dette.
+
+Un bouton « Tout télécharger » les enchaîne.
+
+**F32 — Lisibles par Excel sans manipulation**
+
+Trois décisions, chacune contre un échec courant :
+
+- **point-virgule** comme séparateur, parce qu'un Excel français lit la virgule
+  comme séparateur décimal et ouvrirait tout en une colonne ;
+- **virgule décimale** dans les nombres, sans séparateur de milliers, pour que
+  les colonnes s'additionnent ;
+- **BOM UTF-8** en tête, sans quoi « Bâtisseur » devient « BÃ¢tisseur ».
+
+**F33 — La sauvegarde**
+
+Tout ce que la boutique contient, dans un seul fichier JSON : produits,
+conditionnements, clients, fournisseurs, ventes et leurs lignes, encaissements,
+commandes, réceptions, mouvements de stock, dépenses, recettes, membres.
+
+Ce n'est pas un export comptable mais un filet : ce qu'on garde avant de fermer
+une boutique (§46), et ce qu'on emporte si l'on quitte un jour ce logiciel. Les
+mots de passe en sont absents — une sauvegarde se range dans un dossier
+« Téléchargements », pas dans un coffre.
+
+**Critères d'acceptation**
+
+1. Les quatre fichiers se téléchargent depuis les Paramètres, propriétaire
+   seulement : ils portent les prix d'achat et les marges que le §5 cache au
+   vendeur.
+2. Chaque CSV commence par le BOM, sépare par `;` et écrit les décimales à la
+   virgule.
+3. Une valeur contenant `;`, `"` ou un retour à la ligne est protégée par des
+   guillemets.
+4. L'inventaire chiffre la valeur du stock au coût et à la vente.
+5. L'export des ventes porte une ligne par article, avec le reste dû de la
+   vente.
+6. Aucun fichier ne laisse passer une ligne d'une autre quincaillerie (§29).
+7. La sauvegarde ne contient aucun mot de passe.

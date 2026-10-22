@@ -40,6 +40,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let cash: typeof import('../cash');
   let incomes: typeof import('../incomes');
   let credit: typeof import('../credit');
+  let exports_: typeof import('../exports');
 
   const OWNER: Session = {
     userId: 'usr_owner',
@@ -78,6 +79,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     cash = await import('../cash');
     incomes = await import('../incomes');
     credit = await import('../credit');
+    exports_ = await import('../exports');
   });
 
   afterAll(async () => {
@@ -436,6 +438,99 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
     expect(received.status).toBe('RECEIVED');
     expect(await stockOf(vitre.id)).toBe(50);
+  });
+
+  // ────────────────────── Exports et sauvegarde (§48) ──────────────────
+
+  describe('exports comptables (§48)', () => {
+    /** Une boutique avec un produit, un client, une vente à crédit. */
+    async function seedExportable() {
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name, phone) VALUES ('cus_e', $1, 'Afi; Dossou', '90 00 00 00')`,
+        [OWNER.businessId]
+      );
+      const vitre = await seedVitre(80);
+      await sales.createSale(OWNER, {
+        customerId: 'cus_e',
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 400,
+      });
+      return vitre;
+    }
+
+    it('écrit un inventaire avec les marges et la valeur du stock', async () => {
+      await seedExportable();
+      const fichier = await exports_.EXPORTS.stocks(OWNER.businessId);
+      const lignes = fichier
+        .replace(/^\uFEFF/, '')
+        .trimEnd()
+        .split('\r\n');
+
+      expect(lignes[0]).toContain('Valeur au coût');
+      // 78 pièces restantes × 318,75 d'achat, et × 450 de vente.
+      expect(lignes[1]).toContain('24862,5');
+      expect(lignes[1]).toContain('35100');
+      // La marge unitaire : 450 − 318,75.
+      expect(lignes[1]).toContain('131,25');
+    });
+
+    it('écrit une ligne de vente par article, avec son reste dû', async () => {
+      await seedExportable();
+      const lignes = (await exports_.EXPORTS.ventes(OWNER.businessId))
+        .replace(/^\uFEFF/, '')
+        .trimEnd()
+        .split('\r\n');
+
+      expect(lignes).toHaveLength(2);
+      expect(lignes[1]).toContain('Vitre 60 cm');
+      // 2 × 450 = 900, dont 400 encaissés : 500 restent dus.
+      expect(lignes[1]).toContain(';900;400;500;');
+      expect(lignes[1]).toContain('Partiel');
+    });
+
+    it('protège une cellule qui contient le séparateur', async () => {
+      await seedExportable();
+      const fichier = await exports_.EXPORTS.clients(OWNER.businessId);
+      // Le nom porte un point-virgule : sans guillemets, le fichier gagnerait
+      // une colonne et le tableur décalerait tout le reste de la ligne.
+      expect(fichier).toContain('"Afi; Dossou"');
+    });
+
+    it('chiffre la dette du client dans le fichier clients', async () => {
+      await seedExportable();
+      const lignes = (await exports_.EXPORTS.clients(OWNER.businessId))
+        .replace(/^\uFEFF/, '')
+        .trimEnd()
+        .split('\r\n');
+      expect(lignes[1]).toContain(';900;500;1;');
+    });
+
+    it('ne laisse passer aucune ligne d’une autre quincaillerie', async () => {
+      await seedExportable();
+      const vide = await exports_.EXPORTS.ventes(RIVAL.businessId);
+      expect(
+        vide
+          .replace(/^\uFEFF/, '')
+          .trimEnd()
+          .split('\r\n')
+      ).toHaveLength(1);
+    });
+
+    it('sauvegarde tout, sans les mots de passe', async () => {
+      await seedExportable();
+      const sauvegarde = await exports_.backup(OWNER);
+
+      expect(sauvegarde.format).toBe('maquincaillerie.sauvegarde');
+      expect(sauvegarde.products).toHaveLength(1);
+      expect(sauvegarde.sales).toHaveLength(1);
+      expect(sauvegarde.saleItems).toHaveLength(1);
+      expect(sauvegarde.payments).toHaveLength(1);
+      expect(sauvegarde.customers).toHaveLength(1);
+      expect(sauvegarde.stockMovements).toHaveLength(2);
+      // Une sauvegarde se range dans un dossier « Téléchargements » : elle ne
+      // doit pas transporter de quoi se connecter.
+      expect(JSON.stringify(sauvegarde)).not.toContain('password_hash');
+    });
   });
 
   // ──────────────────────────── Carnet de crédit ───────────────────────

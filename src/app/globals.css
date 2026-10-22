@@ -1757,3 +1757,58 @@ select.input {
     gap: 24px;
   }
 }
+
+/* ─────────────────── Sauvegardes et exports (§48) ──────────────────── */
+
+.exports {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.exports__ligne {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  min-height: var(--tap, 48px);
+}
+
+.exports__ligne:last-child {
+  border-bottom: 0;
+}
+
+.exports__ligne:active {
+  background: var(--surface-2, var(--bg));
+}
+
+.exports__icone {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r);
+  background: var(--blue-soft);
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exports__corps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exports__filet {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2px 0;
+}
