@@ -28,6 +28,7 @@ import type { MobileMoneyProvider, PaymentMethod, PaymentStatus, Session } from 
 interface LigneStock {
   sku: string | null;
   name: string;
+  category: string | null;
   base_unit: string;
   purchase_price: number;
   selling_price: number;
@@ -41,7 +42,7 @@ interface LigneStock {
 export async function stocksRows(businessId: string): Promise<LigneStock[]> {
   return rows<LigneStock>(
     await getSql()`
-      SELECT p.sku, p.name, p.base_unit,
+      SELECT p.sku, p.name, p.category, p.base_unit,
              p.purchase_price::float8 AS purchase_price,
              p.selling_price::float8 AS selling_price,
              p.stock_quantity::float8 AS stock_quantity,
@@ -70,6 +71,7 @@ function etatDuStock(ligne: LigneStock): string {
 const COLONNES_STOCK: CsvColumn<LigneStock>[] = [
   { title: 'Référence', value: (l) => l.sku },
   { title: 'Produit', value: (l) => l.name },
+  { title: 'Rayon', value: (l) => l.category },
   { title: 'Unité', value: (l) => l.base_unit },
   { title: 'Prix d’achat', value: (l) => l.purchase_price },
   { title: 'Prix de vente', value: (l) => l.selling_price },

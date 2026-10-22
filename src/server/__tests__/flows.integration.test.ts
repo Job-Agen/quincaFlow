@@ -535,6 +535,141 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
   });
 
+  // ───────────────────────── Rayons du catalogue (§52) ─────────────────
+
+  describe('rayons (§52)', () => {
+    /** Trois produits, deux rayons, un sans rayon. */
+    async function seedRayons() {
+      await products.createProduct(OWNER, {
+        name: 'Tuyau PVC 110',
+        sku: 'PVC-110',
+        baseUnit: 'barre',
+        sellingPrice: 6500,
+        category: 'Plomberie',
+      });
+      await products.createProduct(OWNER, {
+        name: 'Coude PVC 110',
+        sku: 'PVC-C110',
+        baseUnit: 'pièce',
+        sellingPrice: 800,
+        category: 'Plomberie',
+      });
+      await products.createProduct(OWNER, {
+        name: 'Peinture blanche',
+        sku: 'PEI-20',
+        baseUnit: 'pot',
+        sellingPrice: 18500,
+        category: 'Peinture',
+      });
+      return seedVitre();
+    }
+
+    it('range le rayon avec la fiche, et le rend à la lecture', async () => {
+      const tuyau = await products.createProduct(OWNER, {
+        name: 'Tuyau PVC 110',
+        sku: 'PVC-110',
+        baseUnit: 'barre',
+        sellingPrice: 6500,
+        category: 'Plomberie',
+      });
+      expect(tuyau.category).toBe('Plomberie');
+      expect((await products.getProduct(OWNER.businessId, tuyau.id)).category).toBe('Plomberie');
+    });
+
+    it('laisse un produit sans rayon', async () => {
+      const vitre = await seedVitre();
+      expect(vitre.category).toBeNull();
+    });
+
+    it('traite un rayon tapé en blancs comme une absence de rayon', async () => {
+      // Sans quoi le filtre proposerait un rayon sans nom, impossible à
+      // désigner et impossible à vider.
+      const vitre = await products.createProduct(OWNER, {
+        name: 'Vitre 40 cm',
+        sku: 'VIT-040',
+        baseUnit: 'pièce',
+        sellingPrice: 300,
+        category: '   ',
+      });
+      expect(vitre.category).toBeNull();
+      expect(await products.categories(OWNER.businessId)).toHaveLength(0);
+    });
+
+    it('classe les rayons du plus fourni au moins fourni', async () => {
+      await seedRayons();
+      const rayons = await products.categories(OWNER.businessId);
+      // La vitre n'a pas de rayon : elle ne crée pas une entrée vide.
+      expect(rayons).toEqual([
+        { name: 'Plomberie', products: 2 },
+        { name: 'Peinture', products: 1 },
+      ]);
+    });
+
+    it('oublie un rayon dont le dernier produit est archivé', async () => {
+      await seedRayons();
+      const peinture = (await products.listProducts(OWNER.businessId, { category: 'Peinture' }))[0];
+      await products.archiveProduct(OWNER, peinture!.id);
+
+      // Un rayon vide proposé au filtre ne mènerait qu'à une liste vide.
+      expect((await products.categories(OWNER.businessId)).map((r) => r.name)).toEqual([
+        'Plomberie',
+      ]);
+    });
+
+    it('filtre le catalogue sur un rayon', async () => {
+      await seedRayons();
+      const plomberie = await products.listProducts(OWNER.businessId, { category: 'Plomberie' });
+      expect(plomberie.map((p) => p.name).sort()).toEqual(['Coude PVC 110', 'Tuyau PVC 110']);
+      // Sans rayon demandé, tout le catalogue répond.
+      expect(await products.listProducts(OWNER.businessId, {})).toHaveLength(4);
+    });
+
+    it('croise le rayon et la recherche', async () => {
+      await seedRayons();
+      const trouve = await products.listProducts(OWNER.businessId, {
+        category: 'Plomberie',
+        search: 'coude',
+      });
+      expect(trouve.map((p) => p.name)).toEqual(['Coude PVC 110']);
+    });
+
+    it('change le rayon d’une fiche existante', async () => {
+      const tuyau = await products.createProduct(OWNER, {
+        name: 'Tuyau PVC 110',
+        sku: 'PVC-110',
+        baseUnit: 'barre',
+        sellingPrice: 6500,
+        category: 'Plomberie',
+      });
+      const modifie = await products.updateProduct(OWNER, tuyau.id, {
+        name: 'Tuyau PVC 110',
+        sku: 'PVC-110',
+        baseUnit: 'barre',
+        sellingPrice: 6500,
+        category: 'Assainissement',
+      });
+      expect(modifie.category).toBe('Assainissement');
+    });
+
+    it('ne montre pas les rayons du voisin', async () => {
+      await seedRayons();
+      expect(await products.categories(RIVAL.businessId)).toHaveLength(0);
+      expect(
+        await products.listProducts(RIVAL.businessId, { category: 'Plomberie' })
+      ).toHaveLength(0);
+    });
+
+    it('porte le rayon dans l’inventaire exporté', async () => {
+      await seedRayons();
+      const lignes = (await exports_.EXPORTS.stocks(OWNER.businessId))
+        .replace(/^\uFEFF/, '')
+        .trimEnd()
+        .split('\r\n');
+      expect(lignes[0]).toContain('Rayon');
+      expect(lignes.find((ligne) => ligne.startsWith('PVC-110'))).toContain(';Plomberie;');
+    });
+  });
+
   // ───────────────── Identité de la boutique sur les pièces (§51) ──────
 
   describe('en-tête des documents (§51)', () => {

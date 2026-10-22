@@ -23,7 +23,7 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { money } from '@/utils/format';
 import { describeStock } from '@/domain/units';
-import type { Product } from '@/types';
+import type { Product, ProductCategory } from '@/types';
 
 /**
  * Catalogue et stock (maquette 5).
@@ -45,8 +45,18 @@ function ProductsView() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sort, setSort] = useState('name');
   const [filter, setFilter] = useState(params.get('filter') || 'all');
+  const [category, setCategory] = useState('');
 
-  const { data, loading, error } = useResource<Product[]>('/api/products', { search, filter });
+  const rayons = useResource<ProductCategory[]>('/api/products/categories');
+  const { data, loading, error } = useResource<Product[]>('/api/products', {
+    search,
+    filter,
+    category,
+  });
+
+  // Le rayon choisi puis vidé de ses produits n'a plus rien à filtrer : le
+  // garder sélectionné afficherait une liste vide sans dire pourquoi.
+  const rayonsConnus = rayons.data || [];
 
   return (
     <>
@@ -79,6 +89,20 @@ function ProductsView() {
         >
           <span className="field__label">Disponibilité</span>
           <Segmented options={FILTERS} value={filter} onChange={setFilter} />
+          {rayonsConnus.length > 0 ? (
+            <SelectField
+              label="Rayon"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">Tous les rayons</option>
+              {rayonsConnus.map((rayon) => (
+                <option key={rayon.name} value={rayon.name}>
+                  {rayon.name} ({rayon.products})
+                </option>
+              ))}
+            </SelectField>
+          ) : null}
           <SelectField
             label="Trier par"
             value={sort}
@@ -104,7 +128,7 @@ function ProductsView() {
                 icon={<Package size={26} className="muted" />}
                 title="Aucun produit"
                 hint={
-                  filter === 'all'
+                  filter === 'all' && !category
                     ? 'Créez votre première fiche produit pour commencer à vendre.'
                     : 'Aucun article ne correspond à ce filtre.'
                 }
@@ -124,7 +148,10 @@ function ProductsView() {
                       <ProductThumbnail name={product.name} />
                       <div className="list__body">
                         <div className="list__title">{product.name}</div>
-                        <div className="list__sub">{product.sku || 'Sans référence'}</div>
+                        <div className="list__sub">
+                          {product.sku || 'Sans référence'}
+                          {product.category ? ` · ${product.category}` : ''}
+                        </div>
                         {/* Le stock se lit dans les deux unités : en unité de base, parce
                           que c'est elle qui se vend, et en lots, parce que c'est ainsi
                           que le rayon se compte (§10). L'écran natif dit déjà les deux ;

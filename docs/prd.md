@@ -2172,3 +2172,53 @@ garantissait qu'un ajout n'arriverait que dans l'un des deux.
 5. Une chaîne vide retire le logo.
 6. Ni le logo ni le numéro fiscal ne franchissent la frontière d'une boutique
    (§29).
+
+## 52. Les rayons du catalogue
+
+**Objectif**
+
+Une quincaillerie de quartier tient trois cents références. Au comptoir, le
+vendeur les cherche par leur nom — et il faut déjà savoir ce qu'on cherche.
+Quand le client dit « il me faut un coude, je ne sais pas lequel », la
+recherche par nom ne sert à rien : ce qu'il faut, c'est voir tout le rayon
+plomberie.
+
+**F43 — Un rayon par produit, en texte libre**
+
+Pas de liste fermée. Les rayons d'une quincaillerie de Lomé ne sont pas ceux
+d'une autre — l'une sépare la plomberie de l'assainissement, l'autre vend
+surtout du ciment et de la tôle. Une taxonomie imposée serait contournée dès le
+dixième produit, par un « Divers » fourre-tout.
+
+Le champ se complète par ce qui existe déjà : au dixième produit, « Plomberie »
+s'offre tout seul. C'est ce qui garde une orthographe unique sans l'imposer.
+
+Un rayon tapé en blancs est une absence de rayon — sinon le filtre proposerait
+un rayon sans nom, impossible à désigner.
+
+**F44 — Filtrer le catalogue**
+
+Dans les Produits, une liste déroulante qui chiffre chaque rayon — « Plomberie
+(12) » — et ne propose que les rayons qui contiennent quelque chose. Un rayon
+dont le dernier article est archivé disparaît : le proposer ne mènerait qu'à
+une liste vide.
+
+**F45 — Filtrer au comptoir**
+
+Les mêmes rayons en pastilles, au-dessus de la recherche de l'écran de vente.
+Ils se déduisent du catalogue déjà chargé, sans appel réseau : au comptoir,
+filtrer ne doit pas attendre. Les plus fournis d'abord, puisque c'est là qu'on
+cherche le plus souvent. La rangée n'apparaît qu'à partir de deux rayons —
+un seul ne se filtre pas.
+
+**Critères d'acceptation**
+
+1. Le rayon se saisit sur la fiche produit, et se complète par ceux qui
+   existent.
+2. Un produit sans rayon reste normal : il s'affiche partout, hors de tout
+   filtre.
+3. La liste des rayons ignore les produits archivés et se classe du plus fourni
+   au moins fourni.
+4. Le filtre de rayon se combine à la recherche et aux filtres de stock.
+5. Les rayons d'une boutique ne sont jamais visibles d'une autre (§29).
+6. Le rayon figure dans l'inventaire exporté (§48).

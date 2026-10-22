@@ -3,10 +3,11 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button, Card, CardHead, Notice, TextAreaField, TextField } from '@/components/ui';
+import { useResource } from '@/client/useResource';
 import { costPerBaseUnit, pricePerBaseUnit } from '@/domain/units';
 import { money } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
-import type { Product } from '@/types';
+import type { Product, ProductCategory } from '@/types';
 
 /** Conditionnement en cours de saisie : les nombres transitent en chaînes. */
 export interface UnitFormValue {
@@ -25,6 +26,8 @@ export interface ProductFormValues {
   name: string;
   sku: string;
   description: string;
+  /** Le rayon : plomberie, peinture… Texte libre (§52). */
+  category: string;
   baseUnit: string;
   purchasePrice: number | string;
   sellingPrice: number | string;
@@ -58,6 +61,7 @@ export default function ProductForm({
     name: initial?.name || '',
     sku: initial?.sku || '',
     description: initial?.description || '',
+    category: initial?.category || '',
     baseUnit: initial?.base_unit || 'pièce',
     purchasePrice: initial?.purchase_price ?? '',
     sellingPrice: initial?.selling_price ?? '',
@@ -71,6 +75,7 @@ export default function ProductForm({
         price: unit.price as number | string,
       })),
   }));
+  const rayons = useResource<ProductCategory[]>('/api/products/categories');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -130,6 +135,22 @@ export default function ProductForm({
             required
           />
         </div>
+        {/* Le rayon se tape, et se complète par ce qui existe déjà : au
+          dixième produit, « Plomberie » s'offre tout seul et le catalogue
+          garde une orthographe unique (§52). */}
+        <TextField
+          label="Rayon (optionnel)"
+          placeholder="Plomberie, Peinture, Électricité…"
+          hint="Sert à filtrer le catalogue au comptoir."
+          list="rayons-existants"
+          value={form.category}
+          onChange={set('category')}
+        />
+        <datalist id="rayons-existants">
+          {(rayons.data || []).map((rayon) => (
+            <option key={rayon.name} value={rayon.name} />
+          ))}
+        </datalist>
         <TextAreaField
           label="Description (optionnelle)"
           value={form.description}

@@ -9,6 +9,7 @@ import type {
   Money,
   UnitDraft,
   Product,
+  ProductCategory,
   ProductRow,
   ProductUnitRow,
   Quantity,
@@ -29,7 +30,7 @@ import type {
  */
 
 const COLUMNS = `
-  id, business_id, name, sku, description, base_unit,
+  id, business_id, name, sku, description, base_unit, category,
   purchase_price::float8 AS purchase_price,
   selling_price::float8 AS selling_price,
   stock_quantity::float8 AS stock_quantity,
@@ -49,11 +50,13 @@ export async function listProducts(
   {
     search = '',
     filter = 'all',
+    category = '',
     limit = 200,
-  }: { search?: string; filter?: string; limit?: number } = {}
+  }: { search?: string; filter?: string; category?: string; limit?: number } = {}
 ): Promise<Product[]> {
   const sql = getSql();
   const term = search.trim() ? `%${search.trim()}%` : null;
+  const rayon = category.trim() || null;
 
   const products = rows<ProductRow>(
     await sql`
@@ -62,6 +65,7 @@ export async function listProducts(
      WHERE business_id = ${businessId}
        AND archived = false
        AND (${term}::text IS NULL OR name ILIKE ${term} OR sku ILIKE ${term})
+       AND (${rayon}::text IS NULL OR category = ${rayon})
        AND (
          ${filter}::text = 'all'
          OR (${filter}::text = 'out' AND stock_quantity <= 0)
@@ -89,6 +93,28 @@ export async function listProducts(
     ...product,
     units: unitsOf(product, byProduct.get(product.id)),
   }));
+}
+
+/**
+ * Les rayons réellement utilisés, du plus fourni au moins fourni (§52).
+ *
+ * Il n'existe pas de liste de rayons quelque part : elle se construit de ce que
+ * le gérant a déjà saisi. C'est ce qui permet au champ de proposer « Plomberie »
+ * dès la deuxième fois sans qu'aucune taxonomie n'ait été imposée — et ce qui
+ * garantit qu'un filtre ne propose jamais un rayon vide.
+ */
+export async function categories(businessId: string): Promise<ProductCategory[]> {
+  return rows<ProductCategory>(
+    await getSql()`
+      SELECT category AS name, COUNT(*)::int AS products
+        FROM products
+       WHERE business_id = ${businessId}
+         AND archived = false
+         AND category IS NOT NULL
+       GROUP BY category
+       ORDER BY products DESC, category
+    `
+  );
 }
 
 /** Produits en alerte de stock, pour le tableau de bord (§8). */
@@ -229,6 +255,7 @@ function readProductInput(body: Record<string, unknown>) {
     name: str(body.name, 'nom', { max: 160 }),
     sku: str(body.sku, 'référence', { required: false, max: 60 }),
     description: str(body.description, 'description', { required: false, max: 1000 }),
+    category: str(body.category, 'rayon', { required: false, max: 60 }),
     baseUnit,
     purchasePrice: round2(num(body.purchasePrice, "prix d'achat", { min: 0, required: false })),
     sellingPrice,
@@ -260,11 +287,11 @@ export async function createProduct(session: Session, body: Record<string, unkno
   const queries = [
     sql`
       INSERT INTO products (
-        id, business_id, name, sku, description, base_unit,
+        id, business_id, name, sku, description, base_unit, category,
         purchase_price, selling_price, stock_quantity, low_stock_threshold
       ) VALUES (
         ${productId}, ${session.businessId}, ${input.name}, ${input.sku}, ${input.description},
-        ${input.baseUnit}, ${input.purchasePrice}, ${input.sellingPrice},
+        ${input.baseUnit}, ${input.category}, ${input.purchasePrice}, ${input.sellingPrice},
         ${initialStock}, ${input.lowStockThreshold}
       )
     `,
@@ -304,7 +331,8 @@ export async function updateProduct(
     sql`
       UPDATE products
          SET name = ${input.name}, sku = ${input.sku}, description = ${input.description},
-             base_unit = ${input.baseUnit}, purchase_price = ${input.purchasePrice},
+             base_unit = ${input.baseUnit}, category = ${input.category},
+             purchase_price = ${input.purchasePrice},
              selling_price = ${input.sellingPrice},
              low_stock_threshold = ${input.lowStockThreshold}, updated_at = now()
        WHERE id = ${productId} AND business_id = ${session.businessId}

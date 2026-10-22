@@ -82,7 +82,10 @@ export default function ProductPage({ params }: { params: Promise<{ id: string }
                   </span>
                   <div>
                     <div className="strong">{data.name}</div>
-                    <div className="small muted">{data.sku || 'Sans référence'}</div>
+                    <div className="small muted">
+                      {data.sku || 'Sans référence'}
+                      {data.category ? ` · ${data.category}` : ''}
+                    </div>
                   </div>
                 </div>
                 {data.stock_quantity <= 0 ? (

@@ -106,6 +106,10 @@ CREATE TABLE IF NOT EXISTS products (
   sku                  text,
   description          text,
   base_unit            text NOT NULL DEFAULT 'pièce',
+  -- Le rayon : plomberie, électricité, peinture… (§52). Texte libre et non liste
+  -- fermée : les rayons d'une quincaillerie de Lomé ne sont pas ceux d'une autre,
+  -- et une taxonomie imposée serait contournée dès le dixième produit.
+  category             text,
   purchase_price       numeric(14, 2) NOT NULL DEFAULT 0,
   selling_price        numeric(14, 2) NOT NULL DEFAULT 0,
   -- Stock unique, compté en unité de base (§10). La contrainte est la garde

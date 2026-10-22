@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
       await listProducts(session.businessId, {
         search: params.get('search') || '',
         filter: params.get('filter') || 'all',
+        category: params.get('category') || '',
       })
     );
   });

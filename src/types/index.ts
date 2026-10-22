@@ -98,6 +98,12 @@ export interface IssuedTokens {
 // Produits, conditionnements et stock (§9, §10, §26)
 // ---------------------------------------------------------------------------
 
+/** Un rayon tel qu'il existe réellement dans le catalogue, et ce qu'il contient. */
+export interface ProductCategory {
+  name: string;
+  products: number;
+}
+
 export interface ProductRow {
   id: string;
   business_id: string;
@@ -105,6 +111,8 @@ export interface ProductRow {
   sku: string | null;
   description: string | null;
   base_unit: string;
+  /** Le rayon — plomberie, peinture… Texte libre, vide tant qu'aucun n'est mis (§52). */
+  category: string | null;
   purchase_price: Money;
   selling_price: Money;
   stock_quantity: Quantity;

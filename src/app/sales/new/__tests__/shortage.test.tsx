@@ -42,6 +42,7 @@ const SERRURE: Product = {
   name: 'Serrure porte',
   sku: 'SER-001',
   description: null,
+  category: 'Serrurerie',
   base_unit: 'pièce',
   purchase_price: 3400,
   selling_price: 5000,
