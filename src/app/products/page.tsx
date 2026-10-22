@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { ChevronRight, Package, Plus, SlidersHorizontal } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import ProductThumbnail from '@/components/products/ProductThumbnail';
+import ValeurDuStock from '@/components/products/ValeurDuStock';
 import BarcodeScanner from '@/components/products/BarcodeScanner';
 import {
   Badge,
@@ -56,6 +57,9 @@ function ProductsView() {
       />
 
       <main className="page page--products page--fab">
+        {/* Ce que le stock vaut : l'argent immobilisé, et ce qu'il rapportera.
+          Propriétaire seulement — la valeur au coût révèle les prix d'achat (§5). */}
+        {isOwner ? <ValeurDuStock /> : null}
         <div className="filter-row">
           <SearchField value={search} onChange={setSearch} placeholder="Rechercher un produit…" />
           <button

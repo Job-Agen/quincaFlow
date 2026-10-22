@@ -11,6 +11,7 @@ import type {
   Product,
   ProductRow,
   ProductUnitRow,
+  Quantity,
   Session,
   StockMovementRow,
 } from '@/types';
@@ -91,6 +92,40 @@ export async function listProducts(
 }
 
 /** Produits en alerte de stock, pour le tableau de bord (§8). */
+/**
+ * Ce que le stock vaut (§49).
+ *
+ * Deux chiffres, et ils ne disent pas la même chose : au coût, c'est l'argent
+ * immobilisé dans le magasin — celui qu'on a déjà sorti ; à la vente, c'est ce
+ * qu'il rapportera si tout part. L'écart entre les deux est la marge qui dort
+ * sur les étagères.
+ *
+ * Calculé en SQL sur tout le catalogue, et non sur la liste affichée : une
+ * recherche ou un filtre en cours ne doit pas faire varier la valeur de ce que
+ * la boutique détient. Les articles archivés en sont exclus — ils ne sont plus
+ * à vendre.
+ */
+export async function stockValue(
+  businessId: string
+): Promise<{ atCost: Money; atRetail: Money; products: number; units: Quantity }> {
+  const ligne = one<{ at_cost: number; at_retail: number; products: number; units: number }>(
+    await getSql()`
+      SELECT COALESCE(SUM(stock_quantity * purchase_price), 0)::float8 AS at_cost,
+             COALESCE(SUM(stock_quantity * selling_price), 0)::float8 AS at_retail,
+             COUNT(*)::int AS products,
+             COALESCE(SUM(stock_quantity), 0)::float8 AS units
+        FROM products
+       WHERE business_id = ${businessId} AND archived = false AND stock_quantity > 0
+    `
+  );
+  return {
+    atCost: round2(ligne?.at_cost ?? 0),
+    atRetail: round2(ligne?.at_retail ?? 0),
+    products: ligne?.products ?? 0,
+    units: round3(ligne?.units ?? 0),
+  };
+}
+
 export async function lowStockProducts(businessId: string, limit = 20): Promise<ProductRow[]> {
   const sql = getSql();
   return rows<ProductRow>(

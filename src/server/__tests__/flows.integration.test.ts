@@ -41,6 +41,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let incomes: typeof import('../incomes');
   let credit: typeof import('../credit');
   let exports_: typeof import('../exports');
+  let dashboard: typeof import('../dashboard');
 
   const OWNER: Session = {
     userId: 'usr_owner',
@@ -80,6 +81,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     incomes = await import('../incomes');
     credit = await import('../credit');
     exports_ = await import('../exports');
+    dashboard = await import('../dashboard');
   });
 
   afterAll(async () => {
@@ -530,6 +532,205 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       // Une sauvegarde se range dans un dossier « Téléchargements » : elle ne
       // doit pas transporter de quoi se connecter.
       expect(JSON.stringify(sauvegarde)).not.toContain('password_hash');
+    });
+  });
+
+  // ─────────────────── Tableau de bord enrichi (§49) ───────────────────
+
+  describe('tableau de bord (§49)', () => {
+    it('rend sept jours, les creux compris, et met aujourd’hui au bout', async () => {
+      const vitre = await seedVitre();
+      await sales.createSale(OWNER, { lines: [{ productId: vitre.id, quantity: 2 }] });
+
+      // Une vente d'il y a dix jours : hors fenêtre, elle n'appartient à aucun
+      // des sept seaux.
+      const ancienne = await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 10 }],
+      });
+      await pool.query(
+        "UPDATE sales SET created_at = now() - interval '10 days' WHERE id = $1",
+        [ancienne.id]
+      );
+
+      const tdb = await dashboard.dashboard(OWNER.businessId);
+
+      expect(tdb.week).toHaveLength(7);
+      expect(tdb.week.reduce((somme, jour) => somme + jour.revenue, 0)).toBe(900);
+      // Un jour sans vente reste dans la série, à zéro : un trou se lirait
+      // comme une baisse là où il n'y a qu'une absence de donnée.
+      expect(tdb.week.slice(0, 6).map((jour) => jour.revenue)).toEqual([0, 0, 0, 0, 0, 0]);
+      expect(tdb.week[6]).toMatchObject({ revenue: 900, count: 1 });
+    });
+
+    it('classe le palmarès par chiffre d’affaires, en unités de base', async () => {
+      const vitre = await seedVitre();
+      const carton = vitre.units.find((unit) => unit.factor === 40)!;
+      const clou = await products.createProduct(OWNER, {
+        name: 'Clou de 10',
+        sku: 'CLO-010',
+        baseUnit: 'pièce',
+        purchasePrice: 15,
+        sellingPrice: 25,
+        lowStockThreshold: 0,
+        stockQuantity: 500,
+      });
+      await sales.createSale(OWNER, {
+        lines: [
+          { productId: vitre.id, unitId: carton.id, quantity: 1 },
+          { productId: clou.id, quantity: 100 },
+        ],
+      });
+
+      // Ce qui se vendait il y a dix jours n'aide pas à décider du réassort de
+      // demain : le palmarès s'arrête à la semaine.
+      const ciment = await products.createProduct(OWNER, {
+        name: 'Ciment CIMTOGO',
+        sku: 'CIM-050',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4800,
+        lowStockThreshold: 10,
+        stockQuantity: 200,
+      });
+      const ancienne = await sales.createSale(OWNER, {
+        lines: [{ productId: ciment.id, quantity: 50 }],
+      });
+      await pool.query(
+        "UPDATE sales SET created_at = now() - interval '10 days' WHERE id = $1",
+        [ancienne.id]
+      );
+
+      const { topProducts } = await dashboard.dashboard(OWNER.businessId);
+
+      expect(topProducts.map((produit) => produit.name)).toEqual(['Vitre 60 cm', 'Clou de 10']);
+      // Un carton compte pour ses 40 pièces : sans le facteur, le palmarès
+      // afficherait « 1 vendu » pour la ligne qui rapporte le plus.
+      expect(topProducts[0]).toMatchObject({ quantity: 40, revenue: 17000 });
+      expect(topProducts[1]).toMatchObject({ quantity: 100, revenue: 2500 });
+    });
+
+    it('chiffre les créances et compte les clients qui doivent', async () => {
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name, phone) VALUES
+           ('cus_un', $1, 'Kodjo', '90 00 00 01'), ('cus_deux', $1, 'Afi', '90 00 00 02'),
+           ('cus_trois', $1, 'Sena', '90 00 00 03')`,
+        [OWNER.businessId]
+      );
+      const vitre = await seedVitre();
+      // Deux ardoises pour le même client, une pour un autre, une vente soldée.
+      await sales.createSale(OWNER, {
+        customerId: 'cus_un',
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 400,
+      });
+      await sales.createSale(OWNER, {
+        customerId: 'cus_un',
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 0,
+      });
+      await sales.createSale(OWNER, {
+        customerId: 'cus_deux',
+        lines: [{ productId: vitre.id, quantity: 1 }],
+        amountPaid: 50,
+      });
+      // Un client qui a tout payé n'est pas un débiteur : il ne doit ni peser
+      // dans le total, ni grossir le nombre de relances.
+      await sales.createSale(OWNER, {
+        customerId: 'cus_trois',
+        lines: [{ productId: vitre.id, quantity: 1 }],
+      });
+
+      const tdb = await dashboard.dashboard(OWNER.businessId);
+
+      // 500 + 900 + 400 : la vente soldée ne pèse rien.
+      expect(tdb.receivables).toBe(1800);
+      // Deux clients, pas trois ardoises : c'est le nombre de relances à faire.
+      expect(tdb.debtorCount).toBe(2);
+    });
+
+    it('oublie une vente annulée dans la semaine, le palmarès et les créances', async () => {
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name, phone)
+         VALUES ('cus_ann', $1, 'Yao', '90 00 00 03')`,
+        [OWNER.businessId]
+      );
+      const vitre = await seedVitre();
+      const annulee = await sales.createSale(OWNER, {
+        customerId: 'cus_ann',
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 0,
+      });
+      await sales.cancelSale(OWNER, annulee.id, 'Erreur de saisie');
+
+      const tdb = await dashboard.dashboard(OWNER.businessId);
+
+      // Une vente annulée reste à l'historique, mais la compter ici donnerait
+      // un chiffre que le gérant ne retrouverait pas dans sa caisse.
+      expect(tdb.week[6]).toMatchObject({ revenue: 0, count: 0 });
+      expect(tdb.topProducts).toHaveLength(0);
+      expect(tdb.receivables).toBe(0);
+      expect(tdb.debtorCount).toBe(0);
+    });
+
+    it('ne mélange pas les chiffres de deux quincailleries', async () => {
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name, phone)
+         VALUES ('cus_voisin', $1, 'Sena', '90 00 00 04')`,
+        [OWNER.businessId]
+      );
+      const vitre = await seedVitre();
+      await sales.createSale(OWNER, {
+        customerId: 'cus_voisin',
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 0,
+      });
+
+      const voisin = await dashboard.dashboard(RIVAL.businessId);
+
+      expect(voisin.week.every((jour) => jour.revenue === 0 && jour.count === 0)).toBe(true);
+      expect(voisin.topProducts).toHaveLength(0);
+      expect(voisin.receivables).toBe(0);
+      expect(voisin.debtorCount).toBe(0);
+    });
+  });
+
+  describe('valeur du stock (§49)', () => {
+    it('somme le stock au prix d’achat et au prix de vente', async () => {
+      await seedVitre(80);
+
+      const valeur = await products.stockValue(OWNER.businessId);
+
+      // 80 × 318,75 d'achat, 80 × 450 de vente : l'écart entre les deux est la
+      // marge qui dort dans le magasin.
+      expect(valeur).toEqual({ atCost: 25500, atRetail: 36000, products: 1, units: 80 });
+    });
+
+    it('ignore un produit archivé ou épuisé', async () => {
+      const vitre = await seedVitre(80);
+      await products.createProduct(OWNER, {
+        name: 'Tôle bac alu',
+        sku: 'TOL-002',
+        baseUnit: 'tôle',
+        purchasePrice: 7000,
+        sellingPrice: 9900,
+        lowStockThreshold: 2,
+        stockQuantity: 0,
+      });
+      await products.archiveProduct(OWNER, vitre.id);
+
+      // Un produit archivé n'est plus à vendre, un produit à zéro n'est plus
+      // là : ni l'un ni l'autre ne vaut quelque chose en rayon.
+      expect(await products.stockValue(OWNER.businessId)).toEqual({
+        atCost: 0,
+        atRetail: 0,
+        products: 0,
+        units: 0,
+      });
+    });
+
+    it('ne compte pas le stock du voisin', async () => {
+      await seedVitre(80);
+      expect(await products.stockValue(RIVAL.businessId)).toMatchObject({ atCost: 0, products: 0 });
     });
   });
 

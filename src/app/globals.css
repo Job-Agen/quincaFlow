@@ -1812,3 +1812,145 @@ select.input {
   border-top: 1px solid var(--line);
   margin: 2px 0;
 }
+
+/* ────────────── Semaine et palmarès du tableau de bord (§49) ─────────── */
+
+.semaine {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.semaine__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.semaine__total strong {
+  font-size: 17px;
+}
+
+/*
+ * Sept colonnes de largeur égale. La hauteur est fixe : laisser les barres
+ * dicter la hauteur de la carte ferait sauter le tableau de bord d'un jour à
+ * l'autre, selon la vente la plus forte de la semaine.
+ */
+.semaine__barres {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+  height: 128px;
+}
+
+.semaine__jour {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.semaine__valeur {
+  height: 16px;
+  font-weight: 700;
+  color: var(--ink-2);
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.semaine__rail {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: var(--bg);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.semaine__barre {
+  width: 100%;
+  background: var(--blue);
+  border-radius: var(--r) var(--r) 0 0;
+}
+
+.semaine__libelle {
+  font-weight: 700;
+}
+
+.palmares {
+  list-style: none;
+}
+
+.palmares li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.palmares li:last-child {
+  border-bottom: 0;
+}
+
+.palmares__rang {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-full);
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.palmares__corps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ─────────────────── Valeur du stock, en tête du catalogue ─────────── */
+
+.valeur-stock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.valeur-stock__icone {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r);
+  background: var(--amber-soft);
+  color: var(--amber);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.valeur-stock__corps {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Les deux chiffres passent à la ligne plutôt que de se tasser : à 320 px,
+   côte à côte, ils devenaient illisibles. */
+.valeur-stock__chiffres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}

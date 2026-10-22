@@ -1996,3 +1996,71 @@ mots de passe en sont absents — une sauvegarde se range dans un dossier
    vente.
 6. Aucun fichier ne laisse passer une ligne d'une autre quincaillerie (§29).
 7. La sauvegarde ne contient aucun mot de passe.
+
+## 49. Ce que le tableau de bord ne disait pas
+
+**Objectif**
+
+Le §8 donne cinq chiffres du jour et s'arrête là, par refus du tableau de bord
+qui noie le gérant sous les courbes. Le refus reste juste, mais il laissait
+trois questions sans réponse — et ce sont celles qu'on se pose en ouvrant
+l'application le matin :
+
+- **« Est-ce que ça monte ou ça descend ? »** Un chiffre du jour seul ne le dit
+  pas. 45 000 FCFA, c'est bien ou mal ? La réponse est dans les six jours
+  précédents.
+- **« Qu'est-ce qui fait vivre la boutique ? »** Le gérant croit souvent le
+  savoir ; les chiffres le démentent souvent.
+- **« Combien d'argent dort dehors ? »** Le carnet de crédit (§45) existe, mais
+  il faut aller le chercher. Une dette qu'on ne voit pas est une dette qu'on
+  oublie de réclamer.
+
+**F34 — La semaine en barres**
+
+Sept barres, une par jour, la dernière étant aujourd'hui. Pas de bibliothèque
+de graphiques : des div en CSS, une seule teinte, et le texte porte toute
+l'information — seul le meilleur jour est chiffré sous sa barre, et la
+description complète est lue à voix haute par un lecteur d'écran.
+
+Les sept jours sont toujours là, y compris ceux sans vente. Un jour absent de
+la série serait lu comme une baisse alors qu'il n'y a qu'une absence de donnée.
+
+**F35 — Les cinq plus vendus de la semaine**
+
+Classés par chiffre d'affaires, avec la quantité en unités de base : un carton
+compte pour ses quarante pièces, sinon la ligne qui rapporte le plus
+s'afficherait « 1 vendu ».
+
+La fenêtre est la semaine, pas toute l'histoire : ce qui se vendait l'an
+dernier n'aide pas à décider du réassort de demain.
+
+**F36 — Les créances, en sixième tuile**
+
+Le total dû par les clients et le nombre de clients concernés, qui mène d'un
+appui au carnet de crédit. C'est le rappel que le §45 ne pouvait pas faire
+depuis sa propre page.
+
+**F37 — La valeur du stock**
+
+En tête de la liste des produits : ce que le stock a coûté, et ce qu'il
+rapporterait vendu. L'écart entre les deux est la marge qui dort dans le
+magasin. Le propriétaire seul y a accès — le prix d'achat est ce que le §5
+cache au vendeur.
+
+Les produits archivés et ceux à zéro n'y figurent pas : ni les uns ni les
+autres ne valent quelque chose en rayon.
+
+**Critères d'acceptation**
+
+1. La semaine rend toujours sept jours, les jours sans vente à zéro, le dernier
+   étant aujourd'hui.
+2. Une vente annulée ne compte ni dans la semaine, ni dans le palmarès, ni dans
+   les créances.
+3. Le palmarès compte les quantités en unités de base et se limite aux sept
+   derniers jours.
+4. Le nombre de débiteurs compte les clients, pas les ardoises : trois ventes
+   non soldées du même client font un débiteur.
+5. Un client qui a tout payé ne figure pas dans les créances.
+6. Aucun de ces chiffres ne traverse la frontière d'une boutique (§29).
+7. La valeur du stock ignore les produits archivés et les produits à zéro, et
+   n'est lisible que par le propriétaire.

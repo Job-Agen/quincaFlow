@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Coins,
   FileText,
+  HandCoins,
   Store,
   TrendingUp,
 } from 'lucide-react';
@@ -16,7 +17,8 @@ import AppBar from '@/components/layout/AppBar';
 import { Card, CardHead, Empty, Notice, Skeleton } from '@/components/ui';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { amount, money, time, withUnit } from '@/utils/format';
+import SemaineChart from '@/components/dashboard/SemaineChart';
+import { amount, money, quantity, time, withUnit } from '@/utils/format';
 import type { DashboardSummary } from '@/types';
 
 /**
@@ -55,6 +57,14 @@ const TILES: readonly Tile[] = [
     tone: 'blue',
     icon: ArrowLeftRight,
     href: '/out-of-stock',
+  },
+  {
+    key: 'receivables',
+    label: 'Créances clients',
+    tone: 'amber',
+    icon: HandCoins,
+    money: true,
+    href: '/customers',
   },
   {
     key: 'lowStockCount',
@@ -132,6 +142,35 @@ export default function DashboardPage() {
                 );
               })}
             </div>
+
+            {/* La semaine, puis le palmarès : « est-ce que ça monte ? » et
+              « qu'est-ce qui fait vivre la boutique ? » (§49). */}
+            <Card pad className="stack" style={{ gap: 12 }}>
+              <CardHead title="Cette semaine" />
+              <SemaineChart week={data.week} currency={currency} />
+            </Card>
+
+            {data.topProducts.length > 0 ? (
+              <Card>
+                <CardHead title="Les plus vendus cette semaine" />
+                <ol className="palmares">
+                  {data.topProducts.map((produit, rang) => (
+                    <li key={produit.name}>
+                      <span className="palmares__rang" aria-hidden="true">
+                        {rang + 1}
+                      </span>
+                      <span className="palmares__corps">
+                        <strong>{produit.name}</strong>
+                        <span className="small muted">
+                          {quantity(produit.quantity)} vendu{produit.quantity > 1 ? 's' : ''}
+                        </span>
+                      </span>
+                      <strong className="num">{money(produit.revenue, currency)}</strong>
+                    </li>
+                  ))}
+                </ol>
+              </Card>
+            ) : null}
 
             <Card className="stock-alerts">
               <CardHead

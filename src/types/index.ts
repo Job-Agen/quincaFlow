@@ -457,6 +457,22 @@ export interface HistoryEntry {
 }
 
 /** Les cinq indicateurs du tableau de bord, dans l'ordre du PRD (§8). */
+/** Une journée de la semaine écoulée, pour la courbe du tableau de bord (§49). */
+export interface DashboardDay {
+  /** Jour en ISO court, `2026-10-22`. */
+  day: string;
+  revenue: Money;
+  count: number;
+}
+
+/** Un article du palmarès de la semaine. */
+export interface DashboardTopProduct {
+  name: string;
+  /** Quantité en unité de base : deux cartons de 27 comptent 54 pièces. */
+  quantity: Quantity;
+  revenue: Money;
+}
+
 export interface DashboardSummary {
   revenue: Money;
   margin: Money;
@@ -466,6 +482,13 @@ export interface DashboardSummary {
   lowStockCount: number;
   lowStock: ProductRow[];
   recent: HistoryEntry[];
+  /** Les sept derniers jours, celui-ci compris, jours sans vente inclus (§49). */
+  week: DashboardDay[];
+  /** Les cinq articles qui ont le plus rapporté sur la semaine. */
+  topProducts: DashboardTopProduct[];
+  /** Ce que les clients doivent, toutes ventes non soldées confondues (§45). */
+  receivables: Money;
+  debtorCount: number;
 }
 
 // ---------------------------------------------------------------------------
