@@ -535,6 +535,57 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
   });
 
+  // ───────────────── Identité de la boutique sur les pièces (§51) ──────
+
+  describe('en-tête des documents (§51)', () => {
+    it('garde le numéro fiscal avec les coordonnées', async () => {
+      const { business } = await accounts.updateBusiness(OWNER, {
+        name: 'Quincaillerie A',
+        phone: '90 00 00 00',
+        address: 'Lomé',
+        taxId: '1000123456789',
+      });
+      expect(business.tax_id).toBe('1000123456789');
+    });
+
+    it('accepte un logo image et le rend au profil', async () => {
+      const logo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+      const { business } = await accounts.updateLogo(OWNER, { image: logo });
+      expect(business.logo).toBe(logo);
+    });
+
+    it('refuse ce qui n’est pas une image', async () => {
+      // Un `data:` text/html rangé ici reviendrait dans une balise img de
+      // chaque facture : ce champ est servi tel quel à tous les écrans.
+      await expect(
+        accounts.updateLogo(OWNER, { image: 'data:text/html,<script>alert(1)</script>' })
+      ).rejects.toThrow(/image/i);
+      await expect(accounts.updateLogo(OWNER, { image: 'https://exemple.tg/logo.png' })).rejects.toThrow(
+        /image/i
+      );
+    });
+
+    it('refuse un logo trop lourd', async () => {
+      const enorme = 'data:image/png;base64,' + 'A'.repeat(400_001);
+      await expect(accounts.updateLogo(OWNER, { image: enorme })).rejects.toThrow(/lourd/i);
+    });
+
+    it('retire le logo sur une chaîne vide', async () => {
+      await accounts.updateLogo(OWNER, { image: 'data:image/png;base64,iVBORw0KGgo=' });
+      const { business } = await accounts.updateLogo(OWNER, { image: '' });
+      expect(business.logo).toBeNull();
+    });
+
+    it('ne touche pas à l’en-tête de la boutique voisine', async () => {
+      await accounts.updateLogo(OWNER, { image: 'data:image/png;base64,iVBORw0KGgo=' });
+      await accounts.updateBusiness(OWNER, { name: 'Quincaillerie A', taxId: '1000123456789' });
+
+      const voisin = await accounts.profile(RIVAL);
+      expect(voisin.business.logo).toBeNull();
+      expect(voisin.business.tax_id).toBeNull();
+    });
+  });
+
   // ──────────────── Opérateur Mobile Money et carte (§50) ──────────────
 
   describe('moyen de paiement (§50)', () => {

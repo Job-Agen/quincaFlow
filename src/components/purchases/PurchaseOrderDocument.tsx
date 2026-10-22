@@ -18,7 +18,7 @@
  * nommé, et parce qu'un test doit pouvoir le monter sans fabriquer la promesse
  * de paramètres que Next lui passe.
  */
-import { FileDown, MessageCircle, Printer, Share2, Store } from 'lucide-react';
+import { FileDown, MessageCircle, Printer, Share2 } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Notice, Skeleton } from '@/components/ui';
 import { useResource } from '@/client/useResource';
@@ -33,6 +33,7 @@ import {
 } from '@/domain/purchase';
 import { amount, money, quantity, shortDate } from '@/utils/format';
 import { round2 } from '@/utils/money';
+import Letterhead from '@/components/documents/Letterhead';
 import type { PurchaseOrder } from '@/types';
 
 export default function PurchaseOrderDocument({ id }: { id: string }) {
@@ -107,19 +108,7 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
             ) : null}
 
             <article className={`invoice${cancelled ? ' invoice--cancelled' : ''}`}>
-              <div className="invoice__brand">
-                <Store size={30} />
-                <span className="invoice__name">{business?.name}</span>
-                {business?.tagline ? (
-                  <span className="invoice__meta">{business.tagline}</span>
-                ) : null}
-                {business?.address ? (
-                  <span className="invoice__meta">{business.address}</span>
-                ) : null}
-                {business?.phone ? (
-                  <span className="invoice__meta">Tél : {business.phone}</span>
-                ) : null}
-              </div>
+              <Letterhead business={business} />
 
               <h2 className="invoice__title">{purchaseOrderHeading(priced)}</h2>
 

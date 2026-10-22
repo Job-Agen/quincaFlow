@@ -25,6 +25,8 @@ const PROFILE: Profile = {
     phone: '90 11 22 33',
     address: 'Lomé — Avenue de la Libération',
     tagline: 'Matériaux & outillage',
+    tax_id: '1000123456789',
+    logo: null,
     currency: 'FCFA',
   },
   role: 'OWNER',

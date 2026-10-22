@@ -56,6 +56,13 @@ describe('ce qui engage les deux parties', () => {
     expect(html).toContain('90 11 22 33');
   });
 
+  it('porte le numéro fiscal, que le fournisseur recopie sur sa facture', () => {
+    const html = purchaseOrderHtml(entete, lignes, { ...boutique, tax_id: '1000123456789' });
+    expect(html).toContain('IFU / NIF : 1000123456789');
+    // Sans numéro, pas d'étiquette vide : la ligne disparaît entièrement.
+    expect(purchaseOrderHtml(entete, lignes, boutique)).not.toContain('IFU / NIF');
+  });
+
   it('porte le numéro, la date et le fournisseur', () => {
     const html = purchaseOrderHtml(entete, lignes, boutique);
     expect(html).toContain('PO-0042');

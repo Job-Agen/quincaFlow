@@ -57,6 +57,10 @@ export interface BusinessRow {
   phone: string | null;
   address: string | null;
   tagline: string | null;
+  /** IFU, NIF : le numéro d'identification fiscale de la boutique (§51). */
+  tax_id: string | null;
+  /** Le logo en `data:` URL, ou null tant qu'aucun n'a été chargé (§51). */
+  logo: string | null;
   currency: string;
 }
 

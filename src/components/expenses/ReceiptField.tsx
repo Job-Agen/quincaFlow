@@ -5,6 +5,7 @@ import { Camera, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Button, Notice } from '@/components/ui';
 import { api } from '@/client/api';
 import { errorMessage } from '@/utils/errors';
+import { shrinkImage } from '@/utils/image';
 import type { Receipt } from '@/types';
 
 /**
@@ -27,42 +28,14 @@ import type { Receipt } from '@/types';
 const MAX_SIDE = 1200;
 const JPEG_QUALITY = 0.72;
 
-/**
- * Réduit une photo et la rend en `data:` URL JPEG.
- *
- * Le dessin passe par un canvas : c'est le seul moyen, dans un navigateur, de
- * réencoder une image à une autre taille. L'objet URL est révoqué dans tous les
- * cas — une photo de 4 Mo retenue par un `blob:` oublié à chaque saisie finirait
- * par faire tomber l'onglet.
- */
-async function shrink(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error('Image illisible.'));
-      element.src = url;
-    });
-
-    const ratio = Math.min(1, MAX_SIDE / Math.max(image.width, image.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(image.width * ratio));
-    canvas.height = Math.max(1, Math.round(image.height * ratio));
-
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Le navigateur ne peut pas réduire cette photo.');
-    // Fond blanc : un PNG transparent réencodé en JPEG donnerait sinon un reçu
-    // sur fond noir, illisible.
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-    return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** Réduit une photo de reçu et la rend en `data:` URL JPEG. */
+const shrink = (file: File) =>
+  shrinkImage(file, {
+    maxSide: MAX_SIDE,
+    type: 'image/jpeg',
+    quality: JPEG_QUALITY,
+    background: '#ffffff',
+  });
 
 export default function ReceiptField({
   expenseId,

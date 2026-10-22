@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS businesses (
   phone      text,
   address    text,
   tagline    text,
+  -- Le numéro d'identification fiscale — IFU au Togo et au Bénin, NIF ailleurs
+  -- (§51). Il figure sur la facture : sans lui, une entreprise cliente ne peut
+  -- pas la passer en charge, et la facture est refusée.
+  tax_id     text,
+  -- Le logo, en `data:` URL, comme les justificatifs de dépense (§40) : faute
+  -- de stockage d'objets, et borné à une image que la facture affiche petite.
+  logo       text,
   currency   text NOT NULL DEFAULT 'FCFA',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()

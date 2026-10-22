@@ -1051,6 +1051,14 @@ select.input {
   border-bottom: 1px solid var(--line);
 }
 
+/* Le logo tient la place du pictogramme : assez grand pour être reconnu,
+   assez petit pour ne pas repousser le tableau sur une seconde page. */
+.invoice__logo {
+  max-width: 120px;
+  max-height: 56px;
+  object-fit: contain;
+}
+
 .invoice__name {
   font-size: 19px;
   font-weight: 800;

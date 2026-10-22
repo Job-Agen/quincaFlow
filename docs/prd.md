@@ -2111,3 +2111,64 @@ rapprocher d'un relevé — rien n'est faux, rien n'est à corriger.
 6. Le journal de caisse distingue « Mobile Money · Flooz » de
    « Mobile Money · T-Money ».
 7. Une ligne sans opérateur se lit « Mobile Money », sans mention vide.
+
+## 51. Logo et numéro fiscal sur les pièces
+
+**Objectif**
+
+La facture et le bon de commande sont les deux seules pièces qui sortent de la
+boutique. Elles portaient son nom, son adresse et son téléphone — et il leur
+manquait les deux choses qui font qu'un document est pris au sérieux.
+
+Le **numéro fiscal** d'abord (IFU au Togo et au Bénin, NIF ailleurs). Une
+facture sans lui n'est pas une facture pour une entreprise cliente : elle ne
+peut pas la passer en charge, et elle la renvoie. Le commerçant refait le
+document à la main, ou perd le client.
+
+Le **logo** ensuite. Dans une liasse de vingt factures, celle qui porte
+l'enseigne se retrouve ; les autres se ressemblent toutes.
+
+**F40 — Le numéro fiscal**
+
+Un champ de plus dans les Paramètres, imprimé sous le téléphone. Vide, il ne
+laisse rien — pas d'étiquette orpheline : un « IFU / NIF : » suivi de rien
+serait pire que l'absence.
+
+**F41 — Le logo**
+
+Choisi depuis le téléphone, réduit à 320 px de côté avant l'envoi — la facture
+l'affiche à deux centimètres, au-delà on transporte des pixels que personne ne
+verra sur une connexion qui se paie au mégaoctet.
+
+Il est réencodé en **PNG, transparence gardée** : un logo est presque toujours
+posé sur un fond transparent, et le passer en JPEG sur fond blanc lui collerait
+un rectangle visible dès que la facture s'imprime sur autre chose que du blanc
+pur. C'est la différence avec le justificatif de dépense (§40), qui lui est
+réduit en JPEG sur fond blanc parce qu'un reçu manuscrit n'a pas de
+transparence à préserver.
+
+Il vit en `data:` URL dans la base, comme ces justificatifs, et pour la même
+raison : aucun stockage d'objets n'est configuré. Le choix est borné — une
+image par boutique, 400 Ko au plus, et c'est le serveur qui le vérifie, pas
+l'écran.
+
+Le propriétaire seul y touche : l'en-tête d'une facture engage le commerce,
+un vendeur n'a pas à le réécrire (§5).
+
+**F42 — Un seul en-tête, deux documents**
+
+La facture (§15) et le bon de commande (§43) disent la même chose de la
+boutique. L'en-tête est désormais un seul composant : le dire à deux endroits
+garantissait qu'un ajout n'arriverait que dans l'un des deux.
+
+**Critères d'acceptation**
+
+1. Le numéro fiscal et le logo se saisissent dans les Paramètres, propriétaire
+   seulement.
+2. Un champ vide n'imprime pas son étiquette.
+3. Le logo apparaît en tête de la facture et du bon de commande ; sans logo, le
+   pictogramme reste.
+4. Le serveur refuse un logo qui n'est pas une image, et un logo trop lourd.
+5. Une chaîne vide retire le logo.
+6. Ni le logo ni le numéro fiscal ne franchissent la frontière d'une boutique
+   (§29).

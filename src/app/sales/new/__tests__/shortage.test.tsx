@@ -28,6 +28,8 @@ const PROFILE: Profile = {
     phone: null,
     address: null,
     tagline: null,
+  tax_id: null,
+  logo: null,
     currency: 'FCFA',
   },
   role: 'OWNER',

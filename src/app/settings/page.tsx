@@ -5,6 +5,7 @@ import { KeyRound, Store } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Button, Card, CardHead, Notice, TextField } from '@/components/ui';
 import ExportsCard from '@/components/settings/ExportsCard';
+import LogoField from '@/components/settings/LogoField';
 import ZoneDeDanger from '@/components/settings/ZoneDeDanger';
 import { api } from '@/client/api';
 import { useSession } from '@/client/session';
@@ -26,6 +27,7 @@ export default function SettingsPage() {
     tagline: business?.tagline || '',
     phone: business?.phone || '',
     address: business?.address || '',
+    taxId: business?.tax_id || '',
     currency: business?.currency || 'FCFA',
   }));
   const [state, setState] = useState<{ busy: boolean; error: string | null; saved: boolean }>({
@@ -98,6 +100,15 @@ export default function SettingsPage() {
                 onChange={set('phone')}
                 disabled={!isOwner}
               />
+              <TextField
+                label="Numéro fiscal (IFU / NIF)"
+                placeholder="1000123456789"
+                hint="Imprimé sur les factures. Sans lui, une entreprise cliente ne peut pas passer votre facture en charge."
+                value={form.taxId}
+                onChange={set('taxId')}
+                disabled={!isOwner}
+              />
+              <LogoField disabled={!isOwner} />
               <TextField
                 label="Devise"
                 hint="Symbole affiché après les montants."

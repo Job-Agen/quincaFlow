@@ -154,6 +154,8 @@ export interface OrderDocumentBusiness {
   tagline?: string | null;
   address?: string | null;
   phone?: string | null;
+  /** Le numéro fiscal, que le fournisseur recopie sur sa propre facture (§51). */
+  tax_id?: string | null;
 }
 
 /**

@@ -118,7 +118,7 @@ export async function profile(session: Session): Promise<Profile> {
   const sql = getSql();
   const [userResult, businessResult] = await Promise.all([
     sql`SELECT id, name, email, phone FROM users WHERE id = ${session.userId}`,
-    sql`SELECT id, name, phone, address, tagline, currency
+    sql`SELECT id, name, phone, address, tagline, tax_id, logo, currency
           FROM businesses WHERE id = ${session.businessId}`,
   ]);
   const user = one<UserRow>(userResult);
@@ -269,6 +269,37 @@ export async function deleteBusiness(
   return { ...poids, accountsRemoved: orphelins.length };
 }
 
+/**
+ * Le logo de la boutique, en `data:` URL (§51).
+ *
+ * Même choix que pour les justificatifs de dépense (§40) : faute de stockage
+ * d'objets, l'image vit dans la base. Elle est bornée — un logo s'affiche à
+ * deux centimètres en tête d'une facture, il n'a pas besoin d'être lourd — et
+ * ces bornes sont ici, non dans l'écran : un navigateur n'est pas un garde-fou.
+ */
+const LOGO_PREFIXES = ['data:image/png;base64,', 'data:image/jpeg;base64,', 'data:image/webp;base64,'];
+const LOGO_MAX_LENGTH = 400_000;
+
+/** Range ou retire le logo. Chaîne vide : le gérant l'enlève. */
+export async function updateLogo(session: Session, body: Record<string, unknown>) {
+  const image = typeof body.image === 'string' ? body.image.trim() : '';
+
+  if (image) {
+    if (!LOGO_PREFIXES.some((prefix) => image.startsWith(prefix))) {
+      throw badRequest('Le logo doit être une image (PNG, JPEG ou WebP).');
+    }
+    if (image.length > LOGO_MAX_LENGTH) {
+      throw badRequest('Logo trop lourd. Choisissez une image plus petite.');
+    }
+  }
+
+  await getSql()`
+    UPDATE businesses SET logo = ${image || null}, updated_at = now()
+     WHERE id = ${session.businessId}
+  `;
+  return profile(session);
+}
+
 /** Coordonnées de la boutique — elles figurent en tête des factures (§15). */
 export async function updateBusiness(session: Session, body: Record<string, unknown>) {
   await getSql()`
@@ -277,6 +308,7 @@ export async function updateBusiness(session: Session, body: Record<string, unkn
            tagline = ${str(body.tagline, 'slogan', { required: false, max: 160 })},
            phone = ${str(body.phone, 'téléphone', { required: false, max: 40 })},
            address = ${str(body.address, 'adresse', { required: false, max: 300 })},
+           tax_id = ${str(body.taxId, 'numéro fiscal', { required: false, max: 40 })},
            currency = ${str(body.currency, 'devise', { required: false, max: 10 }) || 'FCFA'},
            updated_at = now()
      WHERE id = ${session.businessId}

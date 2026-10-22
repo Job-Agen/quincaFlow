@@ -141,6 +141,7 @@ export function purchaseOrderHtml(
     ${business?.tagline ? `<div class="meta">${texte(business.tagline)}</div>` : ''}
     ${business?.address ? `<div class="meta">${texte(business.address)}</div>` : ''}
     ${business?.phone ? `<div class="meta">Tél : ${texte(business.phone)}</div>` : ''}
+    ${business?.tax_id ? `<div class="meta">IFU / NIF : ${texte(business.tax_id)}</div>` : ''}
   </div>
 
   <h1>${texte(titre)}</h1>

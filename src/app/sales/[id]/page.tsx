@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { Printer, Share2, Store, XCircle, FileDown, MessageCircle } from 'lucide-react';
+import { Printer, Share2, XCircle, FileDown, MessageCircle } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Notice, Sheet, Skeleton, TextField } from '@/components/ui';
 import { api } from '@/client/api';
@@ -10,6 +10,7 @@ import { useSession } from '@/client/session';
 import { PAYMENT_STATUS_LABELS, paymentLabel } from '@/domain/sale';
 import { amount, dateTime, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
+import Letterhead from '@/components/documents/Letterhead';
 import type { Sale } from '@/types';
 
 /**
@@ -94,19 +95,7 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
             ) : null}
 
             <article className={`invoice${cancelled ? ' invoice--cancelled' : ''}`}>
-              <div className="invoice__brand">
-                <Store size={30} />
-                <span className="invoice__name">{business?.name}</span>
-                {business?.tagline ? (
-                  <span className="invoice__meta">{business.tagline}</span>
-                ) : null}
-                {business?.address ? (
-                  <span className="invoice__meta">{business.address}</span>
-                ) : null}
-                {business?.phone ? (
-                  <span className="invoice__meta">Tél : {business.phone}</span>
-                ) : null}
-              </div>
+              <Letterhead business={business} />
 
               <h2 className="invoice__title">FACTURE</h2>
 
