@@ -11,6 +11,7 @@ import {
   HandCoins,
   Store,
   TrendingUp,
+  Truck,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
@@ -39,6 +40,8 @@ interface Tile {
   money?: boolean;
   /** Une tuile qui mène quelque part devient un lien. */
   href?: string;
+  /** Vrai : la tuile révèle des prix d'achat, et n'est pas pour un vendeur (§5). */
+  ownerOnly?: boolean;
 }
 
 /**
@@ -67,6 +70,15 @@ const TILES: readonly Tile[] = [
     href: '/customers',
   },
   {
+    key: 'supplierDebt',
+    label: 'Dettes fournisseurs',
+    tone: 'violet',
+    icon: Truck,
+    money: true,
+    href: '/purchases',
+    ownerOnly: true,
+  },
+  {
     key: 'lowStockCount',
     label: 'Produits en stock faible',
     tone: 'amber',
@@ -76,7 +88,7 @@ const TILES: readonly Tile[] = [
 ];
 
 export default function DashboardPage() {
-  const { business, currency } = useSession();
+  const { business, currency, isOwner } = useSession();
   const { data, loading, error } = useResource<DashboardSummary>('/api/dashboard');
 
   return (
@@ -113,34 +125,36 @@ export default function DashboardPage() {
         {data ? (
           <>
             <div className="tiles">
-              {TILES.map(({ key, label, tone, icon: Icon, money: isMoney, href }) => {
-                // Une tuile cliquable est un vrai lien, pas un bloc habillé en
-                // lien : c'est ce qui la rend atteignable au clavier et annoncée
-                // comme telle par un lecteur d'écran.
-                const value = data[key];
-                const body = (
-                  <>
-                    <span className="tile__label">
-                      {label}
-                      <Icon size={16} />
-                    </span>
-                    <span className="tile__value num">
-                      {isMoney ? amount(value, 0) : String(value)}
-                    </span>
-                    {isMoney ? <span className="tile__unit">{currency}</span> : null}
-                  </>
-                );
-                const className = `tile tile--${tone}`;
-                return href ? (
-                  <Link key={key} href={href} className={className}>
-                    {body}
-                  </Link>
-                ) : (
-                  <div key={key} className={className}>
-                    {body}
-                  </div>
-                );
-              })}
+              {TILES.filter((tile) => isOwner || !tile.ownerOnly).map(
+                ({ key, label, tone, icon: Icon, money: isMoney, href }) => {
+                  // Une tuile cliquable est un vrai lien, pas un bloc habillé en
+                  // lien : c'est ce qui la rend atteignable au clavier et annoncée
+                  // comme telle par un lecteur d'écran.
+                  const value = data[key];
+                  const body = (
+                    <>
+                      <span className="tile__label">
+                        {label}
+                        <Icon size={16} />
+                      </span>
+                      <span className="tile__value num">
+                        {isMoney ? amount(value, 0) : String(value)}
+                      </span>
+                      {isMoney ? <span className="tile__unit">{currency}</span> : null}
+                    </>
+                  );
+                  const className = `tile tile--${tone}`;
+                  return href ? (
+                    <Link key={key} href={href} className={className}>
+                      {body}
+                    </Link>
+                  ) : (
+                    <div key={key} className={className}>
+                      {body}
+                    </div>
+                  );
+                }
+              )}
             </div>
 
             {/* La semaine, puis le palmarès : « est-ce que ça monte ? » et

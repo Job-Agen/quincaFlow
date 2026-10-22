@@ -38,7 +38,7 @@ const ENTRY_LIMIT = 300;
 interface CashRow {
   id: string;
   direction: 'IN' | 'OUT';
-  kind: 'SALE_PAYMENT' | 'INCOME' | 'EXPENSE';
+  kind: 'SALE_PAYMENT' | 'INCOME' | 'EXPENSE' | 'SUPPLIER_PAYMENT';
   occurred_at: string;
   label: string;
   /** Moyen de paiement ou poste de dépense, à traduire en libellé lisible. */
@@ -62,6 +62,11 @@ function detailOf(row: CashRow): string {
   }
   if (row.kind === 'INCOME') {
     return INCOME_CATEGORY_LABELS[row.code as IncomeCategory] ?? 'Divers';
+  }
+  if (row.kind === 'SUPPLIER_PAYMENT') {
+    // Même lecture qu'un encaissement : c'est le même moyen de paiement, dans
+    // l'autre sens (§53).
+    return paymentLabel(row.code as PaymentMethod, row.provider as MobileMoneyProvider | null);
   }
   return EXPENSE_CATEGORY_LABELS[row.code as ExpenseCategory] ?? 'Divers';
 }
@@ -123,6 +128,23 @@ export async function cashJournal(
          AND (${toDate}::date IS NULL OR i.received_on <= ${toDate})
 
       UNION ALL
+      -- Le règlement d'une commande fournisseur (§53). Il sort bien du tiroir :
+      -- ne pas l'y voir faisait croire à une caisse plus pleine qu'elle n'est,
+      -- le jour précisément où elle venait de se vider. Il n'entre pas pour
+      -- autant au compte de résultat (§39) — la marchandise y est déjà comptée
+      -- par son coût d'achat, et l'y remettre la compterait deux fois.
+      SELECT sp.id, 'OUT', 'SUPPLIER_PAYMENT',
+             sp.created_at,
+             COALESCE('Règlement ' || o.reference, 'Règlement fournisseur'),
+             sp.method, sp.provider, sp.amount::float8,
+             o.reference, NULL
+        FROM supplier_payments sp
+        JOIN purchase_orders o ON o.id = sp.purchase_order_id
+       WHERE sp.business_id = ${businessId}
+         AND (${from}::timestamptz IS NULL OR sp.created_at >= ${from})
+         AND (${to}::timestamptz IS NULL OR sp.created_at <= ${to})
+
+      UNION ALL
       -- La dépense est datée du jour où l'argent est sorti, et l'heure de saisie
       -- ne sert qu'à départager deux dépenses du même jour.
       SELECT e.id, 'OUT', 'EXPENSE',
@@ -153,7 +175,13 @@ export async function cashJournal(
               FROM expenses e
              WHERE e.business_id = ${businessId}
                AND (${fromDate}::date IS NULL OR e.spent_on >= ${fromDate})
-               AND (${toDate}::date IS NULL OR e.spent_on <= ${toDate})) AS cash_out
+               AND (${toDate}::date IS NULL OR e.spent_on <= ${toDate}))
+           + (SELECT COALESCE(SUM(sp.amount), 0)::float8
+                FROM supplier_payments sp
+                JOIN purchase_orders o ON o.id = sp.purchase_order_id
+               WHERE sp.business_id = ${businessId}
+                 AND (${from}::timestamptz IS NULL OR sp.created_at >= ${from})
+                 AND (${to}::timestamptz IS NULL OR sp.created_at <= ${to})) AS cash_out
       FROM payments p
       JOIN sales s ON s.id = p.sale_id
      WHERE p.business_id = ${businessId}

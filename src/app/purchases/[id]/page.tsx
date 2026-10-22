@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
-import { ExternalLink, FileText, PackageCheck, Paperclip, Share2 } from 'lucide-react';
+import { ExternalLink, FileText, PackageCheck, Paperclip, Share2, Wallet } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import {
   Badge,
@@ -29,6 +29,8 @@ import {
   purchaseOrderMessage,
   remainingOf,
 } from '@/domain/purchase';
+import { paymentLabel } from '@/domain/sale';
+import SupplierPaymentSheet from '@/components/purchases/SupplierPaymentSheet';
 import { amount, dateTime, shortDate, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type { PurchaseOrder, PurchaseOrderItemRow, PurchaseOrderStatus } from '@/types';
@@ -47,6 +49,7 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
     `/api/purchase-orders/${id}`
   );
   const [receiving, setReceiving] = useState(false);
+  const [paying, setPaying] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [issue, setIssue] = useState<string | null>(null);
 
@@ -123,6 +126,70 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                 <Badge tone={PO_STATUS_TONES[data.status]}>{PO_STATUS_LABELS[data.status]}</Badge>
               </div>
             </Card>
+
+            {/* Ce qui est livré, ce qui est réglé, ce qui reste (§53). La
+              carte n'apparaît qu'une fois quelque chose livré : avant, il n'y a
+              rien à payer, et un « 0 reste dû » se lirait comme une commande
+              gratuite. Propriétaire seulement — ces montants sont des prix
+              d'achat (§5). */}
+            {isOwner && data.received > 0 ? (
+              <Card pad className="order-meta">
+                <CardHead title="Règlement" />
+                <div className="total-line">
+                  <span className="muted">Livré à ce jour</span>
+                  <strong className="num">{money(data.received, currency)}</strong>
+                </div>
+                <div className="total-line">
+                  <span className="muted">Déjà réglé</span>
+                  <span className="num">{money(data.amount_paid, currency)}</span>
+                </div>
+                <div className="total-line total-line--grand">
+                  <span>Reste à payer</span>
+                  <strong className="num">{money(data.balance, currency)}</strong>
+                </div>
+
+                {data.payments.length > 0 ? (
+                  <div className="list">
+                    {data.payments.map((versement) => (
+                      <div key={versement.id} className="list__row">
+                        <div className="list__body">
+                          <div className="list__title">
+                            {paymentLabel(versement.method, versement.provider)}
+                          </div>
+                          <div className="list__sub">
+                            {dateTime(versement.created_at)}
+                            {versement.note ? ` · ${versement.note}` : ''}
+                          </div>
+                        </div>
+                        <strong className="num">{money(versement.amount, currency)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {data.balance > 0 && data.status !== 'CANCELLED' ? (
+                  <Button variant="soft" block onClick={() => setPaying(true)}>
+                    <Wallet size={18} />
+                    Enregistrer un règlement
+                  </Button>
+                ) : (
+                  <p className="small muted">Cette commande est soldée.</p>
+                )}
+              </Card>
+            ) : null}
+
+            {paying && data ? (
+              <SupplierPaymentSheet
+                orderId={data.id}
+                owed={data.balance}
+                currency={currency}
+                onClose={() => setPaying(false)}
+                onSaved={(order) => {
+                  setData(order);
+                  setPaying(false);
+                }}
+              />
+            ) : null}
 
             <Card>
               <div className="table-wrap">

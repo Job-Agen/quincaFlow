@@ -95,8 +95,8 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       TRUNCATE users, businesses, business_members, refresh_tokens, counters, login_attempts,
         products, product_units, customers, suppliers, sales, sale_items, payments,
         out_of_stock_sales, purchase_orders, purchase_order_items,
-        purchase_receipts, purchase_receipt_items, stock_movements, documents, expenses,
-        incomes
+        purchase_receipts, purchase_receipt_items, supplier_payments,
+        stock_movements, documents, expenses, incomes
       RESTART IDENTITY CASCADE
     `);
     await pool.query(
@@ -532,6 +532,177 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       // Une sauvegarde se range dans un dossier « Téléchargements » : elle ne
       // doit pas transporter de quoi se connecter.
       expect(JSON.stringify(sauvegarde)).not.toContain('password_hash');
+    });
+  });
+
+  // ────────────────────── Dettes fournisseurs (§53) ────────────────────
+
+  describe('dettes fournisseurs (§53)', () => {
+    /** Une commande de 400 vitres à 320, livrée à hauteur de `recu`. */
+    async function seedCommande(recu = 0) {
+      const vitre = await seedVitre();
+      await pool.query(
+        "INSERT INTO suppliers (id, business_id, name) VALUES ('sup_1', $1, 'Bâtir Plus')",
+        [OWNER.businessId]
+      );
+      let order = await purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_1',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 400, unitCost: 320 }],
+      });
+      if (recu > 0) {
+        order = await purchases.receivePurchaseOrder(OWNER, order.id, {
+          lines: [{ itemId: order.items[0]!.id, quantity: recu }],
+        });
+      }
+      return order;
+    }
+
+    it('ne doit rien sur une commande que personne n’a livrée', async () => {
+      const order = await seedCommande();
+      // 128 000 commandés, zéro arrivé : commander n'est pas devoir.
+      expect(order.total_estimated).toBe(128000);
+      expect(order.received).toBe(0);
+      expect(order.balance).toBe(0);
+      expect(await purchases.supplierDebts(OWNER.businessId)).toHaveLength(0);
+    });
+
+    it('ne doit que ce qui est arrivé', async () => {
+      const order = await seedCommande(150);
+      // 150 vitres à 320 : 48 000 dus, pas les 128 000 de la commande.
+      expect(order.received).toBe(48000);
+      expect(order.balance).toBe(48000);
+    });
+
+    it('refuse de régler une commande dont rien n’est livré', async () => {
+      const order = await seedCommande();
+      await expect(
+        purchases.recordSupplierPayment(OWNER, order.id, { amount: 1000 })
+      ).rejects.toThrow(/livré/i);
+    });
+
+    it('enregistre un acompte et laisse le reste dû', async () => {
+      const commande = await seedCommande(150);
+      const order = await purchases.recordSupplierPayment(OWNER, commande.id, {
+        amount: 20000,
+        method: 'MOBILE_MONEY',
+        provider: 'FLOOZ',
+        note: 'Acompte livraison',
+      });
+
+      expect(order.amount_paid).toBe(20000);
+      expect(order.balance).toBe(28000);
+      expect(order.payments).toHaveLength(1);
+      expect(order.payments[0]).toMatchObject({
+        amount: 20000,
+        method: 'MOBILE_MONEY',
+        provider: 'FLOOZ',
+        note: 'Acompte livraison',
+      });
+    });
+
+    it('cumule les règlements successifs', async () => {
+      const commande = await seedCommande(150);
+      await purchases.recordSupplierPayment(OWNER, commande.id, { amount: 20000 });
+      const order = await purchases.recordSupplierPayment(OWNER, commande.id, { amount: 28000 });
+
+      expect(order.amount_paid).toBe(48000);
+      expect(order.balance).toBe(0);
+      expect(order.payments).toHaveLength(2);
+    });
+
+    it('refuse un règlement qui dépasse le livré', async () => {
+      const commande = await seedCommande(150);
+      await expect(
+        purchases.recordSupplierPayment(OWNER, commande.id, { amount: 48001 })
+      ).rejects.toThrow(/dépasse/i);
+    });
+
+    it('refuse de régler deux fois la même commande soldée', async () => {
+      const commande = await seedCommande(150);
+      await purchases.recordSupplierPayment(OWNER, commande.id, { amount: 48000 });
+      await expect(
+        purchases.recordSupplierPayment(OWNER, commande.id, { amount: 1 })
+      ).rejects.toThrow(/soldée/i);
+    });
+
+    it('refuse de régler une commande annulée', async () => {
+      // Une commande déjà livrée ne peut plus être annulée : celle-ci est donc
+      // annulée avant toute livraison, et c'est le seul cas qui existe.
+      const commande = await seedCommande();
+      await purchases.updatePurchaseOrderStatus(OWNER, commande.id, { status: 'CANCELLED' });
+      await expect(
+        purchases.recordSupplierPayment(OWNER, commande.id, { amount: 1000 })
+      ).rejects.toThrow(/annulée/i);
+    });
+
+    it('regroupe la dette par fournisseur, pas par commande', async () => {
+      const premiere = await seedCommande(150);
+      await purchases.recordSupplierPayment(OWNER, premiere.id, { amount: 8000 });
+      const vitre = (await products.listProducts(OWNER.businessId, {}))[0]!;
+      const seconde = await purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_1',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 100, unitCost: 300 }],
+      });
+      await purchases.receivePurchaseOrder(OWNER, seconde.id, {
+        lines: [{ itemId: seconde.items[0]!.id, quantity: 100 }],
+      });
+
+      // 40 000 encore dus sur la première, 30 000 sur la seconde : c'est au
+      // fournisseur qu'on paie, et c'est lui qui réclame.
+      expect(await purchases.supplierDebts(OWNER.businessId)).toEqual([
+        { id: 'sup_1', name: 'Bâtir Plus', owed: 70000, orders: 2 },
+      ]);
+    });
+
+    it('sort un fournisseur soldé de la liste des dettes', async () => {
+      const commande = await seedCommande(150);
+      await purchases.recordSupplierPayment(OWNER, commande.id, { amount: 48000 });
+      // Un fournisseur à zéro n'a rien à faire dans une liste de dettes.
+      expect(await purchases.supplierDebts(OWNER.businessId)).toHaveLength(0);
+    });
+
+    it('ne doit rien sur une commande annulée', async () => {
+      const commande = await seedCommande();
+      await purchases.updatePurchaseOrderStatus(OWNER, commande.id, { status: 'CANCELLED' });
+      expect(await purchases.supplierDebts(OWNER.businessId)).toHaveLength(0);
+      expect((await dashboard.dashboard(OWNER.businessId, true)).supplierDebt).toBe(0);
+    });
+
+    it('fait sortir le règlement de la caisse', async () => {
+      const commande = await seedCommande(150);
+      await purchases.recordSupplierPayment(OWNER, commande.id, {
+        amount: 20000,
+        method: 'MOBILE_MONEY',
+        provider: 'TMONEY',
+      });
+
+      const journal = await cash.cashJournal(OWNER.businessId);
+      const sortie = journal.entries.find((ligne) => ligne.kind === 'SUPPLIER_PAYMENT');
+
+      // Ne pas l'y voir ferait croire à une caisse plus pleine qu'elle n'est,
+      // le jour précisément où elle vient de se vider.
+      expect(sortie).toMatchObject({
+        direction: 'OUT',
+        amount: 20000,
+        detail: 'Mobile Money · T-Money',
+      });
+      expect(journal.cashOut).toBe(20000);
+    });
+
+    it('chiffre la dette fournisseur au tableau de bord, pour le propriétaire', async () => {
+      await seedCommande(150);
+      expect((await dashboard.dashboard(OWNER.businessId, true)).supplierDebt).toBe(48000);
+      // Un vendeur ne reçoit pas ce chiffre : il porte des prix d'achat (§5).
+      expect((await dashboard.dashboard(OWNER.businessId, false)).supplierDebt).toBe(0);
+    });
+
+    it('ne laisse pas voir la dette du voisin', async () => {
+      const commande = await seedCommande(150);
+      expect(await purchases.supplierDebts(RIVAL.businessId)).toHaveLength(0);
+      expect((await dashboard.dashboard(RIVAL.businessId, true)).supplierDebt).toBe(0);
+      await expect(
+        purchases.recordSupplierPayment(RIVAL, commande.id, { amount: 1000 })
+      ).rejects.toThrow(/introuvable/i);
     });
   });
 

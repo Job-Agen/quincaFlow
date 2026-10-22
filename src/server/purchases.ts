@@ -6,6 +6,8 @@ import { round2, round3 } from '../utils/money';
 import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
 import { findUnit, weightedAverageCost } from '../domain/units';
+import { orderBalance, receivedValue, tooMuch } from '../domain/supplierDebt';
+import { MOBILE_MONEY_PROVIDERS, PAYMENT_METHODS, providerFor } from '../domain/sale';
 import type {
   DocumentRow,
   PurchaseOrder,
@@ -13,6 +15,8 @@ import type {
   PurchaseOrderRow,
   PurchaseReceiptRow,
   Session,
+  SupplierDebt,
+  SupplierPaymentRow,
 } from '@/types';
 import {
   DOCUMENT_KINDS,
@@ -33,7 +37,8 @@ import {
 
 const ORDER_COLUMNS = `
   id, business_id, reference, supplier_id, supplier_name, status,
-  total_estimated::float8 AS total_estimated, notes, created_at, updated_at
+  total_estimated::float8 AS total_estimated,
+  amount_paid::float8 AS amount_paid, notes, created_at, updated_at
 `;
 
 const ITEM_COLUMNS = `
@@ -74,7 +79,7 @@ export async function getPurchaseOrder(
   );
   if (!order) throw notFound('Commande introuvable.');
 
-  const [itemResult, receiptResult, documentResult] = await Promise.all([
+  const [itemResult, receiptResult, documentResult, paymentResult] = await Promise.all([
     sql`SELECT ${sql.unsafe(ITEM_COLUMNS)} FROM purchase_order_items
          WHERE purchase_order_id = ${orderId} AND business_id = ${businessId}
          ORDER BY position`,
@@ -85,13 +90,23 @@ export async function getPurchaseOrder(
          WHERE business_id = ${businessId}
            AND reference_type = 'PURCHASE_ORDER' AND reference_id = ${orderId}
          ORDER BY created_at`,
+    sql`SELECT id, amount::float8 AS amount, method, provider, note, created_at
+          FROM supplier_payments
+         WHERE business_id = ${businessId} AND purchase_order_id = ${orderId}
+         ORDER BY created_at DESC`,
   ]);
 
+  const items = rows<PurchaseOrderItemRow>(itemResult);
   return {
     ...order,
-    items: rows<PurchaseOrderItemRow>(itemResult),
+    items,
     receipts: rows<PurchaseReceiptRow>(receiptResult),
     documents: rows<DocumentRow>(documentResult),
+    payments: rows<SupplierPaymentRow>(paymentResult),
+    // Ce qui est livré, et ce qui reste à payer dessus : le calcul vit ici et
+    // non dans l'écran, pour que le téléphone et le web disent le même chiffre.
+    received: receivedValue(items),
+    balance: orderBalance(receivedValue(items), order.amount_paid),
   };
 }
 
@@ -384,4 +399,106 @@ export async function receivePurchaseOrder(
 
   await runTransaction(queries);
   return getPurchaseOrder(session.businessId, orderId);
+}
+
+/**
+ * Enregistre un règlement au fournisseur (§53).
+ *
+ * Trois garde-fous, et chacun répond à une erreur réelle :
+ *
+ * — **On ne règle que ce qui est arrivé.** Payer d'avance une commande non
+ *   livrée est une avance, pas un règlement, et le §53 ne traite pas les
+ *   avances. Le plafond est donc la valeur du livré, non le total commandé.
+ * — **Le dépassement est refusé, ici et pas seulement à l'écran** : deux
+ *   vendeurs peuvent régler la même commande en même temps.
+ * — **Une commande annulée ne se règle pas.** Elle n'a rien livré, ou ce
+ *   qu'elle a livré a été repris.
+ */
+export async function recordSupplierPayment(
+  session: Session,
+  orderId: string,
+  body: Record<string, unknown>
+): Promise<PurchaseOrder> {
+  const order = await getPurchaseOrder(session.businessId, orderId);
+  if (order.status === 'CANCELLED') {
+    throw conflict('Cette commande est annulée : il n’y a rien à régler.');
+  }
+
+  const amount = round2(num(body.amount, 'montant', { min: 0.01 }));
+  const method = enumValue(body.method || 'CASH', 'moyen de paiement', PAYMENT_METHODS);
+  const provider = providerFor(
+    method,
+    body.provider ? enumValue(body.provider, 'opérateur', MOBILE_MONEY_PROVIDERS) : null
+  );
+  const note = str(body.note, 'motif', { required: false, max: 300 });
+
+  if (order.balance <= 0) {
+    throw conflict(
+      order.received > 0
+        ? 'Cette commande est déjà soldée.'
+        : 'Rien n’a encore été livré sur cette commande : il n’y a rien à régler.'
+    );
+  }
+  if (tooMuch(amount, order.balance)) {
+    throw conflict(
+      `Le règlement dépasse ce qui reste dû : il reste ${order.balance.toLocaleString('fr-FR')} à payer.`
+    );
+  }
+
+  const sql = getSql();
+  await runTransaction([
+    sql`
+      UPDATE purchase_orders
+         SET amount_paid = amount_paid + ${amount}, updated_at = now()
+       WHERE id = ${orderId} AND business_id = ${session.businessId}
+    `,
+    sql`
+      INSERT INTO supplier_payments (
+        id, business_id, purchase_order_id, method, provider, amount, note, user_id
+      )
+      VALUES (${newId('spay')}, ${session.businessId}, ${orderId}, ${method},
+              ${provider}, ${amount}, ${note}, ${session.userId})
+    `,
+  ]);
+
+  return getPurchaseOrder(session.businessId, orderId);
+}
+
+/**
+ * Ce qui reste dû à chaque fournisseur (§53).
+ *
+ * Agrégé par fournisseur et non par commande : c'est au fournisseur qu'on paie,
+ * et c'est lui qui réclame. Les commandes soldées n'y figurent pas — un
+ * fournisseur à zéro n'a rien à faire dans une liste de dettes.
+ *
+ * Les commandes annulées ne sont pas écartées, et n'ont pas à l'être : une
+ * commande déjà livrée ne peut plus être annulée, donc une commande annulée n'a
+ * rien reçu et ne doit rien. Un filtre de statut ici ferait croire à une règle
+ * qui n'existe pas.
+ *
+ * Le dû d'une commande se calcule en SQL sur ses lignes reçues, pour la même
+ * raison que le reste : une somme faite sur les quelques commandes affichées ne
+ * serait pas la dette, mais le total de l'écran.
+ */
+export async function supplierDebts(businessId: string): Promise<SupplierDebt[]> {
+  return rows<SupplierDebt>(
+    await getSql()`
+      WITH livre AS (
+        SELECT o.id, o.supplier_id, o.supplier_name, o.amount_paid::float8 AS paid,
+               COALESCE(SUM(i.quantity_received * i.unit_cost), 0)::float8 AS received
+          FROM purchase_orders o
+          LEFT JOIN purchase_order_items i ON i.purchase_order_id = o.id
+         WHERE o.business_id = ${businessId}
+         GROUP BY o.id, o.supplier_id, o.supplier_name, o.amount_paid
+      )
+      SELECT COALESCE(supplier_name, 'Fournisseur inconnu') AS name,
+             supplier_id AS id,
+             SUM(GREATEST(received - paid, 0))::float8 AS owed,
+             COUNT(*) FILTER (WHERE received - paid > 0)::int AS orders
+        FROM livre
+       GROUP BY supplier_id, supplier_name
+      HAVING SUM(GREATEST(received - paid, 0)) > 0
+       ORDER BY owed DESC
+    `
+  );
 }

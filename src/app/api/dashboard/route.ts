@@ -5,6 +5,6 @@ import { dashboard } from '../../../server/dashboard';
 export async function GET() {
   return handle(async () => {
     const session = await requireAuth();
-    return json(await dashboard(session.businessId));
+    return json(await dashboard(session.businessId, session.role === 'OWNER'));
   });
 }

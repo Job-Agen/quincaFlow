@@ -41,12 +41,31 @@ function week(): { from: string } {
   return { from: from.toISOString() };
 }
 
-export async function dashboard(businessId: string): Promise<DashboardSummary> {
+/**
+ * @param isOwner Vrai : le résumé porte la dette fournisseur, qui révèle les
+ *   prix d'achat. Un vendeur reçoit zéro — la valeur n'est pas masquée à
+ *   l'écran mais absente de la réponse, parce qu'un écran n'est pas un
+ *   garde-fou (§5).
+ */
+export async function dashboard(
+  businessId: string,
+  isOwner = false
+): Promise<DashboardSummary> {
   const sql = getSql();
   const { start, end } = today();
   const { from: weekStart } = week();
 
-  const [salesRow, oosRow, recentSales, recentOos, lowStock, weekRows, topRows, owedRow] =
+  const [
+    salesRow,
+    oosRow,
+    recentSales,
+    recentOos,
+    lowStock,
+    weekRows,
+    topRows,
+    owedRow,
+    supplierRow,
+  ] =
     await Promise.all([
       sql`
       SELECT COUNT(*)::int AS count,
@@ -124,6 +143,21 @@ export async function dashboard(businessId: string): Promise<DashboardSummary> {
         FROM sales
        WHERE business_id = ${businessId} AND status = 'COMPLETED' AND amount_paid < total
     `,
+
+      // Et ce que la boutique doit, elle, à ses fournisseurs (§53). Seul le
+      // livré compte : une commande passée n'engage pas un paiement — et une
+      // commande annulée n'a rien pu recevoir, elle ne doit donc rien.
+      sql`
+      SELECT COALESCE(SUM(GREATEST(livre.received - livre.paid, 0)), 0)::float8 AS owed
+        FROM (
+          SELECT o.amount_paid::float8 AS paid,
+                 COALESCE(SUM(i.quantity_received * i.unit_cost), 0)::float8 AS received
+            FROM purchase_orders o
+            LEFT JOIN purchase_order_items i ON i.purchase_order_id = o.id
+           WHERE o.business_id = ${businessId}
+           GROUP BY o.id, o.amount_paid
+        ) AS livre
+    `,
     ]);
 
   const sales = one<{ count: number; revenue: number; cost: number }>(salesRow) ?? {
@@ -146,6 +180,7 @@ export async function dashboard(businessId: string): Promise<DashboardSummary> {
     .slice(0, 8);
 
   const owed = one<{ owed: number; customers: number }>(owedRow) ?? { owed: 0, customers: 0 };
+  const supplier = one<{ owed: number }>(supplierRow) ?? { owed: 0 };
 
   return {
     revenue: round2(sales.revenue),
@@ -166,5 +201,6 @@ export async function dashboard(businessId: string): Promise<DashboardSummary> {
     })),
     receivables: round2(owed.owed),
     debtorCount: owed.customers,
+    supplierDebt: isOwner ? round2(supplier.owed) : 0,
   };
 }

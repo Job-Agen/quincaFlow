@@ -288,6 +288,10 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   supplier_name text,
   status        text NOT NULL DEFAULT 'DRAFT',
   total_estimated numeric(14, 2) NOT NULL DEFAULT 0,
+  -- Ce qui a déjà été réglé au fournisseur sur cette commande (§53). Miroir de
+  -- `sales.amount_paid` : la dette fournisseur est l'ardoise du §45 vue de
+  -- l'autre côté du comptoir.
+  amount_paid   numeric(14, 2) NOT NULL DEFAULT 0,
   notes         text,
   user_id       text REFERENCES users (id) ON DELETE SET NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
@@ -334,6 +338,29 @@ CREATE TABLE IF NOT EXISTS purchase_receipts (
 );
 
 CREATE INDEX IF NOT EXISTS receipts_order_idx ON purchase_receipts (purchase_order_id);
+
+-- Un règlement au fournisseur (§53).
+--
+-- Table distincte de `payments`, qui porte les encaissements : ce sont deux
+-- sens opposés, et les mélanger obligerait chaque lecture du journal de caisse
+-- à vérifier de quel côté elle se trouve. Les colonnes sont les mêmes, à
+-- dessein : un règlement se saisit comme un encaissement.
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id                text PRIMARY KEY,
+  business_id       text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
+  purchase_order_id text NOT NULL REFERENCES purchase_orders (id) ON DELETE CASCADE,
+  method            text NOT NULL DEFAULT 'CASH',
+  provider          text,
+  amount            numeric(14, 2) NOT NULL,
+  note              text,
+  user_id           text REFERENCES users (id) ON DELETE SET NULL,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS supplier_payments_order_idx
+  ON supplier_payments (purchase_order_id);
+CREATE INDEX IF NOT EXISTS supplier_payments_business_date_idx
+  ON supplier_payments (business_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS purchase_receipt_items (
   id                     text PRIMARY KEY,

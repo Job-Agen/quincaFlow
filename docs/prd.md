@@ -2222,3 +2222,77 @@ un seul ne se filtre pas.
 4. Le filtre de rayon se combine à la recherche et aux filtres de stock.
 5. Les rayons d'une boutique ne sont jamais visibles d'une autre (§29).
 6. Le rayon figure dans l'inventaire exporté (§48).
+
+## 53. Ce que la boutique doit à ses fournisseurs
+
+**Objectif**
+
+Le §45 a donné au gérant le carnet de ses clients. Il lui manquait le même
+carnet de l'autre côté du comptoir : il prend sa livraison de ciment le lundi,
+règle la moitié tout de suite et le reste à la fin du mois — et l'application
+n'en gardait aucune trace.
+
+C'est pourtant l'argent qu'il doit mettre de côté avant de se croire riche
+d'une bonne journée de ventes. Une caisse pleine le soir d'une grosse
+livraison n'est pas un bénéfice : c'est une dette qui n'a pas encore été
+appelée.
+
+**F46 — On ne doit que ce qui est arrivé**
+
+La règle qui fait toute la différence avec la dette client. Une commande passée
+n'engage aucun paiement ; une commande livrée, si. La dette se calcule donc sur
+la valeur de ce qui a été **reçu**, aux prix de la commande, et non sur le total
+commandé.
+
+Sans cette règle, des centaines de milliers de francs apparaîtraient dus pour
+des sacs encore chez le fournisseur. Une livraison partielle n'engage que sa
+part — et c'est le cas le plus courant.
+
+Une commande annulée ne doit rien, et aucun filtre ne le lui impose : elle n'a
+rien pu recevoir, puisqu'une commande déjà livrée ne peut plus être annulée.
+
+**F47 — Le règlement**
+
+Saisi sur la commande, avec les mêmes gestes que le remboursement client
+(§45) : un montant, « tout solder » parce que c'est le cas le plus fréquent, le
+moyen de paiement et son opérateur (§50), un motif facultatif.
+
+Trois refus, et chacun arrête une erreur réelle : on ne règle pas ce qui n'est
+pas arrivé, on ne dépasse pas ce qui reste dû — vérifié par le serveur, parce
+que deux vendeurs peuvent régler la même commande en même temps —, et on ne
+règle pas une commande annulée.
+
+La carte n'apparaît qu'une fois quelque chose livré. Avant, il n'y a rien à
+payer, et un « 0 à payer » se lirait comme une commande gratuite.
+
+**F48 — Le règlement sort de la caisse**
+
+Le journal (§40) porte désormais ces sorties. Ne pas les y voir faisait croire
+à une caisse plus pleine qu'elle n'est, le jour précisément où elle venait de
+se vider.
+
+Elles n'entrent pas pour autant au compte de résultat (§39) : la marchandise y
+est déjà comptée par son coût d'achat, et l'y remettre la compterait deux fois.
+C'est la distinction que le §40 pose depuis le début — « où est passé
+l'argent ? » n'est pas « combien ai-je gagné ? ».
+
+**F49 — La dette au tableau de bord**
+
+Une tuile « Dettes fournisseurs », en regard des « Créances clients » (§49).
+Les deux chiffres se lisent ensemble : ce qu'on me doit, ce que je dois.
+
+Propriétaire seulement, et pas seulement à l'écran — le chiffre est absent de
+la réponse du serveur pour un vendeur. Il porte des prix d'achat (§5), et un
+écran n'est pas un garde-fou.
+
+**Critères d'acceptation**
+
+1. Une commande sans livraison ne doit rien, quel que soit son total.
+2. Une livraison partielle ne doit que sa part, aux prix de la commande.
+3. Un règlement qui dépasse le reste dû est refusé par le serveur.
+4. Les règlements d'une même commande se cumulent.
+5. Une commande soldée ou annulée ne se règle pas.
+6. La dette est agrégée par fournisseur ; un fournisseur soldé n'y figure plus.
+7. Le règlement apparaît en sortie du journal de caisse, jamais en entrée.
+8. Un vendeur ne reçoit pas la dette fournisseur.
+9. Rien de tout cela ne franchit la frontière d'une boutique (§29).

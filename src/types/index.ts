@@ -368,6 +368,24 @@ export interface PurchaseOrderItemRow {
   line_total: Money;
 }
 
+/** Un règlement au fournisseur, tel que la commande le montre (§53). */
+export interface SupplierPaymentRow {
+  id: string;
+  amount: Money;
+  method: PaymentMethod;
+  provider: MobileMoneyProvider | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** Ce qu'un fournisseur réclame encore, toutes commandes confondues (§53). */
+export interface SupplierDebt {
+  id: string | null;
+  name: string;
+  owed: Money;
+  orders: number;
+}
+
 export interface PurchaseOrderRow {
   id: string;
   business_id: string;
@@ -376,6 +394,8 @@ export interface PurchaseOrderRow {
   supplier_name: string | null;
   status: PurchaseOrderStatus;
   total_estimated: Money;
+  /** Ce qui a déjà été réglé au fournisseur sur cette commande (§53). */
+  amount_paid: Money;
   /** La colonne s'appelle `notes` au pluriel, contrairement aux ventes. */
   notes: string | null;
   created_at: string;
@@ -401,6 +421,11 @@ export interface PurchaseOrder extends PurchaseOrderRow {
   items: PurchaseOrderItemRow[];
   receipts: PurchaseReceiptRow[];
   documents: DocumentRow[];
+  payments: SupplierPaymentRow[];
+  /** Valeur de ce qui a réellement été livré, aux prix de la commande (§53). */
+  received: Money;
+  /** Ce qui reste dû dessus : le livré moins le réglé, jamais négatif (§53). */
+  balance: Money;
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +546,8 @@ export interface DashboardSummary {
   /** Ce que les clients doivent, toutes ventes non soldées confondues (§45). */
   receivables: Money;
   debtorCount: number;
+  /** Ce qui reste dû aux fournisseurs sur ce qui a été livré (§53). */
+  supplierDebt: Money;
 }
 
 // ---------------------------------------------------------------------------
@@ -722,8 +749,11 @@ export interface FinancialReport {
 export interface CashEntry {
   id: string;
   direction: 'IN' | 'OUT';
-  /** `SALE_PAYMENT` encaissement de vente, `INCOME` recette hors vente (§42), `EXPENSE` dépense. */
-  kind: 'SALE_PAYMENT' | 'INCOME' | 'EXPENSE';
+  /**
+   * `SALE_PAYMENT` encaissement de vente, `INCOME` recette hors vente (§42),
+   * `EXPENSE` dépense, `SUPPLIER_PAYMENT` règlement d'une commande (§53).
+   */
+  kind: 'SALE_PAYMENT' | 'INCOME' | 'EXPENSE' | 'SUPPLIER_PAYMENT';
   occurredAt: string;
   label: string;
   /** Moyen de paiement pour une entrée, poste de dépense pour une sortie. */
