@@ -1179,6 +1179,139 @@ select.input {
 }
 
 /* Seule la facture est imprimée : le reste de l'application disparaît. */
+/* ───────────────────── Pièces imprimées (§56) ──────────────────────── */
+/*
+ * Une facture, un bon de commande, un rapport : des documents, pas des écrans.
+ * Ce qui suit vaut partout — un bloc de totaux aligné à droite est utile sur un
+ * téléphone aussi — et `@media print` ne fait ensuite que ce qu'une feuille
+ * exige en propre : deux colonnes en tête, des filets, des couleurs calmes.
+ */
+
+.doc__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.doc__piece {
+  text-align: center;
+}
+
+.doc__champs {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 10px;
+  justify-content: center;
+  font-size: 13px;
+  margin: 0;
+}
+
+.doc__champs dt {
+  color: var(--muted);
+}
+
+.doc__champs dd {
+  margin: 0;
+  text-align: right;
+}
+
+/* Le client a son propre encadré : sur une facture, celui qui doit payer ne se
+   lit pas à la suite du numéro de pièce. */
+.doc__parties {
+  display: flex;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+/* Sur une feuille, le destinataire occupe une moitié : l'autre reste vide, et
+   c'est ce vide qui fait lire le bloc comme une adresse. */
+@media print {
+  html:not([data-ticket]) .doc .doc__parties {
+    max-width: 58%;
+  }
+}
+
+.doc__partie {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  flex: 1;
+  min-width: 0;
+}
+
+.doc__partie-titre {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* Le décompte : une colonne étroite collée à droite, où l'œil descend du
+   sous-total au reste dû sans jamais chercher la ligne suivante. */
+.doc__totaux {
+  margin-left: auto;
+  width: min(100%, 320px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+}
+
+.doc__ligne {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+  padding: 3px 0;
+}
+
+.doc__ligne--total {
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  margin: 4px 0;
+  padding: 7px 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.doc__ligne--du {
+  font-weight: 700;
+  color: var(--red);
+}
+
+.doc__lettres {
+  margin-top: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.doc__reglement {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+/* Le pied : les mentions qui ne se lisent qu'une fois, et seulement sur
+   papier — personne ne cherche les conditions de règlement sur un téléphone. */
+.doc__pied {
+  display: none;
+  margin-top: 18px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: center;
+}
+
 /* Le titre d'une journée dans l'historique : assez marqué pour séparer deux
    journées, assez discret pour ne pas concurrencer les lignes. */
 .history__jour {
@@ -1215,12 +1348,18 @@ select.input {
     display: block;
   }
 
-  /* Un document imprimé n'a pas de filtres : la recherche, les onglets et les
-     boutons d'action ne se touchent pas sur du papier (§55). */
+  /* Un document imprimé n'a pas de filtres ni de boutons : la recherche, les
+     onglets et les actions ne se touchent pas sur du papier (§55, §56). Les
+     boutons propres aux documents vivent déjà dans `.invoice-actions.no-print`,
+     cette règle ne leur retire donc rien. */
   .filter-row,
   .segmented,
   .sheet,
-  .sheet-backdrop {
+  .sheet-backdrop,
+  .btn,
+  .fab,
+  .secondary-action,
+  .filter-toggle {
     display: none !important;
   }
 
@@ -1233,6 +1372,21 @@ select.input {
   .table tr,
   .list__row {
     break-inside: avoid;
+  }
+
+  /* Une liste imprimée se resserre : à la densité de l'écran, un historique de
+     cent ventes coûterait quinze feuilles (§56). */
+  .list__row {
+    padding: 5px 2px;
+    gap: 10px;
+  }
+
+  .list__title {
+    font-size: 11.5px;
+  }
+
+  .list__sub {
+    font-size: 9.5px;
   }
 
   /* À l'impression, un tableau qui défile horizontalement perd ses dernières
@@ -1253,6 +1407,149 @@ select.input {
   .invoice {
     border: none;
     box-shadow: none;
+  }
+
+  /* Les cartes de l'écran sont des surfaces : sur une feuille, elles
+     deviennent des sections séparées par un filet. Ombres et coins arrondis
+     n'impriment rien d'utile et salissent la page. */
+  .card {
+    border: none;
+    border-top: 0.5px solid #c9ced6;
+    border-radius: 0;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  /* Les tuiles pastel sont une convention d'écran : sur du papier elles
+     ressortent en aplats sales, et en noir et blanc elles disparaissent. Un
+     filet et du texte noir disent la même chose, et se photocopient. */
+  .tile {
+    background: none !important;
+    border: 0.5px solid #70787f;
+    border-radius: 2px;
+    color: #000 !important;
+    padding: 7px 9px;
+  }
+
+  .tile svg,
+  .tile__label svg {
+    display: none;
+  }
+
+  .tile__value {
+    font-size: 15px;
+  }
+
+  .tile__unit,
+  .tile__label {
+    color: #000 !important;
+    font-size: 9.5px;
+  }
+
+  /* Le statut d'une pièce s'écrit, il ne se colorie pas : une pastille verte
+     ne survit pas à une photocopie en noir et blanc (§56). */
+  .badge {
+    background: none !important;
+    border: 1px solid #000;
+    color: #000 !important;
+    border-radius: 3px;
+    padding: 1px 7px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Une pièce sur feuille A4 (§56) ──
+     Tout ce qui suit ne vaut que sur du papier large. Le sélecteur exclut
+     explicitement le rouleau : sur 58 mm, un en-tête sur deux colonnes
+     donnerait deux colonnes de six caractères. */
+  html:not([data-ticket]) .doc {
+    font-size: 12px;
+    color: #000;
+  }
+
+  /* L'identité à gauche, la pièce à droite : c'est la forme d'une facture, et
+     c'est ce qui la distingue au premier regard d'un ticket de caisse. */
+  html:not([data-ticket]) .doc .doc__head {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #000;
+  }
+
+  html:not([data-ticket]) .doc .invoice__brand {
+    align-items: flex-start;
+    text-align: left;
+    border: none;
+    padding-bottom: 0;
+    gap: 1px;
+  }
+
+  html:not([data-ticket]) .doc .invoice__name {
+    font-size: 16px;
+  }
+
+  html:not([data-ticket]) .doc .invoice__meta {
+    font-size: 10.5px;
+  }
+
+  html:not([data-ticket]) .doc .doc__piece {
+    text-align: right;
+    flex: 0 0 auto;
+  }
+
+  html:not([data-ticket]) .doc .invoice__title {
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    margin: 0 0 6px;
+    text-align: right;
+  }
+
+  html:not([data-ticket]) .doc .doc__champs {
+    justify-content: end;
+    font-size: 11px;
+  }
+
+  html:not([data-ticket]) .doc .doc__partie-titre {
+    font-size: 9px;
+  }
+
+  /* Le tableau devient un vrai tableau : un filet sous l'en-tête, un trait fin
+     entre les lignes, et des nombres alignés sur leur colonne. Les bandes
+     grises du web s'impriment en aplats sales sur une imprimante à jet. */
+  html:not([data-ticket]) .doc .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+  }
+
+  html:not([data-ticket]) .doc.invoice .table th,
+  html:not([data-ticket]) .doc .table th {
+    background: none;
+    border-bottom: 1.5px solid #000;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 9.5px;
+    padding: 5px 6px;
+  }
+
+  html:not([data-ticket]) .doc .table td {
+    border-bottom: 0.5px solid #c9ced6;
+    padding: 6px;
+  }
+
+  html:not([data-ticket]) .doc .doc__ligne--total {
+    border-color: #000;
+  }
+
+  html:not([data-ticket]) .doc .doc__ligne--du {
+    color: #000;
+  }
+
+  html:not([data-ticket]) .doc .doc__pied {
+    display: block;
   }
 
   /* ── Ticket de caisse, 58 ou 80 mm (§54) ──

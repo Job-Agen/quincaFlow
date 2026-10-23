@@ -12,6 +12,11 @@ import type { BusinessRow } from '@/types';
  * porte l'enseigne se reconnaît d'un coup d'œil dans une liasse. Le numéro
  * fiscal ferme l'en-tête — sans lui, une entreprise cliente ne peut pas passer
  * la facture en charge, et la renvoie.
+ *
+ * Centré à l'écran, où la page fait 390 px de large et où une colonne est la
+ * seule mise en page possible ; aligné à gauche sur une feuille A4, où il
+ * partage la ligne avec le bloc de la pièce (§56). Le basculement est dans la
+ * feuille de style d'impression, pas ici : c'est le même en-tête.
  */
 export default function Letterhead({ business }: { business: BusinessRow | null | undefined }) {
   return (

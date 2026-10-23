@@ -107,33 +107,50 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
               </Notice>
             ) : null}
 
-            <article className={`invoice${cancelled ? ' invoice--cancelled' : ''}`}>
-              <Letterhead business={business} />
+            <article className={`invoice doc${cancelled ? ' invoice--cancelled' : ''}`}>
+              {/* Même forme que la facture (§56) : l'identité à gauche, la
+                pièce à droite. Le fournisseur lit deux documents par jour, et
+                reconnaît celui-ci à sa mise en page avant de le lire. */}
+              <div className="doc__head">
+                <Letterhead business={business} />
 
-              <h2 className="invoice__title">{purchaseOrderHeading(priced)}</h2>
+                <div className="doc__piece">
+                  <h2 className="invoice__title">{purchaseOrderHeading(priced)}</h2>
+                  <dl className="doc__champs">
+                    <dt>N°</dt>
+                    <dd>
+                      <strong>{data.reference}</strong>
+                    </dd>
+                    <dt>Date</dt>
+                    <dd>{shortDate(data.created_at)}</dd>
+                    {/* Le statut appartient à l'en-tête, avec le reste de ce
+                        qui identifie la pièce — pas entre le total et les
+                        observations. */}
+                    <dt>Statut</dt>
+                    <dd className="doc-status">
+                      <Badge tone={PO_STATUS_TONES[data.status]}>
+                        {PO_STATUS_LABELS[data.status]}
+                      </Badge>
+                    </dd>
+                  </dl>
+                </div>
+              </div>
 
-              <div className="small" style={{ display: 'grid', gap: 3, marginBottom: 14 }}>
-                <span>
-                  N° : <strong>{data.reference}</strong>
-                </span>
-                <span>Date : {shortDate(data.created_at)}</span>
-                <span>Fournisseur : {data.supplier_name || '—'}</span>
-                {/* Le statut appartient à l'en-tête, avec le reste de ce qui
-                    identifie la pièce — pas entre le total et les observations. */}
-                <span className="doc-status">
-                  Statut :{' '}
-                  <Badge tone={PO_STATUS_TONES[data.status]}>{PO_STATUS_LABELS[data.status]}</Badge>
-                </span>
+              <div className="doc__parties">
+                <div className="doc__partie">
+                  <span className="doc__partie-titre">Commande adressée à</span>
+                  <strong>{data.supplier_name || '—'}</strong>
+                </div>
               </div>
 
               <div className="table-wrap">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Désignation</th>
+                          <th>Désignation</th>
                       <th className="num">Qté</th>
-                      {priced ? <th className="num">Prix</th> : null}
-                      {priced ? <th className="num">Total</th> : null}
+                      {priced ? <th className="num">Prix ({currency})</th> : null}
+                      {priced ? <th className="num">Total ({currency})</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -165,9 +182,11 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
               </div>
 
               {priced ? (
-                <div className="invoice__total">
-                  <span>TOTAL ESTIMÉ</span>
-                  <span className="num">{money(total, currency)}</span>
+                <div className="doc__totaux">
+                  <div className="doc__ligne doc__ligne--total">
+                    <span>TOTAL ESTIMÉ</span>
+                    <span className="num">{money(total, currency)}</span>
+                  </div>
                 </div>
               ) : (
                 /*
@@ -202,6 +221,15 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
                   </div>
                 </div>
               )}
+              <footer className="doc__pied">
+                {business?.name}
+                {business?.tax_id ? ` · IFU / NIF : ${business.tax_id}` : ''}
+                {business?.phone ? ` · Tél : ${business.phone}` : ''}
+                <br />
+                {priced
+                  ? 'Prix et quantités à confirmer par le fournisseur avant livraison.'
+                  : 'Document établi pour demande de prix. Il ne vaut pas engagement d’achat.'}
+              </footer>
             </article>
 
             <div className="invoice-actions no-print">

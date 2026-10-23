@@ -102,10 +102,22 @@ export default function ReportsPage() {
 
         {/* L'en-tête n'apparaît qu'imprimé : à l'écran, la barre de
           l'application dit déjà de quelle boutique il s'agit (§55). */}
-        <div className="print-only">
-          <Letterhead business={business} />
-          <h2 className="invoice__title">RAPPORT FINANCIER</h2>
-          <p className="small" style={{ textAlign: 'center' }}>{periodLabel}</p>
+        {/* Même en-tête que la facture et le bon de commande (§56) : les
+          pièces d'une boutique doivent se ressembler, c'est ce qui les fait
+          reconnaître avant d'être lues. */}
+        <div className="print-only doc">
+          <div className="doc__head">
+            <Letterhead business={business} />
+            <div className="doc__piece">
+              <h2 className="invoice__title">RAPPORT FINANCIER</h2>
+              <dl className="doc__champs">
+                <dt>Période</dt>
+                <dd>{periodLabel}</dd>
+                <dt>Édité le</dt>
+                <dd>{shortDate(new Date().toISOString())}</dd>
+              </dl>
+            </div>
+          </div>
         </div>
 
         {/* Le sélecteur de période et les liens d'action ne font pas partie du

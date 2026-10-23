@@ -7,12 +7,12 @@ import { Badge, Button, Notice, Segmented, Sheet, Skeleton, TextField } from '@/
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { PAYMENT_STATUS_LABELS, paymentLabel } from '@/domain/sale';
+import { saleBalance } from '@/domain/credit';
 import { PRINT_FORMAT_LABELS, TICKET_WIDTHS, isTicket, readFormat } from '@/domain/ticket';
 import { printWith, usePrintFormat } from '@/client/print';
 import { amount, dateTime, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
-import Letterhead from '@/components/documents/Letterhead';
+import InvoiceDocument from '@/components/documents/InvoiceDocument';
 import type { Sale } from '@/types';
 
 /**
@@ -29,6 +29,9 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
   const { data: sale, loading, error, setData } = useResource<Sale>(`/api/sales/${id}`);
   const [cancelling, setCancelling] = useState(false);
   const [format, choisirFormat] = usePrintFormat();
+  // Ce que le client doit encore : affiché seulement s'il reste quelque chose,
+  // un « Reste dû : 0 » sur une facture soldée semant le doute pour rien.
+  const reste = sale ? saleBalance(sale.total, sale.amount_paid) : 0;
   const cancelled = sale?.status === 'CANCELLED';
 
   async function share(target: 'native' | 'whatsapp' = 'native') {
@@ -97,87 +100,7 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
               </Notice>
             ) : null}
 
-            <article className={`invoice${cancelled ? ' invoice--cancelled' : ''}`}>
-              <Letterhead business={business} />
-
-              <h2 className="invoice__title">FACTURE</h2>
-
-              <div className="small" style={{ display: 'grid', gap: 3, marginBottom: 14 }}>
-                <span>
-                  N° : <strong>{sale.invoice_reference}</strong>
-                </span>
-                <span>Date : {dateTime(sale.created_at)}</span>
-                <span>Client : {sale.customer_name || 'Client comptoir'}</span>
-                <span>Vente : {sale.reference}</span>
-              </div>
-
-              <div className="table-wrap">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Désignation</th>
-                      <th className="num">Qté</th>
-                      <th className="num">Prix</th>
-                      <th className="num">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sale.items.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          {item.product_name}
-                          {item.unit_factor > 1 ? (
-                            <span className="muted small"> ({item.unit_label})</span>
-                          ) : null}
-                        </td>
-                        <td className="num">{quantity(item.quantity)}</td>
-                        <td className="num">{amount(item.unit_price)}</td>
-                        <td className="num">{amount(item.line_total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {sale.discount > 0 ? (
-                <div className="total-line small">
-                  <span>Remise</span>
-                  <span className="num">− {amount(sale.discount)}</span>
-                </div>
-              ) : null}
-
-              <div className="invoice__total">
-                <span>TOTAL</span>
-                <span className="num">{money(sale.total, currency)}</span>
-              </div>
-
-              <div className="total-line small">
-                <span className="muted">
-                  {paymentLabel(sale.payment_method, sale.payment_provider)}
-                </span>
-                {/*
-                  Sur une vente annulée, « Payée » en vert affirme quelque chose
-                  de faux : l'encaissement a été rendu. Le statut d'origine est
-                  conservé en base, mais la facture n'a plus à s'en prévaloir.
-                */}
-                {cancelled ? (
-                  <Badge tone="red">Annulée</Badge>
-                ) : (
-                  <Badge tone={sale.payment_status === 'PAID' ? 'green' : 'amber'}>
-                    {PAYMENT_STATUS_LABELS[sale.payment_status]}
-                  </Badge>
-                )}
-              </div>
-
-              {cancelled ? (
-                <p className="invoice__void">
-                  Facture annulée le {dateTime(sale.updated_at || sale.created_at)}
-                  {sale.note ? ` — ${sale.note}` : ''}. Ce document ne vaut pas justificatif.
-                </p>
-              ) : (
-                <p className="invoice__thanks">Merci pour votre confiance !</p>
-              )}
-            </article>
+            <InvoiceDocument sale={sale} business={business} currency={currency} />
 
             {/* Le format d'impression, choisi une fois et retenu : une boutique
               a une imprimante, pas trois (§54). */}

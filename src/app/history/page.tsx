@@ -158,13 +158,20 @@ function HistoryView() {
       <AppBar back="/more" title="Historique des ventes" />
 
       <main className="page page--history">
-        <div className="print-only">
-          <Letterhead business={business} />
-          <h2 className="invoice__title">{TITRES[kind] ?? 'HISTORIQUE DES OPÉRATIONS'}</h2>
-          <p className="small" style={{ textAlign: 'center' }}>
-            {PERIODS.find((une) => une.value === period)?.label ?? 'Tout'} · édité le{' '}
-            {shortDate(new Date().toISOString())}
-          </p>
+        {/* Même en-tête que la facture (§56). */}
+        <div className="print-only doc">
+          <div className="doc__head">
+            <Letterhead business={business} />
+            <div className="doc__piece">
+              <h2 className="invoice__title">{TITRES[kind] ?? 'HISTORIQUE DES OPÉRATIONS'}</h2>
+              <dl className="doc__champs">
+                <dt>Période</dt>
+                <dd>{PERIODS.find((une) => une.value === period)?.label ?? 'Tout'}</dd>
+                <dt>Édité le</dt>
+                <dd>{shortDate(new Date().toISOString())}</dd>
+              </dl>
+            </div>
+          </div>
         </div>
 
         <div className="filter-row">

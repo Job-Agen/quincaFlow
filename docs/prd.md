@@ -2438,3 +2438,96 @@ Deux défauts que seule une feuille rendait visibles :
 7. Le rapport et l'historique s'impriment avec l'en-tête de la boutique et la
    période en clair, sans filtre ni bouton.
 8. L'historique affiche le titre de chaque journée, date absolue comprise.
+
+## 56. Des pièces, pas des écrans agrandis
+
+**Objectif**
+
+La facture imprimée était une fiche de téléphone étirée sur une feuille A4 :
+tout centré, 60 % de page vide, le client noyé entre le numéro de pièce et la
+date, une pastille verte « Payée » et pas un mot de ce qu'une facture doit
+porter. Elle ne ressemblait pas à un document — elle ressemblait à une capture
+d'écran.
+
+Or c'est la seule chose que le client emporte, et la seule qu'une entreprise
+présentera à son comptable.
+
+**F57 — La forme d'une facture**
+
+L'identité du vendeur à gauche, la pièce à droite, séparées du corps par un
+filet. C'est la mise en page que tout le monde reconnaît sans la lire, et
+c'est ce qui distingue une facture d'un ticket de caisse au premier regard.
+
+Le destinataire reçoit son propre encadré — **Facturé à** — sur une moitié de
+largeur. Le vide à sa droite n'est pas perdu : c'est lui qui fait lire le bloc
+comme une adresse.
+
+**F58 — Le décompte, et la somme en lettres**
+
+Un bloc aligné à droite : sous-total, remise, **TOTAL** entre deux filets,
+montant réglé, reste dû. L'œil descend sans chercher. Le sous-total ne paraît
+que s'il y a une remise, et le reste dû que s'il reste quelque chose — « Reste
+dû : 0 » sur une facture soldée sème un doute pour rien.
+
+Puis la mention qui rend la facture opposable :
+
+> Arrêtée la présente facture à la somme de **quatre-vingt-huit mille FCFA**.
+
+Ce n'est pas une coquetterie. Un chiffre se retouche au stylo — un 1 devient un
+4, un zéro s'ajoute ; une somme en lettres, non. Les administrations et les
+entreprises de la zone la réclament, et une facture qui en manque revient au
+commerçant. La devise est celle de la boutique (§6), jamais « francs CFA » en
+dur.
+
+**F59 — Ce qui ne se photocopie pas n'a rien à faire sur une feuille**
+
+- **Les pastilles de statut deviennent des mentions encadrées, en noir.** Une
+  pastille verte sur une photocopie en noir et blanc devient un rectangle gris
+  qui ne dit plus rien.
+- **Les tuiles pastel du rapport deviennent des encadrés blancs**, sans icône.
+- **La bande grise d'en-tête de tableau devient un filet**, et les lignes un
+  trait fin : un aplat gris sort sale d'une imprimante à jet.
+- **Les boutons, filtres, onglets et liens disparaissent.** Sur une feuille, ce
+  sont des mots qu'on ne peut pas toucher.
+- **La devise passe en tête de colonne** — « Prix (FCFA) » — plutôt qu'être
+  répétée vingt fois.
+- **Un pied de page** porte l'identité, le numéro fiscal et la mention qui
+  convient : réserve de propriété tant qu'il reste dû, facture acquittée sinon.
+
+**F60 — Une famille de documents**
+
+La facture, le bon de commande, le rapport financier et l'historique partagent
+désormais le même en-tête, la même grille, les mêmes filets. Une boutique dont
+les pièces se ressemblent est une boutique qu'on reconnaît.
+
+Le bon de commande y gagne son propre bloc **Commande adressée à**, et le
+rapport comme l'historique perdent leur en-tête centré d'écran.
+
+**F61 — Le rouleau garde sa forme**
+
+Tout ce qui précède vaut pour la feuille A4, et **seulement** pour elle. Un
+en-tête sur deux colonnes imprimé sur 58 mm donnerait deux colonnes de six
+caractères. Les règles de la feuille excluent donc explicitement le rouleau,
+qui conserve sa pile centrée (§54).
+
+**F62 — La pièce n'est plus l'écran**
+
+La facture est devenue un composant à part, comme l'était déjà le bon de
+commande : un document a sa forme propre, qui ne dépend ni de la route qui
+l'affiche ni de l'état de chargement autour. C'est aussi ce qui le rend
+vérifiable — un test monte la pièce avec une vente, sans routeur.
+
+**Critères d'acceptation**
+
+1. Sur A4, l'identité est à gauche et la pièce à droite ; le destinataire a son
+   encadré.
+2. Le reste dû n'apparaît que s'il reste quelque chose ; le sous-total, que s'il
+   y a une remise.
+3. La somme en lettres figure sur toute facture non annulée, dans la devise de
+   la boutique.
+4. Une vente annulée n'arrête aucune somme et ne se prévaut pas d'avoir été
+   payée.
+5. Aucun statut ne repose sur une couleur seule.
+6. La devise est en tête de colonne, pas sur chaque ligne.
+7. Le ticket 58 et 80 mm garde sa mise en page centrée.
+8. Les quatre pièces portent le même en-tête.
