@@ -1179,12 +1179,66 @@ select.input {
 }
 
 /* Seule la facture est imprimée : le reste de l'application disparaît. */
+/* Le titre d'une journée dans l'historique : assez marqué pour séparer deux
+   journées, assez discret pour ne pas concurrencer les lignes. */
+.history__jour {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+  margin: 4px 0 0;
+}
+
+/* Une rangée de boutons de téléchargement : elle passe à la ligne plutôt que
+   de déborder, et disparaît à l'impression — elle ne fait pas partie du
+   document (§55). */
+.exports-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* L'en-tête d'un document n'existe qu'imprimé : à l'écran, la barre de
+   l'application dit déjà où l'on est (§55). */
+.print-only {
+  display: none;
+}
+
 @media print {
   .appbar,
   .tabbar,
   .fab,
   .no-print {
     display: none !important;
+  }
+
+  .print-only {
+    display: block;
+  }
+
+  /* Un document imprimé n'a pas de filtres : la recherche, les onglets et les
+     boutons d'action ne se touchent pas sur du papier (§55). */
+  .filter-row,
+  .segmented,
+  .sheet,
+  .sheet-backdrop {
+    display: none !important;
+  }
+
+  /* Un tableau coupé en deux par un saut de page perd son en-tête : les lignes
+     restent ensemble, et l'en-tête se répète si le tableau déborde. */
+  .table thead {
+    display: table-header-group;
+  }
+
+  .table tr,
+  .list__row {
+    break-inside: avoid;
+  }
+
+  /* À l'impression, un tableau qui défile horizontalement perd ses dernières
+     colonnes : elles sortent simplement de la feuille. */
+  .table-wrap {
+    overflow: visible;
   }
 
   body {

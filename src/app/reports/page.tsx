@@ -18,6 +18,8 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { EXPENSE_CATEGORY_LABELS, isOperating } from '@/domain/report';
 import ExpenseDonut from '@/components/reports/ExpenseDonut';
+import TelechargerRapport from '@/components/reports/TelechargerRapport';
+import Letterhead from '@/components/documents/Letterhead';
 import { amount, money, monthLabel, percent, quantity, shortDate, withUnit } from '@/utils/format';
 import type { FinancialReport, ProductProfit } from '@/types';
 
@@ -60,7 +62,7 @@ function sortProducts(products: ProductProfit[], by: string): ProductProfit[] {
 }
 
 export default function ReportsPage() {
-  const { currency, isOwner } = useSession();
+  const { business, currency, isOwner } = useSession();
   const [period, setPeriod] = useState('month');
   const [sort, setSort] = useState('margin');
 
@@ -71,6 +73,13 @@ export default function ReportsPage() {
   const operatingCount = (data?.expensesByCategory || [])
     .filter((bucket) => isOperating(bucket.category))
     .reduce((sum, bucket) => sum + bucket.count, 0);
+
+  // La période, écrite en toutes lettres sur la feuille : « Ce mois » n'a aucun
+  // sens trois semaines plus tard, dans une pochette.
+  const periodLabel =
+    data?.from && data.to
+      ? `Du ${shortDate(data.from)} au ${shortDate(data.to)}`
+      : 'Depuis l’ouverture de la boutique';
 
   return (
     <>
@@ -91,7 +100,23 @@ export default function ReportsPage() {
           </Notice>
         ) : null}
 
-        <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+        {/* L'en-tête n'apparaît qu'imprimé : à l'écran, la barre de
+          l'application dit déjà de quelle boutique il s'agit (§55). */}
+        <div className="print-only">
+          <Letterhead business={business} />
+          <h2 className="invoice__title">RAPPORT FINANCIER</h2>
+          <p className="small" style={{ textAlign: 'center' }}>{periodLabel}</p>
+        </div>
+
+        {/* Le sélecteur de période et les liens d'action ne font pas partie du
+          document : sur une feuille, ce sont quatre mots qu'on ne peut pas
+          toucher (§55). La période imprimée est écrite en toutes lettres
+          au-dessus. */}
+        <div className="no-print">
+          <Segmented options={PERIODS} value={period} onChange={setPeriod} />
+        </div>
+
+        {isOwner ? <TelechargerRapport period={period} /> : null}
 
         {error ? <Notice tone="error">{error.message}</Notice> : null}
         {loading && !data ? <Skeleton count={3} height={96} /> : null}
@@ -192,7 +217,7 @@ export default function ReportsPage() {
                   caisse sur la période, sans être déduits ici : la marchandise est comptée à son
                   coût le jour où elle est vendue, et la retirer deux fois ferait apparaître une
                   perte qui n’existe pas.{' '}
-                  <Link href="/cash" className="link">
+                  <Link href="/cash" className="link no-print">
                     Voir le journal de caisse
                   </Link>
                 </Notice>
@@ -203,7 +228,7 @@ export default function ReportsPage() {
                   Aucune dépense n’est enregistrée sur cette période : le bénéfice net affiché est
                   donc votre marge brute. Transport, salaires, loyer et pertes en seront déduits dès
                   que vous les saisirez.{' '}
-                  <Link href="/expenses" className="link">
+                  <Link href="/expenses" className="link no-print">
                     Saisir une dépense
                   </Link>
                 </Notice>
@@ -211,7 +236,7 @@ export default function ReportsPage() {
                 <p className="muted small">
                   Le bénéfice net n’est juste que si toutes les dépenses de la période ont été
                   saisies.{' '}
-                  <Link href="/expenses" className="link">
+                  <Link href="/expenses" className="link no-print">
                     Voir les dépenses
                   </Link>
                 </p>
@@ -222,7 +247,7 @@ export default function ReportsPage() {
               <CardHead
                 title="Répartition des dépenses"
                 action={
-                  <Link href="/expenses" className="link">
+                  <Link href="/expenses" className="link no-print">
                     Saisir
                   </Link>
                 }

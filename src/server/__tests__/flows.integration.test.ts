@@ -42,6 +42,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let credit: typeof import('../credit');
   let exports_: typeof import('../exports');
   let dashboard: typeof import('../dashboard');
+  let history_: typeof import('../history');
 
   const OWNER: Session = {
     userId: 'usr_owner',
@@ -82,6 +83,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     credit = await import('../credit');
     exports_ = await import('../exports');
     dashboard = await import('../dashboard');
+    history_ = await import('../history');
   });
 
   afterAll(async () => {
@@ -1001,6 +1003,130 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       expect(await exports_.EXPORTS.ventes(OWNER.businessId)).toContain(
         'Mobile Money · Orange Money'
       );
+    });
+  });
+
+  // ─────────────────── Exports du rapport financier (§55) ─────────────
+
+  describe('rapport financier exporté (§55)', () => {
+    /** Une vente, une dépense d'exploitation, un achat de stock. */
+    async function seedPeriode() {
+      const vitre = await seedVitre();
+      await sales.createSale(OWNER, { lines: [{ productId: vitre.id, quantity: 10 }] });
+      await expenses.createExpense(OWNER, {
+        category: 'TRANSPORT',
+        label: 'Livraison chantier',
+        amount: 1200,
+      });
+      await expenses.createExpense(OWNER, {
+        category: 'STOCK_PURCHASE',
+        label: 'Réassort ciment',
+        amount: 50000,
+      });
+      return vitre;
+    }
+
+    const lignes = (fichier: string) =>
+      fichier
+        .replace(/^\uFEFF/, '')
+        .trimEnd()
+        .split('\r\n');
+
+    it('déroule le résultat du chiffre d’affaires au bénéfice net', async () => {
+      await seedPeriode();
+      const sortie = lignes(await exports_.EXPORTS.rapport(OWNER.businessId, {}));
+
+      expect(sortie[0]).toBe('Poste;Montant;Détail');
+      const texte = sortie.join('\n');
+      // 10 × 450 vendus, 10 × 318,75 de coût : 4 500 de CA, 1 312,5 de marge.
+      expect(texte).toContain("Chiffre d'affaires;4500");
+      // Virgule décimale partout, y compris dans le taux glissé en commentaire :
+      // un point au milieu d'un fichier en virgules casse la colonne du tableur.
+      expect(texte).toContain('Marge brute;1312,5;29,2 %');
+      expect(texte).not.toMatch(/\d\.\d/);
+      // 1 200 de transport déduits ; l'achat de stock ne l'est pas.
+      expect(texte).toContain('Bénéfice net;112,5');
+    });
+
+    it('sort les dépenses en négatif, pour qu’une somme de colonne tombe juste', async () => {
+      await seedPeriode();
+      const texte = lignes(await exports_.EXPORTS.rapport(OWNER.businessId, {})).join('\n');
+      expect(texte).toContain('Dépense — Transport;-1200');
+      expect(texte).toContain('Coût des marchandises vendues;-3187,5');
+    });
+
+    it('dit que l’achat de stock n’est pas déduit, plutôt que de le taire', async () => {
+      await seedPeriode();
+      const texte = lignes(await exports_.EXPORTS.rapport(OWNER.businessId, {})).join('\n');
+      const ligne = texte.split('\n').find((une) => une.startsWith('dont achat de stock'));
+      // Il est sorti de la caisse mais déjà compté par le coût des marchandises
+      // vendues : le fichier doit le montrer sans le soustraire (§39).
+      expect(ligne).toContain('50000');
+      expect(ligne).toContain('Déjà compté');
+    });
+
+    it('chiffre la rentabilité, une ligne par produit', async () => {
+      await seedPeriode();
+      const sortie = lignes(await exports_.EXPORTS.rentabilite(OWNER.businessId, {}));
+
+      expect(sortie[0]).toContain('Taux de marge (%)');
+      expect(sortie).toHaveLength(2);
+      expect(sortie[1]).toContain('Vitre 60 cm');
+      // 4 500 de CA, 3 187,5 de coût, 1 312,5 de marge.
+      expect(sortie[1]).toContain(';4500;3187,5;1312,5;');
+    });
+
+    it('ne retient que la période demandée', async () => {
+      const vitre = await seedPeriode();
+      const ancienne = await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 20 }],
+      });
+      await pool.query(
+        "UPDATE sales SET created_at = now() - interval '60 days' WHERE id = $1",
+        [ancienne.id]
+      );
+
+      const bornes = history_.periodBounds('7d');
+      const texte = lignes(await exports_.EXPORTS.rapport(OWNER.businessId, bornes)).join('\n');
+      // Sans bornes, le chiffre d'affaires vaudrait 13 500 : la vente d'il y a
+      // deux mois ne doit pas entrer dans le rapport du mois.
+      expect(texte).toContain("Chiffre d'affaires;4500");
+    });
+
+    it('rend un fichier lisible même sans aucune vente', async () => {
+      const sortie = lignes(await exports_.EXPORTS.rapport(OWNER.businessId, {}));
+      // Un tableur ouvrant un fichier vide n'affiche rien et laisse croire à un
+      // export raté : les postes sont là, à zéro.
+      expect(sortie.length).toBeGreaterThan(5);
+      expect(sortie.join('\n')).toContain('Bénéfice net;0');
+      expect(lignes(await exports_.EXPORTS.rentabilite(OWNER.businessId, {}))).toHaveLength(1);
+    });
+
+    it('ne laisse passer aucun chiffre de la boutique voisine', async () => {
+      await seedPeriode();
+      const texte = lignes(await exports_.EXPORTS.rapport(RIVAL.businessId, {})).join('\n');
+      expect(texte).toContain("Chiffre d'affaires;0");
+      expect(lignes(await exports_.EXPORTS.rentabilite(RIVAL.businessId, {}))).toHaveLength(1);
+    });
+
+    it('retombe sur le mois en cours quand aucune période n’est demandée', async () => {
+      // « Depuis l'ouverture » téléchargé par mégarde ne ressemble pas à une
+      // erreur : il ressemble à un très bon mois.
+      const sansPeriode = exports_.exportRequest('rapport', null);
+      expect(sansPeriode.bounds.from).toEqual(history_.periodBounds('month').from);
+      expect(sansPeriode.fileName).toContain('rapport-month');
+
+      expect(exports_.exportRequest('rapport', 'last-month').bounds.from).toEqual(
+        history_.periodBounds('last-month').from
+      );
+    });
+
+    it('date le nom du fichier, sauf l’inventaire qui n’a pas de période', async () => {
+      // Deux fichiers nommés pareil finissent en « rapport (3).csv », et plus
+      // personne ne sait lequel couvre quoi.
+      expect(exports_.exportRequest('rentabilite', '7d').fileName).toContain('rentabilite-7d');
+      expect(exports_.exportRequest('stocks', '7d').fileName).not.toContain('7d');
+      expect(exports_.exportRequest('stocks', '7d').fileName).toContain('stocks');
     });
   });
 

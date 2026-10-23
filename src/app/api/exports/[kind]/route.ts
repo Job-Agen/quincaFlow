@@ -1,23 +1,29 @@
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { handle } from '../../../../lib/http';
 import { requireOwner } from '../../../../lib/auth';
-import { EXPORTS, backup, isExportKind } from '../../../../server/exports';
+import { EXPORTS, backup, exportRequest, isExportKind } from '../../../../server/exports';
 import { exportFileName } from '../../../../domain/csv';
 import { notFound } from '../../../../lib/http';
 
 /**
  * Télécharge un export (§48).
  *
- *   /api/exports/stocks     inventaire et valeur du stock
- *   /api/exports/ventes     historique détaillé, une ligne par article
- *   /api/exports/clients    fichier clients et carnet de crédit
- *   /api/exports/sauvegarde tout, en JSON
+ *   /api/exports/stocks      inventaire et valeur du stock
+ *   /api/exports/ventes      historique détaillé, une ligne par article
+ *   /api/exports/clients     fichier clients et carnet de crédit
+ *   /api/exports/rapport     compte de résultat de la période (§55)
+ *   /api/exports/rentabilite marge par produit sur la période (§55)
+ *   /api/exports/sauvegarde  tout, en JSON
+ *
+ * Les deux derniers lisent `?period=`, comme l'écran Rapports : sans lui, le
+ * fichier porterait le mois en cours alors que l'écran montrait l'an dernier.
  *
  * Réservé au propriétaire : ces fichiers portent les prix d'achat et les
  * marges, que le §5 ne montre pas au vendeur. Les laisser sortir par une
  * adresse ouverte à tous contournerait la règle de l'écran.
  */
-export async function GET(_request: Request, { params }: { params: Promise<{ kind: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ kind: string }> }) {
   return handle(async () => {
     const session = await requireOwner();
     const { kind } = await params;
@@ -31,9 +37,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
     }
 
     if (!isExportKind(kind)) throw notFound('Export inconnu.');
+    const { bounds, fileName } = exportRequest(kind, request.nextUrl.searchParams.get('period'));
     return fichier(
-      await EXPORTS[kind](session.businessId),
-      exportFileName(kind),
+      await EXPORTS[kind](session.businessId, bounds),
+      fileName,
       // `text/csv` et rien d'autre : un `application/octet-stream` ferait
       // proposer « ouvrir avec… » au lieu du tableur.
       'text/csv; charset=utf-8'

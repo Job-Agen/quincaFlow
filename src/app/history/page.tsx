@@ -3,11 +3,19 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeftRight, SlidersHorizontal, PackageCheck, Receipt, Truck } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Printer,
+  SlidersHorizontal,
+  PackageCheck,
+  Receipt,
+  Truck,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import {
   Badge,
+  Button,
   Card,
   Empty,
   Notice,
@@ -20,7 +28,9 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { OOS_STATUS_LABELS } from '@/domain/outOfStock';
 import { PO_STATUS_LABELS, PO_STATUS_TONES } from '@/domain/purchase';
-import { dayLabel, money, dateTime } from '@/utils/format';
+import { dayLabel, money, dateTime, shortDate } from '@/utils/format';
+import { printWith } from '@/client/print';
+import Letterhead from '@/components/documents/Letterhead';
 import type { HistoryEntry, HistoryKind, OutOfStockStatus, PurchaseOrderStatus } from '@/types';
 
 /**
@@ -53,6 +63,20 @@ interface HistoryShape {
   /** `null` pour une réception : elle n'a pas d'écran propre. */
   href: ((entry: HistoryEntry) => string) | null;
 }
+
+/**
+ * Le titre du document imprimé, par nature d'opération (§55).
+ *
+ * Distinct du libellé d'une ligne : « Vente » nomme une opération, « Historique
+ * des ventes » nomme une pièce. Un en-tête de feuille au singulier se lirait
+ * comme une facture.
+ */
+const TITRES: Record<string, string> = {
+  SALE: 'HISTORIQUE DES VENTES',
+  OUT_OF_STOCK: 'HISTORIQUE DES VENTES HORS STOCK',
+  PURCHASE_ORDER: 'HISTORIQUE DES COMMANDES',
+  RECEIPT: 'HISTORIQUE DES RÉCEPTIONS',
+};
 
 const SHAPES: Record<HistoryKind, HistoryShape> = {
   SALE: { icon: Receipt, label: 'Vente', href: (entry) => `/sales/${entry.id}` },
@@ -99,7 +123,7 @@ function statusBadge(entry: HistoryEntry) {
 
 function HistoryView() {
   const params = useSearchParams();
-  const { currency } = useSession();
+  const { business, currency } = useSession();
   const [period, setPeriod] = useState('all');
   // La nature vient de l'URL : /sales redirige ici en pré-filtrant sur les ventes.
   const [kind, setKind] = useState(params.get('kind') || 'SALE');
@@ -112,14 +136,21 @@ function HistoryView() {
     search,
   });
 
+  // Le total ne vaut que si toutes les lignes sont de même nature : sans
+  // filtre, l'historique mêle ventes, commandes et réceptions.
+  const total =
+    kind && data && data.length > 0
+      ? data.reduce((somme, entry) => somme + entry.amount, 0)
+      : null;
+
   // Le regroupement par jour est fait à l'affichage : le serveur renvoie un flux
   // trié, et découper ici évite une seconde requête par journée affichée.
-  const days: { label: string; entries: HistoryEntry[] }[] = [];
+  const days: { label: string; date: string; entries: HistoryEntry[] }[] = [];
   (data || []).forEach((entry) => {
     const label = dayLabel(entry.created_at);
     const last = days[days.length - 1];
     if (last && last.label === label) last.entries.push(entry);
-    else days.push({ label, entries: [entry] });
+    else days.push({ label, date: shortDate(entry.created_at), entries: [entry] });
   });
 
   return (
@@ -127,6 +158,15 @@ function HistoryView() {
       <AppBar back="/more" title="Historique des ventes" />
 
       <main className="page page--history">
+        <div className="print-only">
+          <Letterhead business={business} />
+          <h2 className="invoice__title">{TITRES[kind] ?? 'HISTORIQUE DES OPÉRATIONS'}</h2>
+          <p className="small" style={{ textAlign: 'center' }}>
+            {PERIODS.find((une) => une.value === period)?.label ?? 'Tout'} · édité le{' '}
+            {shortDate(new Date().toISOString())}
+          </p>
+        </div>
+
         <div className="filter-row">
           <SearchField value={search} onChange={setSearch} placeholder="Rechercher une vente…" />
           <button
@@ -153,6 +193,20 @@ function HistoryView() {
           </button>
         </Sheet>
 
+        {data && data.length > 0 ? (
+          <div className="exports-row no-print">
+            <Button
+              variant="soft"
+              size="sm"
+              onClick={() => printWith('A4')}
+              title="Choisissez Enregistrer au format PDF dans la fenêtre d’impression"
+            >
+              <Printer size={16} />
+              Imprimer / PDF
+            </Button>
+          </div>
+        ) : null}
+
         {error ? <Notice tone="error">{error.message}</Notice> : null}
         {loading && !data ? <Skeleton count={5} height={64} /> : null}
 
@@ -168,6 +222,18 @@ function HistoryView() {
 
         {days.map((day) => (
           <div key={day.label} className="stack" style={{ gap: 8 }}>
+            {/* Le groupe était calculé mais son titre n'était rendu nulle part :
+              à l'écran on devinait la journée en lisant les heures, sur une
+              feuille imprimée on ne la devinait plus du tout (§55). */}
+            <h2 className="history__jour">
+              {day.label}
+              {/* « Hier » ne veut plus rien dire dans une pochette trois
+                semaines plus tard : la date absolue accompagne le libellé
+                relatif, à l'écran comme sur la feuille (§55). */}
+              {day.label === day.date ? null : (
+                <span className="muted"> · {day.date}</span>
+              )}
+            </h2>
             <Card>
               <div className="list">
                 {day.entries.map((entry) => {
@@ -206,6 +272,19 @@ function HistoryView() {
             </Card>
           </div>
         ))}
+
+        {/* Un total n'a de sens que sur une nature unique : additionner une
+          vente, une commande fournisseur et une réception donnerait un chiffre
+          que rien ne désigne (§55). */}
+        {total !== null ? (
+          <Card pad>
+            <div className="total-line total-line--grand">
+              <span>Total — {SHAPES[kind as HistoryKind]?.label ?? ''}</span>
+              <strong className="num">{money(total, currency)}</strong>
+            </div>
+            <p className="small muted">{(data || []).length} opération(s) sur la période.</p>
+          </Card>
+        ) : null}
       </main>
     </>
   );

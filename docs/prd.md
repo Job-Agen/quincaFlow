@@ -2352,3 +2352,89 @@ le total de ligne, et c'est le total que le client vérifie.
 5. Le ticket 58 mm n'affiche pas la colonne des prix unitaires.
 6. L'en-tête du §51 — logo, numéro fiscal — figure sur le ticket comme sur la
    facture.
+
+## 55. Sortir le rapport de l'écran
+
+**Objectif**
+
+Le §48 a donné trois fichiers : ce que je détiens, ce que j'ai vendu, ce qu'on
+me doit. Il manquait le quatrième, et c'est celui qu'on réclame le plus : **ce
+que la période m'a rapporté**. L'écran Rapports (§39) calcule le chiffre
+d'affaires, la marge, les charges et le bénéfice net — et rien de tout cela ne
+sortait nulle part.
+
+Trois destinataires, trois formats. Le comptable veut des colonnes. La banque
+et l'associé veulent une feuille. Le gérant, lui, veut parfois simplement
+l'historique de son mois sur papier, à classer.
+
+**F53 — Deux CSV, parce que ce sont deux formes**
+
+Le compte de résultat est une suite de postes — un libellé, un montant. La
+rentabilité est une ligne par produit, avec dix colonnes. Les empiler dans un
+seul fichier décalerait l'un des deux d'une colonne sur l'autre, et c'est
+précisément ce qu'un tableur ne sait pas rattraper.
+
+- **Résultat** — ventes en stock, hors stock, recettes hors vente, chiffre
+  d'affaires, coût des marchandises vendues, marge brute, une ligne par poste
+  de dépense, puis les charges déduites et le bénéfice net. Dans l'ordre de
+  l'écran, qui est celui dans lequel le chiffre se construit.
+- **Rentabilité** — une ligne par produit : quantité, chiffre d'affaires, coût,
+  marge, taux, et la part hors stock comptée à part.
+
+Les dépenses et le coût des marchandises y sont **en négatif**, pour qu'une
+somme de colonne tombe sur le bénéfice net. Et l'achat de stock figure sans
+être déduit, avec la mention qui dit pourquoi : il est déjà compté par le coût
+des marchandises vendues (§39). Le taire laisserait croire à une charge
+oubliée.
+
+**F54 — Les fichiers portent la période affichée**
+
+Sans elle, le gérant qui consulte le mois dernier téléchargerait le mois en
+cours sans rien remarquer — et s'en apercevrait devant son comptable. La
+période est dans les bornes *et* dans le nom du fichier : deux fichiers nommés
+pareil finissent en « rapport (3).csv », et plus personne ne sait lequel couvre
+quoi.
+
+Sans période demandée, c'est le mois en cours, jamais tout l'historique : un
+rapport « depuis l'ouverture » téléchargé par mégarde ne ressemble pas à une
+erreur, il ressemble à un très bon mois.
+
+**F55 — Deux pages imprimables**
+
+Le rapport financier et l'historique s'impriment — donc se téléchargent en PDF,
+par la même fenêtre que les factures (§54).
+
+Chacune porte l'en-tête du §51, logo et numéro fiscal compris, son titre, et la
+période **en toutes lettres** : « Du 01/10/2026 au 23/10/2026 ». « Ce mois »
+n'a aucun sens trois semaines plus tard, dans une pochette.
+
+Ce qui ne s'imprime pas : les filtres, les onglets de période, la recherche et
+les liens d'action. Sur une feuille, ce sont des mots qu'on ne peut pas
+toucher.
+
+**F56 — Ce que l'impression a révélé**
+
+Deux défauts que seule une feuille rendait visibles :
+
+- **L'historique groupait les opérations par jour sans jamais afficher le
+  titre du jour.** À l'écran on devinait la journée en lisant les heures ; sur
+  papier on ne la devinait plus du tout. Le groupe était calculé depuis le
+  début, son titre n'était rendu nulle part.
+- **« Hier » ne veut plus rien dire dans une pochette.** Un libellé relatif
+  est juste le jour où on le lit, et faux tous les jours suivants. La date
+  absolue l'accompagne désormais, à l'écran comme sur la feuille.
+
+**Critères d'acceptation**
+
+1. Le résultat et la rentabilité se téléchargent depuis l'écran Rapports,
+   propriétaire seulement : ils portent les coûts d'achat (§5).
+2. Les deux fichiers couvrent la période affichée, et la nomment.
+3. Sans période, c'est le mois en cours.
+4. Les dépenses et le coût des marchandises sont en négatif ; l'achat de stock
+   figure sans être déduit, avec sa mention.
+5. Un fichier reste lisible sur une période sans aucune vente : les postes sont
+   là, à zéro.
+6. Les décimales sont des virgules partout, y compris dans la colonne Détail.
+7. Le rapport et l'historique s'impriment avec l'en-tête de la boutique et la
+   période en clair, sans filtre ni bouton.
+8. L'historique affiche le titre de chaque journée, date absolue comprise.
