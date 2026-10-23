@@ -1589,6 +1589,20 @@ select.input {
     font-size: 11px;
   }
 
+  /* Une thermique n'imprime qu'en noir : une bande grise en sort tramée, sale
+     et lente, et le rouge du reste dû devient un gris plus pâle que le reste.
+     Les deux redeviennent du noir franc sur le rouleau (§56). */
+  html[data-ticket] .invoice .table th,
+  html[data-ticket] .table th {
+    background: none;
+    border-bottom: 1px solid #000;
+  }
+
+  html[data-ticket] .doc__ligne--du {
+    color: #000;
+    font-weight: 800;
+  }
+
   html[data-ticket] .table-wrap {
     overflow: visible;
   }
