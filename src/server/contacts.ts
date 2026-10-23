@@ -14,8 +14,8 @@ import type { ContactRow, Session } from '@/types';
 
 const TABLES = {
   customers: {
-    columns: 'id, name, phone, address, notes, created_at',
-    fields: ['name', 'phone', 'address', 'notes'],
+    columns: 'id, name, phone, email, address, notes, created_at',
+    fields: ['name', 'phone', 'email', 'address', 'notes'],
     missing: 'Client introuvable.',
   },
   suppliers: {
@@ -100,7 +100,7 @@ export async function listContacts(
   if (kind === 'customers') {
     return rows<ContactRow>(
       await sql`
-        SELECT c.id, c.name, c.phone, c.address, c.notes, c.created_at,
+        SELECT c.id, c.name, c.phone, c.email, c.address, c.notes, c.created_at,
                COALESCE(SUM(
                  CASE WHEN s.status = 'COMPLETED' AND s.amount_paid < s.total
                       THEN s.total - s.amount_paid ELSE 0 END
@@ -109,7 +109,7 @@ export async function listContacts(
           LEFT JOIN sales s ON s.customer_id = c.id AND s.business_id = c.business_id
          WHERE c.business_id = ${businessId}
            AND (${term}::text IS NULL OR c.name ILIKE ${term} OR c.phone ILIKE ${term})
-         GROUP BY c.id, c.name, c.phone, c.address, c.notes, c.created_at
+         GROUP BY c.id, c.name, c.phone, c.email, c.address, c.notes, c.created_at
          ORDER BY c.name
          LIMIT ${plafond}
       `
@@ -147,8 +147,8 @@ export async function createContact(session: Session, kind: string, body: Record
 
   if (kind === 'customers') {
     await sql`
-      INSERT INTO customers (id, business_id, name, phone, address, notes)
-      VALUES (${id}, ${session.businessId}, ${input.name}, ${input.phone},
+      INSERT INTO customers (id, business_id, name, phone, email, address, notes)
+      VALUES (${id}, ${session.businessId}, ${input.name}, ${input.phone}, ${input.email},
               ${input.address}, ${input.notes})
     `;
   } else {
@@ -175,7 +175,8 @@ export async function updateContact(
   if (kind === 'customers') {
     await sql`
       UPDATE customers SET name = ${input.name}, phone = ${input.phone},
-             address = ${input.address}, notes = ${input.notes}, updated_at = now()
+             email = ${input.email}, address = ${input.address},
+             notes = ${input.notes}, updated_at = now()
        WHERE id = ${id} AND business_id = ${session.businessId}
     `;
   } else {

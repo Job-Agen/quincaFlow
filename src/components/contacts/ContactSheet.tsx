@@ -37,6 +37,7 @@ export default function ContactSheet({
   const [form, setForm] = useState({
     name: contact.name || '',
     phone: contact.phone || '',
+    email: contact.email || '',
     whatsapp: contact.whatsapp || '',
     address: contact.address || '',
     notes: contact.notes || '',
@@ -72,6 +73,19 @@ export default function ContactSheet({
         value={form.phone}
         onChange={set('phone')}
       />
+      {/* L'adresse sert à envoyer les factures (§57) : elle ne concerne donc
+        que les clients, pas les fournisseurs, à qui on envoie des commandes
+        par WhatsApp. */}
+      {withWhatsapp ? null : (
+        <TextField
+          label="E-mail"
+          type="email"
+          inputMode="email"
+          hint="Pour lui envoyer ses factures en pièce jointe."
+          value={form.email}
+          onChange={set('email')}
+        />
+      )}
       {withWhatsapp ? (
         <TextField
           label="WhatsApp"

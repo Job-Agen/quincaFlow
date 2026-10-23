@@ -437,6 +437,8 @@ export interface ContactRow {
   business_id: string;
   name: string;
   phone: string | null;
+  /** Où partent les factures de ce client (§57). Absent chez les fournisseurs. */
+  email?: string | null;
   whatsapp?: string | null;
   address: string | null;
   notes: string | null;

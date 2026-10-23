@@ -256,13 +256,16 @@ export function Notice({
   tone,
   icon,
   children,
+  className,
 }: {
   tone?: 'error' | 'warn' | 'info' | 'success';
   icon?: ReactNode;
   children: ReactNode;
+  /** Pour écarter un avis du document imprimé : `no-print` (§56). */
+  className?: string;
 }) {
   return (
-    <div className={`notice${tone ? ` notice--${tone}` : ''}`}>
+    <div className={`notice${tone ? ` notice--${tone}` : ''}${className ? ` ${className}` : ''}`}>
       {icon}
       <div>{children}</div>
     </div>

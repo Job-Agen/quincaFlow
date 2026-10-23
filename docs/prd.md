@@ -2531,3 +2531,91 @@ vérifiable — un test monte la pièce avec une vente, sans routeur.
 6. La devise est en tête de colonne, pas sur chaque ligne.
 7. Le ticket 58 et 80 mm garde sa mise en page centrée.
 8. Les quatre pièces portent le même en-tête.
+
+## 57. Envoyer la facture, pas un résumé
+
+**Objectif**
+
+Le bouton « Partager WhatsApp » existait depuis longtemps. Il envoyait **du
+texte** : une liste d'articles et un total. Le client recevait un message, pas
+une facture — rien qu'il puisse garder, imprimer ou donner à son comptable. Et
+par courriel, rien du tout.
+
+La pièce refaite au §56 ne sortait donc jamais de l'écran du gérant.
+
+**F63 — Un seul constructeur de PDF, deux chemins**
+
+Le téléphone le fabrique pour le partage natif ; le serveur le fabrique pour la
+pièce jointe d'un courriel. **Le même module**, isomorphe — deux constructeurs
+auraient divergé au premier changement de mise en page, et personne ne l'aurait
+vu avant qu'un client ne reçoive une facture d'une autre époque.
+
+La coupure est ailleurs, et c'est elle qui rend la chose vérifiable :
+
+- **Le plan** dit *où* chaque chose se pose, en points PDF, sans rien dessiner.
+  Pur, donc testé : qu'aucun bloc ne sorte de la feuille, que le tableau se
+  pagine au lieu d'être coupé, que l'en-tête de colonnes se redessine sur
+  chaque page, que le décompte ne figure que sur la dernière.
+- **Le tracé** pose ce que le plan a placé, et ne décide de rien.
+
+La bibliothèque PDF pèse un demi-mégaoctet : elle est chargée **à la demande**,
+au moment où le gérant appuie sur « Envoyer ». Personne ne la télécharge pour
+encaisser une vente.
+
+**F64 — Ce qu'une police PDF ne sait pas écrire**
+
+Les polices de base n'encodent que le latin-1, et un nom de produit est du
+texte libre. Une émoticône collée dans un libellé ferait échouer le tracé, donc
+l'envoi tout entier. Les caractères hors latin-1 sont remplacés : mieux vaut
+une facture où un caractère manque qu'une facture qui ne part pas.
+
+**F65 — WhatsApp, avec trois replis**
+
+1. `navigator.share` avec le fichier — Android, iPhone. Le client reçoit le PDF
+   dans la conversation.
+2. Le navigateur n'en veut pas : le PDF est téléchargé, WhatsApp s'ouvre avec
+   le texte, et l'écran explique qu'il reste à le joindre.
+3. Rien ne marche : le PDF est téléchargé, ce qui était déjà l'essentiel.
+
+Le repli n'est pas un détail. Un gérant qui appuie sur « Envoyer » et à qui il
+ne se passe rien conclut que l'application est cassée.
+
+**F66 — Le courriel**
+
+Un champ **e-mail** apparaît sur les fiches clients — elles n'en avaient pas.
+L'adresse est proposée à l'envoi, jamais imposée : une entreprise fait souvent
+envoyer ses factures à une comptabilité qui n'est pas la personne venue au
+comptoir. L'adresse corrigée n'est pas réenregistrée sur la fiche, sans quoi
+une adresse de circonstance deviendrait silencieusement celle du client.
+
+L'application ne parle pas SMTP : un serveur sans adresse fixe voit ses
+messages classés en indésirables. Elle confie le message à un expéditeur
+(Resend), par deux variables d'environnement et rien dans le code :
+
+```
+RESEND_API_KEY   la clé du compte
+MAIL_FROM        « Ma Quincaillerie <no-reply@votre-domaine.tg> »
+```
+
+Sans elles, la fonctionnalité **se tait proprement et dit quoi configurer**,
+plutôt que d'échouer sur un refus illisible au moment où le gérant appuie.
+
+Et quand l'expéditeur refuse — domaine non vérifié, quota dépassé —, sa phrase
+est relayée telle quelle. Un envoi annoncé qui n'a pas eu lieu ne se rattrape
+jamais.
+
+Une facture annulée ne s'envoie pas : elle ferait croire à une créance.
+
+**Critères d'acceptation**
+
+1. Le PDF envoyé est celui du §56 : même en-tête, même décompte, même somme en
+   lettres.
+2. La pièce jointe porte la référence de la facture comme nom de fichier.
+3. Le tableau se pagine ; aucun bloc ne sort de la feuille.
+4. Un caractère hors latin-1 ne fait pas échouer l'envoi.
+5. Là où le partage de fichiers n'existe pas, le PDF est téléchargé et l'écran
+   le dit.
+6. Sans expéditeur configuré, le message nomme les variables à définir.
+7. Un refus de l'expéditeur est relayé au gérant, jamais tu.
+8. La facture d'une vente annulée ne part pas.
+9. Rien de tout cela ne franchit la frontière d'une boutique (§29).

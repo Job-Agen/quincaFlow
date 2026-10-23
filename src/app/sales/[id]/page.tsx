@@ -1,19 +1,21 @@
 'use client';
 
 import { use, useState } from 'react';
-import { Printer, Share2, XCircle, FileDown, MessageCircle } from 'lucide-react';
+import { Mail, Printer, Share2, XCircle, FileDown, MessageCircle } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Notice, Segmented, Sheet, Skeleton, TextField } from '@/components/ui';
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { saleBalance } from '@/domain/credit';
+import { envoyerFacture } from '@/client/partage';
 import { PRINT_FORMAT_LABELS, TICKET_WIDTHS, isTicket, readFormat } from '@/domain/ticket';
 import { printWith, usePrintFormat } from '@/client/print';
 import { amount, dateTime, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import InvoiceDocument from '@/components/documents/InvoiceDocument';
-import type { Sale } from '@/types';
+import EnvoiMailSheet from '@/components/documents/EnvoiMailSheet';
+import type { ContactRow, Sale } from '@/types';
 
 /**
  * Facture / reçu (maquette 4, §15).
@@ -33,8 +35,17 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
   // un « Reste dû : 0 » sur une facture soldée semant le doute pour rien.
   const reste = sale ? saleBalance(sale.total, sale.amount_paid) : 0;
   const cancelled = sale?.status === 'CANCELLED';
+  const [envoi, setEnvoi] = useState<'en-cours' | 'téléchargé' | null>(null);
+  const [erreurEnvoi, setErreurEnvoi] = useState<string | null>(null);
+  const [parMail, setParMail] = useState(false);
 
-  async function share(target: 'native' | 'whatsapp' = 'native') {
+  // La fiche du client n'est chargée que si la facture en porte un : c'est elle
+  // qui propose l'adresse d'envoi (§57).
+  const { data: client } = useResource<ContactRow>(
+    sale?.customer_id ? `/api/customers/${sale.customer_id}` : null
+  );
+
+  async function share() {
     if (!sale) return;
     const lines = sale.items
       .map(
@@ -60,12 +71,22 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
       .filter(Boolean)
       .join('\n');
 
-    // Le partage natif ouvre WhatsApp parmi les autres applications ; le lien
-    // wa.me reste le repli sur les navigateurs de bureau qui ne l'implémentent pas.
-    if (target !== 'whatsapp' && navigator.share) {
-      await navigator.share({ title: `Facture ${sale.invoice_reference}`, text }).catch(() => {});
-    } else {
-      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    // Le partage du téléphone propose WhatsApp parmi les autres applications,
+    // et emporte le PDF avec lui (§57). Là où il n'existe pas — les navigateurs
+    // de bureau —, le fichier est téléchargé et wa.me s'ouvre avec le texte :
+    // le gérant joint le PDF lui-même, en deux gestes.
+    setEnvoi('en-cours');
+    try {
+      const issue = await envoyerFacture(sale, business, currency, text);
+      if (issue === 'téléchargé') {
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+        setEnvoi('téléchargé');
+      } else {
+        setEnvoi(null);
+      }
+    } catch (issue) {
+      setEnvoi(null);
+      setErreurEnvoi(errorMessage(issue));
     }
   }
 
@@ -119,10 +140,30 @@ export default function SalePage({ params }: { params: Promise<{ id: string }> }
               />
             </div>
 
+            {erreurEnvoi ? (
+              <Notice tone="error" className="no-print">
+                {erreurEnvoi}
+              </Notice>
+            ) : null}
+            {envoi === 'téléchargé' ? (
+              <Notice tone="warn" className="no-print">
+                Ce navigateur ne sait pas joindre un fichier à un message. La facture a été
+                téléchargée : joignez-la à la conversation WhatsApp qui vient de s’ouvrir.
+              </Notice>
+            ) : null}
+
+            {parMail && sale ? (
+              <EnvoiMailSheet sale={sale} client={client} onClose={() => setParMail(false)} />
+            ) : null}
+
             <div className="invoice-actions no-print">
-              <Button variant="success" onClick={() => share('whatsapp')}>
+              <Button variant="success" disabled={envoi === 'en-cours'} onClick={() => share()}>
                 <MessageCircle size={23} />
-                Partager WhatsApp
+                {envoi === 'en-cours' ? 'Préparation…' : 'Envoyer par WhatsApp'}
+              </Button>
+              <Button variant="soft" disabled={cancelled} onClick={() => setParMail(true)}>
+                <Mail size={23} />
+                Envoyer par e-mail
               </Button>
               <Button
                 onClick={() => printWith(format)}

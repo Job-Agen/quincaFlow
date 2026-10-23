@@ -42,6 +42,8 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let credit: typeof import('../credit');
   let exports_: typeof import('../exports');
   let dashboard: typeof import('../dashboard');
+  let contacts: typeof import('../contacts');
+  let invoiceMail: typeof import('../invoiceMail');
   let history_: typeof import('../history');
 
   const OWNER: Session = {
@@ -83,6 +85,8 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     credit = await import('../credit');
     exports_ = await import('../exports');
     dashboard = await import('../dashboard');
+    contacts = await import('../contacts');
+    invoiceMail = await import('../invoiceMail');
     history_ = await import('../history');
   });
 
@@ -840,6 +844,146 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
         .split('\r\n');
       expect(lignes[0]).toContain('Rayon');
       expect(lignes.find((ligne) => ligne.startsWith('PVC-110'))).toContain(';Plomberie;');
+    });
+  });
+
+  // ─────────────────── Envoi de la facture (§57) ───────────────────────
+
+  describe('facture envoyée (§57)', () => {
+    /** Une vente à crédit chez un client qui a une adresse. */
+    async function seedEnvoi() {
+      await pool.query(
+        `INSERT INTO customers (id, business_id, name, phone, email)
+         VALUES ('cus_mail', $1, 'Entreprise BTP Soleil', '90 00 00 09', 'compta@btp.tg')`,
+        [OWNER.businessId]
+      );
+      const vitre = await seedVitre();
+      return sales.createSale(OWNER, {
+        customerId: 'cus_mail',
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 400,
+      });
+    }
+
+    it('garde l’adresse sur la fiche client', async () => {
+      await seedEnvoi();
+      const fiche = await contacts.getContact(OWNER.businessId, 'customers', 'cus_mail');
+      expect(fiche.email).toBe('compta@btp.tg');
+    });
+
+    it('se laisse modifier, et se laisse vider', async () => {
+      await seedEnvoi();
+      const change = await contacts.updateContact(OWNER, 'customers', 'cus_mail', {
+        name: 'Entreprise BTP Soleil',
+        email: 'direction@btp.tg',
+      });
+      expect(change.email).toBe('direction@btp.tg');
+
+      const vide = await contacts.updateContact(OWNER, 'customers', 'cus_mail', {
+        name: 'Entreprise BTP Soleil',
+      });
+      expect(vide.email).toBeNull();
+    });
+
+    it('refuse une adresse qui n’en est pas une', async () => {
+      const vente = await seedEnvoi();
+      await expect(invoiceMail.emailSale(OWNER, vente.id, 'pas-une-adresse')).rejects.toThrow(
+        /invalide/i
+      );
+    });
+
+    it('refuse d’envoyer la facture d’une vente annulée', async () => {
+      const vente = await seedEnvoi();
+      await sales.cancelSale(OWNER, vente.id, 'Erreur de saisie');
+      // Envoyer une facture annulée ferait croire à une créance.
+      await expect(invoiceMail.emailSale(OWNER, vente.id, 'compta@btp.tg')).rejects.toThrow(
+        /annulée/i
+      );
+    });
+
+    it('dit quoi configurer plutôt que d’échouer sur un refus illisible', async () => {
+      const vente = await seedEnvoi();
+      // Sans expéditeur configuré, le gérant doit lire une phrase qu'il peut
+      // agir, pas un 401 venu d'une API qu'il ne connaît pas.
+      await expect(invoiceMail.emailSale(OWNER, vente.id, 'compta@btp.tg')).rejects.toThrow(
+        /RESEND_API_KEY/
+      );
+    });
+
+    it('joint un vrai PDF, et dit à qui, quoi, pour combien', async () => {
+      const vente = await seedEnvoi();
+
+      // L'expéditeur est remplacé par un espion : c'est le contenu du message
+      // qu'on vérifie, et il part une fois chez un vrai client sans que
+      // personne ne le relise.
+      process.env.RESEND_API_KEY = 'cle-de-test';
+      process.env.MAIL_FROM = 'Quincaillerie A <no-reply@test.tg>';
+      const appels: { url: string; corps: Record<string, unknown> }[] = [];
+      const vraiFetch = globalThis.fetch;
+      globalThis.fetch = (async (url: string, init: RequestInit) => {
+        appels.push({ url: String(url), corps: JSON.parse(String(init.body)) });
+        return new Response('{}', { status: 200 });
+      }) as typeof fetch;
+
+      try {
+        const issue = await invoiceMail.emailSale(OWNER, vente.id, 'Compta@BTP.TG');
+        expect(issue).toMatchObject({ sent: true, to: 'compta@btp.tg' });
+      } finally {
+        globalThis.fetch = vraiFetch;
+        delete process.env.RESEND_API_KEY;
+        delete process.env.MAIL_FROM;
+      }
+
+      expect(appels).toHaveLength(1);
+      const corps = appels[0]!.corps as {
+        to: string[];
+        subject: string;
+        text: string;
+        attachments: { filename: string; content: string }[];
+      };
+
+      expect(corps.to).toEqual(['compta@btp.tg']);
+      expect(corps.subject).toContain(vente.invoice_reference);
+      expect(corps.text).toContain('Entreprise BTP Soleil');
+      // 900 au total, 400 encaissés : le message annonce le reste.
+      expect(corps.text).toMatch(/reste.*500/i);
+
+      const piece = corps.attachments[0]!;
+      expect(piece.filename).toBe(`${vente.invoice_reference}.pdf`);
+      // Un PDF, et pas une chaîne vide : les premiers octets le disent.
+      const octets = Buffer.from(piece.content, 'base64');
+      expect(octets.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(octets.length).toBeGreaterThan(1000);
+    });
+
+    it('relaie le refus de l’expéditeur plutôt que d’annoncer un envoi', async () => {
+      const vente = await seedEnvoi();
+      process.env.RESEND_API_KEY = 'cle-de-test';
+      process.env.MAIL_FROM = 'Quincaillerie A <no-reply@test.tg>';
+      const vraiFetch = globalThis.fetch;
+      globalThis.fetch = (async () =>
+        new Response(JSON.stringify({ message: 'The domain test.tg is not verified.' }), {
+          status: 403,
+        })) as typeof fetch;
+
+      try {
+        // « Ce domaine n'est pas vérifié » est une phrase que le gérant peut
+        // agir ; un envoi annoncé qui n'a pas eu lieu ne se rattrape jamais.
+        await expect(invoiceMail.emailSale(OWNER, vente.id, 'compta@btp.tg')).rejects.toThrow(
+          /not verified/i
+        );
+      } finally {
+        globalThis.fetch = vraiFetch;
+        delete process.env.RESEND_API_KEY;
+        delete process.env.MAIL_FROM;
+      }
+    });
+
+    it('n’envoie pas la facture d’une autre quincaillerie', async () => {
+      const vente = await seedEnvoi();
+      await expect(invoiceMail.emailSale(RIVAL, vente.id, 'compta@btp.tg')).rejects.toThrow(
+        /introuvable/i
+      );
     });
   });
 

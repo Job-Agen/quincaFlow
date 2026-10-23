@@ -148,6 +148,9 @@ CREATE TABLE IF NOT EXISTS customers (
   business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
   name        text NOT NULL,
   phone       text,
+  -- L'adresse où partent les factures (§57). Facultative : au comptoir, le
+  -- téléphone suffit, et c'est une entreprise cliente qui réclame un courriel.
+  email       text,
   address     text,
   notes       text,
   created_at  timestamptz NOT NULL DEFAULT now(),
