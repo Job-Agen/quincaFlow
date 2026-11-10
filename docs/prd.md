@@ -2619,3 +2619,101 @@ Une facture annulée ne s'envoie pas : elle ferait croire à une créance.
 7. Un refus de l'expéditeur est relayé au gérant, jamais tu.
 8. La facture d'une vente annulée ne part pas.
 9. Rien de tout cela ne franchit la frontière d'une boutique (§29).
+
+## 58. Trier, corriger, effacer une commande fournisseur
+
+**Objectif**
+
+Depuis le §20 une commande fournisseur ne savait que naître, se recevoir et
+s'annuler. Trois manques en découlaient.
+
+La liste d'abord : elle montrait tout, du brouillon de ce matin à la livraison
+de l'an dernier, dans un seul fil. Le gérant qui cherche ce qui court encore
+devait lire chaque ligne.
+
+La correction ensuite. Une commande se prépare souvent **avant** le coup de fil
+au fournisseur : on note vingt sacs, le fournisseur n'en a que quinze, le prix
+a bougé. Sans modification, il fallait annuler et tout ressaisir — et la
+boutique gardait deux numéros pour une seule commande, dont un fantôme.
+
+L'effacement enfin. Une commande ouverte par erreur, ou sur le mauvais
+fournisseur, restait là pour toujours. L'annulation ne répond pas à ce
+besoin-là : elle dit « cette commande a existé et ne courra plus », ce qui est
+une information. Une saisie fautive n'en est pas une.
+
+**F67 — Ce que la liste sait filtrer**
+
+Trois états, pas sept statuts : **En cours**, **Livrées**, **Annulées**,
+**Toutes**. « En cours » vient en premier parce que c'est la seule qui demande
+une action. Les statuts internes (brouillon, envoyée, partiellement reçue) se
+rangent derrière « En cours » : pour le gérant ce sont tous des articles qui ne
+sont pas encore sur l'étagère.
+
+La période s'y croise — tout, 30 jours, ce mois, le mois dernier — par les
+mêmes bornes que les rapports (§33), pour qu'une commande comptée ici et là-bas
+le soit de la même façon.
+
+Quand un filtre ne laisse rien, l'écran le dit : « Aucune commande ne
+correspond à ce filtre. » Sans cette phrase, un gérant resté sur « Annulées »
+croit avoir perdu ses commandes.
+
+**F68 — Le verrou, avant toute chose**
+
+Une règle unique, `verrouDeCommande`, décide : elle rend soit `null` — les deux
+gestes sont offerts —, soit **la phrase** qui explique le refus. Elle est
+appliquée deux fois, à l'écran et sur la route, à partir du même code : une
+règle qui ne vit que dans le composant se contourne avec l'outil de
+développement du téléphone.
+
+| Situation | Modifier / supprimer | Pourquoi |
+|---|---|---|
+| Brouillon, envoyée | oui | rien n'a bougé dans la boutique |
+| Une réception, même partielle | non | du stock est entré ; l'effacer ferait mentir l'inventaire |
+| Un règlement fournisseur | non | une dette a été payée contre cette pièce (§54) |
+| Annulée | non | l'annulation est déjà la trace voulue |
+
+Une commande verrouillée n'affiche pas des boutons grisés : elle affiche la
+phrase. Un bouton qu'on ne peut pas appuyer n'apprend rien.
+
+**F69 — Modifier, c'est remplacer**
+
+L'enregistrement **remplace** les lignes au lieu de les fusionner. Une
+fusion garderait l'article que le gérant vient de retirer : il croirait
+l'avoir ôté, le fournisseur le livrerait quand même.
+
+Le **numéro ne change pas**. Il est peut-être déjà parti par WhatsApp, lu au
+téléphone, noté sur un cahier. Une correction qui renumérote la commande casse
+la seule chose que les deux parties avaient en commun.
+
+La saisie est **celle de la création** (`PurchaseOrderForm`), pas une seconde
+page : un champ ajouté d'un côté manquerait de l'autre, et on s'en apercevrait
+devant le fournisseur. Une ligne rechargée ne garde que le libellé de son
+conditionnement — « sac », « carton » —, parce qu'un bon déjà imprimé ne doit
+pas changer si le produit est renommé ; l'identifiant se retrouve dans le
+catalogue au rendu.
+
+**F70 — Supprimer, sans corbeille**
+
+La feuille de confirmation nomme la commande, compte ses lignes, dit qu'il n'y
+a **pas de corbeille**, et propose l'annulation à la place pour une commande
+déjà envoyée au fournisseur. Le geste reste réservé au propriétaire (§31).
+
+L'identifiant de boutique reste dans la clé de l'effacement bien que le verrou
+ait déjà écarté la commande d'une autre boutique : le §29 veut cet identifiant
+dans la clé de toute écriture, jamais dans un simple filtre d'affichage.
+
+**Critères d'acceptation**
+
+1. Chaque état ne montre que les commandes de cet état ; « Toutes » les montre
+   toutes.
+2. La période écarte ce qui tombe hors de ses bornes, et se croise avec l'état.
+3. Un filtre sans résultat l'explique au lieu d'afficher un vide muet.
+4. Une commande reçue, réglée ou annulée n'offre ni « Modifier » ni
+   « Supprimer », et la phrase dit laquelle des trois.
+5. La route refuse le même geste que l'écran, avec la même phrase.
+6. Après modification : le numéro est inchangé, les lignes sont celles saisies,
+   et aucune ligne retirée ne subsiste.
+7. Modifier ne crée ni mouvement de stock ni réception : commander n'est pas
+   posséder (§21).
+8. Supprimer efface la commande et ses lignes, et rien d'autre.
+9. Rien de tout cela ne franchit la frontière d'une boutique (§29).

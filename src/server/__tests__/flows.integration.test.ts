@@ -541,6 +541,225 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
   });
 
+  // ─────────── Filtrer, modifier, supprimer une commande (§58) ─────────
+
+  describe('commandes fournisseurs : filtrer, modifier, supprimer (§58)', () => {
+    async function seedCatalogue() {
+      await pool.query(
+        `INSERT INTO suppliers (id, business_id, name) VALUES
+         ('sup_1', $1, 'Bâtir Plus'), ('sup_2', $1, 'Dépôt Central')`,
+        [OWNER.businessId]
+      );
+      return seedVitre(400);
+    }
+
+    const commande = async (vitre: { id: string; units: { id: string }[] }, over = {}) =>
+      purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_1',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 100, unitCost: 320 }],
+        ...over,
+      });
+
+    it('filtre sur ce qui court encore, ce qui est livré, ce qui est annulé', async () => {
+      const vitre = await seedCatalogue();
+      const ouverte = await commande(vitre);
+      const livree = await commande(vitre);
+      await purchases.receivePurchaseOrder(OWNER, livree.id, {
+        lines: [{ itemId: livree.items[0]!.id, quantity: 100 }],
+      });
+      const annulee = await commande(vitre);
+      await purchases.updatePurchaseOrderStatus(OWNER, annulee.id, { status: 'CANCELLED' });
+
+      const refs = async (statut: string) =>
+        (await purchases.listPurchaseOrders(OWNER.businessId, { statut })).map((o) => o.reference);
+
+      expect(await refs('ouvertes')).toEqual([ouverte.reference]);
+      expect(await refs('livrees')).toEqual([livree.reference]);
+      expect(await refs('annulees')).toEqual([annulee.reference]);
+      // Un filtre inconnu ne filtre rien : une liste vide ferait croire à une
+      // boutique sans commandes.
+      expect(await refs('')).toHaveLength(3);
+      expect(await refs('n’importe quoi')).toHaveLength(3);
+    });
+
+    it('filtre sur la période', async () => {
+      const vitre = await seedCatalogue();
+      const recente = await commande(vitre);
+      const ancienne = await commande(vitre);
+      await pool.query(
+        "UPDATE purchase_orders SET created_at = now() - interval '60 days' WHERE id = $1",
+        [ancienne.id]
+      );
+
+      const bornes = history_.periodBounds('30d');
+      const vues = await purchases.listPurchaseOrders(OWNER.businessId, bornes);
+      expect(vues.map((o) => o.reference)).toEqual([recente.reference]);
+    });
+
+    it('croise la période, le statut et la recherche', async () => {
+      const vitre = await seedCatalogue();
+      await commande(vitre);
+      const chezLautre = await commande(vitre, { supplierId: 'sup_2' });
+
+      const vues = await purchases.listPurchaseOrders(OWNER.businessId, {
+        statut: 'ouvertes',
+        search: 'Dépôt',
+        ...history_.periodBounds('30d'),
+      });
+      expect(vues.map((o) => o.reference)).toEqual([chezLautre.reference]);
+    });
+
+    it('réécrit les lignes, le fournisseur et les observations', async () => {
+      const vitre = await seedCatalogue();
+      const avant = await commande(vitre);
+
+      const apres = await purchases.updatePurchaseOrder(OWNER, avant.id, {
+        supplierId: 'sup_2',
+        notes: 'Livraison avant vendredi.',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 250, unitCost: 300 }],
+      });
+
+      expect(apres.supplier_name).toBe('Dépôt Central');
+      expect(apres.notes).toBe('Livraison avant vendredi.');
+      expect(apres.items).toHaveLength(1);
+      expect(apres.items[0]).toMatchObject({ quantity_ordered: 250, unit_cost: 300 });
+      expect(apres.total_estimated).toBe(75000);
+    });
+
+    it('ne fait entrer aucun stock en modifiant la commande', async () => {
+      const vitre = await seedCatalogue();
+      const avant = await commande(vitre);
+      const etat = async () => {
+        const { rows } = await pool.query<{ stock: number; mouvements: number }>(
+          `SELECT p.stock_quantity::float8 AS stock,
+                  (SELECT count(*)::int FROM stock_movements m WHERE m.product_id = p.id)
+                    AS mouvements
+             FROM products p WHERE p.id = $1`,
+          [vitre.id]
+        );
+        return rows[0]!;
+      };
+      const avantEdition = await etat();
+
+      await purchases.updatePurchaseOrder(OWNER, avant.id, {
+        supplierId: 'sup_1',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 900, unitCost: 320 }],
+      });
+
+      // Corriger une commande, c'est corriger une intention : commander n'est
+      // pas posséder (§21). Rien n'entre en boutique avant la réception.
+      expect(await etat()).toEqual(avantEdition);
+      expect(avantEdition.stock).toBe(400);
+      expect((await purchases.getPurchaseOrder(OWNER.businessId, avant.id)).received).toBe(0);
+    });
+
+    it('garde le numéro de commande à la modification', async () => {
+      const vitre = await seedCatalogue();
+      const avant = await commande(vitre);
+      const apres = await purchases.updatePurchaseOrder(OWNER, avant.id, {
+        supplierId: 'sup_1',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 50, unitCost: 320 }],
+      });
+      // Le fournisseur a peut-être déjà le PO-0001 sous les yeux : lui en
+      // renvoyer un autre ferait deux commandes dans son carnet.
+      expect(apres.reference).toBe(avant.reference);
+    });
+
+    it('remplace les lignes au lieu de les additionner', async () => {
+      const vitre = await seedCatalogue();
+      const avant = await commande(vitre);
+      const apres = await purchases.updatePurchaseOrder(OWNER, avant.id, {
+        supplierId: 'sup_1',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 7, unitCost: 320 }],
+      });
+      expect(apres.items).toHaveLength(1);
+      const { rows: restes } = await pool.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM purchase_order_items WHERE purchase_order_id = $1',
+        [avant.id]
+      );
+      expect(restes[0]!.n).toBe(1);
+    });
+
+    it('supprime une commande dont rien ne dépend', async () => {
+      const vitre = await seedCatalogue();
+      const brouillon = await commande(vitre);
+
+      await purchases.deletePurchaseOrder(OWNER, brouillon.id);
+
+      await expect(
+        purchases.getPurchaseOrder(OWNER.businessId, brouillon.id)
+      ).rejects.toThrow(/introuvable/i);
+      // Les lignes partent avec elle, sans rien laisser derrière.
+      const { rows } = await pool.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM purchase_order_items WHERE purchase_order_id = $1',
+        [brouillon.id]
+      );
+      expect(rows[0]!.n).toBe(0);
+    });
+
+    it('refuse de modifier ou supprimer une commande livrée', async () => {
+      const vitre = await seedCatalogue();
+      const livree = await commande(vitre);
+      await purchases.receivePurchaseOrder(OWNER, livree.id, {
+        lines: [{ itemId: livree.items[0]!.id, quantity: 40 }],
+      });
+
+      // Réécrire ses lignes falsifierait le stock déjà entré.
+      await expect(
+        purchases.updatePurchaseOrder(OWNER, livree.id, {
+          supplierId: 'sup_1',
+          items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 1, unitCost: 1 }],
+        })
+      ).rejects.toThrow(/livraison/i);
+      await expect(purchases.deletePurchaseOrder(OWNER, livree.id)).rejects.toThrow(/livraison/i);
+    });
+
+    it('refuse de supprimer une commande qui porte un règlement', async () => {
+      const vitre = await seedCatalogue();
+      const reglee = await commande(vitre);
+      await purchases.receivePurchaseOrder(OWNER, reglee.id, {
+        lines: [{ itemId: reglee.items[0]!.id, quantity: 100 }],
+      });
+      await purchases.recordSupplierPayment(OWNER, reglee.id, { amount: 1000 });
+
+      // La cascade emporterait le règlement, et avec lui une sortie du journal
+      // de caisse (§53).
+      await expect(purchases.deletePurchaseOrder(OWNER, reglee.id)).rejects.toThrow(/livraison|règlement/i);
+      const journal = await cash.cashJournal(OWNER.businessId);
+      expect(journal.entries.some((ligne) => ligne.kind === 'SUPPLIER_PAYMENT')).toBe(true);
+    });
+
+    it('refuse de modifier une commande annulée', async () => {
+      const vitre = await seedCatalogue();
+      const annulee = await commande(vitre);
+      await purchases.updatePurchaseOrderStatus(OWNER, annulee.id, { status: 'CANCELLED' });
+      await expect(
+        purchases.updatePurchaseOrder(OWNER, annulee.id, {
+          supplierId: 'sup_1',
+          items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 1, unitCost: 1 }],
+        })
+      ).rejects.toThrow(/annulée/i);
+    });
+
+    it('ne touche pas aux commandes de la quincaillerie voisine', async () => {
+      const vitre = await seedCatalogue();
+      const mienne = await commande(vitre);
+
+      await expect(purchases.deletePurchaseOrder(RIVAL, mienne.id)).rejects.toThrow(/introuvable/i);
+      await expect(
+        purchases.updatePurchaseOrder(RIVAL, mienne.id, {
+          supplierName: 'Pirate',
+          items: [{ productId: vitre.id, quantity: 1, unitCost: 1 }],
+        })
+      ).rejects.toThrow(/introuvable/i);
+      expect(await purchases.listPurchaseOrders(RIVAL.businessId, {})).toHaveLength(0);
+      // Et elle est toujours là.
+      expect((await purchases.getPurchaseOrder(OWNER.businessId, mienne.id)).reference).toBe(
+        mienne.reference
+      );
+    });
+  });
+
   // ────────────────────── Dettes fournisseurs (§53) ────────────────────
 
   describe('dettes fournisseurs (§53)', () => {

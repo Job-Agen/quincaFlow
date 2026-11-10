@@ -60,6 +60,39 @@ export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   CANCELLED: 'Annulée',
 };
 
+/**
+ * Ce qui interdit de modifier ou de supprimer une commande, ou `null` si rien
+ * ne s'y oppose (§58).
+ *
+ * Une commande n'est un brouillon que tant que rien n'en dépend. Dès qu'une
+ * livraison est entrée, elle a écrit des mouvements de stock ; dès qu'un
+ * règlement est saisi, elle a fait sortir de l'argent de la caisse (§53).
+ * Réécrire ses lignes falsifierait l'un, la supprimer effacerait l'autre — la
+ * suppression en base emporte en cascade les réceptions et les règlements, donc
+ * une entrée du journal de caisse disparaîtrait sans laisser de trace.
+ *
+ * Au-delà de ce point, le geste juste n'est pas de corriger mais d'annuler :
+ * l'annulation garde la trace de ce qui a existé, parce que le fournisseur, lui,
+ * a bien reçu la commande.
+ *
+ * La fonction rend une phrase et non un booléen : c'est elle que le gérant lit,
+ * et « action impossible » ne lui dirait pas quoi faire à la place.
+ */
+export function verrouDeCommande(
+  statut: PurchaseOrderStatus,
+  receptions: number,
+  reglements: number
+): string | null {
+  if (statut === 'CANCELLED') return 'Cette commande est annulée.';
+  if (receptions > 0) {
+    return 'Cette commande a déjà reçu une livraison : elle ne peut plus être modifiée ni supprimée. Annulez-la si elle ne doit plus courir.';
+  }
+  if (reglements > 0) {
+    return 'Cette commande porte un règlement fournisseur : elle ne peut plus être modifiée ni supprimée.';
+  }
+  return null;
+}
+
 /** Teinte de badge par statut : vert quand c'est livré, ambre tant que ça court. */
 export const PO_STATUS_TONES: Record<PurchaseOrderStatus, Tone> = {
   DRAFT: 'grey',

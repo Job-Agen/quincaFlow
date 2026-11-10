@@ -13,6 +13,7 @@ import type {
   PurchaseOrder,
   PurchaseOrderItemRow,
   PurchaseOrderRow,
+  PurchaseOrderStatus,
   PurchaseReceiptRow,
   Session,
   SupplierDebt,
@@ -24,6 +25,7 @@ import {
   orderTotal,
   receptionStatus,
   remainingOf,
+  verrouDeCommande,
 } from '../domain/purchase';
 
 /**
@@ -49,17 +51,49 @@ const ITEM_COLUMNS = `
   unit_cost::float8 AS unit_cost, position
 `;
 
+/**
+ * Les statuts que recouvre chaque filtre de l'écran (§58).
+ *
+ * Le gérant ne pense pas en sept statuts : il pense « ce qui court encore »,
+ * « ce qui est arrivé », « ce que j'ai annulé ». Le découpage est ici et non
+ * dans l'écran, pour que le téléphone et le web filtrent pareil.
+ */
+const FILTRES: Record<string, readonly PurchaseOrderStatus[]> = {
+  ouvertes: ['DRAFT', 'SENT', 'INVOICE_RECEIVED', 'PAID', 'PARTIALLY_RECEIVED'],
+  livrees: ['RECEIVED'],
+  annulees: ['CANCELLED'],
+};
+
 export async function listPurchaseOrders(
   businessId: string,
-  { search = '', limit = 100 }: { search?: string; limit?: number } = {}
+  {
+    search = '',
+    statut = '',
+    from = null,
+    to = null,
+    limit = 100,
+  }: {
+    search?: string;
+    statut?: string;
+    from?: string | null;
+    to?: string | null;
+    limit?: number;
+  } = {}
 ): Promise<PurchaseOrderRow[]> {
   const sql = getSql();
   const term = search.trim() ? `%${search.trim()}%` : null;
+  // Un filtre inconnu ne filtre rien plutôt que de ne rien rendre : une liste
+  // vide ferait croire à une boutique sans commandes.
+  const statuts = FILTRES[statut] ?? null;
+
   return rows<PurchaseOrderRow>(
     await sql`
     SELECT ${sql.unsafe(ORDER_COLUMNS)} FROM purchase_orders
      WHERE business_id = ${businessId}
        AND (${term}::text IS NULL OR reference ILIKE ${term} OR supplier_name ILIKE ${term})
+       AND (${statuts === null} OR status = ANY(${statuts ?? []}::text[]))
+       AND (${from}::timestamptz IS NULL OR created_at >= ${from})
+       AND (${to}::timestamptz IS NULL OR created_at <= ${to})
      ORDER BY created_at DESC
      LIMIT ${Math.min(limit, 300)}
   `
@@ -148,8 +182,8 @@ async function readItems(businessId: string, rawItems: unknown) {
   });
 }
 
-export async function createPurchaseOrder(session: Session, body: Record<string, unknown>) {
-  const items = await readItems(session.businessId, body.items);
+/** Le fournisseur d'une commande, par son identifiant ou par son nom libre. */
+async function resoudreFournisseur(session: Session, body: Record<string, unknown>) {
   const supplierId = str(body.supplierId, 'fournisseur', { required: false });
   let supplierName = str(body.supplierName, 'fournisseur', { required: false });
 
@@ -163,6 +197,12 @@ export async function createPurchaseOrder(session: Session, body: Record<string,
     supplierName = supplier.name;
   }
   if (!supplierName) throw badRequest('Indiquez le fournisseur.');
+  return { supplierId, supplierName };
+}
+
+export async function createPurchaseOrder(session: Session, body: Record<string, unknown>) {
+  const items = await readItems(session.businessId, body.items);
+  const { supplierId, supplierName } = await resoudreFournisseur(session, body);
 
   const orderId = newId('po');
   const format = referenceFormat('PURCHASE_ORDER');
@@ -203,6 +243,118 @@ export async function createPurchaseOrder(session: Session, body: Record<string,
   ]);
 
   return getPurchaseOrder(session.businessId, orderId);
+}
+
+/**
+ * Ce qui fige une commande, lu en base (§58).
+ *
+ * Les deux comptes sont demandés ensemble parce qu'ils répondent à la même
+ * question — quelque chose dépend-il déjà de cette commande ? — et qu'un aller
+ * de plus vers la base pour la poser deux fois ne dirait rien de neuf.
+ */
+async function verrou(businessId: string, orderId: string): Promise<string | null> {
+  const sql = getSql();
+  const compte = one<{ receptions: number; reglements: number }>(
+    await sql`
+      SELECT (SELECT COUNT(*) FROM purchase_receipts r
+               WHERE r.purchase_order_id = ${orderId} AND r.business_id = ${businessId})::int
+               AS receptions,
+             (SELECT COUNT(*) FROM supplier_payments p
+               WHERE p.purchase_order_id = ${orderId} AND p.business_id = ${businessId})::int
+               AS reglements
+    `
+  );
+  const order = one<{ status: PurchaseOrderStatus }>(
+    await sql`
+      SELECT status FROM purchase_orders
+       WHERE id = ${orderId} AND business_id = ${businessId}
+    `
+  );
+  if (!order) throw notFound('Commande introuvable.');
+  return verrouDeCommande(order.status, compte?.receptions ?? 0, compte?.reglements ?? 0);
+}
+
+/**
+ * Réécrit une commande : fournisseur, lignes, observations (§58).
+ *
+ * Remplacement et non fusion : les lignes envoyées deviennent la commande. Une
+ * modification ligne à ligne demanderait au téléphone de tenir des
+ * identifiants de lignes à jour, et un écart entre les deux côtés produirait
+ * une commande que personne n'a saisie.
+ *
+ * Le numéro de commande, lui, ne bouge pas. Le fournisseur a peut-être déjà le
+ * PO-0012 sous les yeux : lui en renvoyer un autre pour les mêmes marchandises
+ * ferait deux commandes dans son carnet.
+ */
+export async function updatePurchaseOrder(
+  session: Session,
+  orderId: string,
+  body: Record<string, unknown>
+): Promise<PurchaseOrder> {
+  const empeche = await verrou(session.businessId, orderId);
+  if (empeche) throw conflict(empeche);
+
+  const items = await readItems(session.businessId, body.items);
+  const { supplierId, supplierName } = await resoudreFournisseur(session, body);
+  const sql = getSql();
+
+  await runTransaction([
+    sql`
+      UPDATE purchase_orders
+         SET supplier_id = ${supplierId}, supplier_name = ${supplierName},
+             total_estimated = ${orderTotal(
+               items.map((item) => ({ quantity: item.quantityOrdered, unitCost: item.unitCost }))
+             )},
+             notes = ${str(body.notes, 'notes', { required: false, max: 1000 })},
+             updated_at = now()
+       WHERE id = ${orderId} AND business_id = ${session.businessId}
+    `,
+    sql`
+      DELETE FROM purchase_order_items
+       WHERE purchase_order_id = ${orderId} AND business_id = ${session.businessId}
+    `,
+    ...items.map(
+      (item, index) => sql`
+        INSERT INTO purchase_order_items (
+          id, business_id, purchase_order_id, product_id, product_name,
+          unit_label, unit_factor, quantity_ordered, unit_cost, position
+        ) VALUES (
+          ${newId('poi')}, ${session.businessId}, ${orderId}, ${item.productId},
+          ${item.productName}, ${item.unitLabel}, ${item.unitFactor},
+          ${item.quantityOrdered}, ${item.unitCost}, ${index}
+        )
+      `
+    ),
+  ]);
+
+  return getPurchaseOrder(session.businessId, orderId);
+}
+
+/**
+ * Supprime une commande dont rien ne dépend (§58).
+ *
+ * Distincte de l'annulation, et les deux ont leur emploi : une commande annulée
+ * a existé — le fournisseur l'a peut-être reçue — et reste à l'historique ; une
+ * commande créée par erreur, mauvais fournisseur ou doublon, n'a aucune raison
+ * d'encombrer la liste pour toujours.
+ *
+ * Elle ne s'efface que tant qu'elle n'a rien produit. Les lignes partent en
+ * cascade avec elle ; les réceptions et les règlements aussi, et c'est
+ * précisément pourquoi leur présence l'interdit.
+ */
+export async function deletePurchaseOrder(session: Session, orderId: string): Promise<void> {
+  const empeche = await verrou(session.businessId, orderId);
+  if (empeche) throw conflict(empeche);
+
+  // `business_id` dans la clé, bien que `verrou` ait déjà refusé la commande
+  // d'une autre boutique : le §29 veut l'identifiant de boutique dans la clé de
+  // toute écriture, jamais dans un simple filtre d'affichage. Aucun test ne
+  // peut l'atteindre — c'est précisément le but : la garde reste si un jour le
+  // verrou change.
+  await getSql()`
+    DELETE FROM purchase_orders
+     WHERE id = ${orderId} AND business_id = ${session.businessId}
+  `;
 }
 
 /**

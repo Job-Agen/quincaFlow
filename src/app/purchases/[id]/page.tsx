@@ -1,8 +1,18 @@
 'use client';
 
 import { use, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ExternalLink, FileText, PackageCheck, Paperclip, Share2, Wallet } from 'lucide-react';
+import {
+  ExternalLink,
+  FileText,
+  PackageCheck,
+  Paperclip,
+  Pencil,
+  Share2,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import {
   Badge,
@@ -25,6 +35,7 @@ import {
   PO_STATUS_LABELS,
   PO_STATUS_TONES,
   canReceive,
+  verrouDeCommande,
   orderMessageLines,
   purchaseOrderMessage,
   remainingOf,
@@ -44,12 +55,34 @@ import type { PurchaseOrder, PurchaseOrderItemRow, PurchaseOrderStatus } from '@
  */
 export default function PurchaseOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const { business, currency, isOwner } = useSession();
   const { data, loading, error, setData } = useResource<PurchaseOrder>(
     `/api/purchase-orders/${id}`
   );
   const [receiving, setReceiving] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [suppression, setSuppression] = useState(false);
+  const [effacement, setEffacement] = useState(false);
+  const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
+
+  // La même règle que le serveur, lue sur ce que la commande porte déjà (§58).
+  const verrou = data
+    ? verrouDeCommande(data.status, data.receipts.length, data.payments.length)
+    : null;
+
+  async function supprimer() {
+    if (!data) return;
+    setEffacement(true);
+    setErreurSuppression(null);
+    try {
+      await api.delete(`/api/purchase-orders/${data.id}`);
+      router.replace('/purchases');
+    } catch (souci) {
+      setErreurSuppression(errorMessage(souci));
+      setEffacement(false);
+    }
+  }
   const [attaching, setAttaching] = useState(false);
   const [issue, setIssue] = useState<string | null>(null);
 
@@ -308,6 +341,48 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                     : 'Toutes les quantités commandées ont été reçues.'}
               </Notice>
             )}
+
+            {/* Modifier et supprimer ne s'offrent que tant que rien ne dépend
+              de la commande : au-delà, réécrire ses lignes falsifierait le
+              stock déjà entré, et la supprimer emporterait un règlement (§58).
+              Le serveur refuse de toute façon — l'écran n'est pas un
+              garde-fou —, mais proposer un geste qui sera refusé est une
+              promesse qu'on ne tient pas. */}
+            {isOwner ? (
+              <div className="exports-row no-print">
+                {verrou ? (
+                  <p className="small muted">{verrou}</p>
+                ) : (
+                  <>
+                    <Link href={`/purchases/${data.id}/edit`} className="btn btn--soft btn--sm">
+                      <Pencil size={16} />
+                      Modifier
+                    </Link>
+                    <Button variant="soft" size="sm" onClick={() => setSuppression(true)}>
+                      <Trash2 size={16} />
+                      Supprimer
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : null}
+
+            {suppression ? (
+              <Sheet open title="Supprimer la commande" onClose={() => setSuppression(false)}>
+                {erreurSuppression ? <Notice tone="error">{erreurSuppression}</Notice> : null}
+                <p className="small">
+                  La commande <strong>{data.reference}</strong> et ses {data.items.length} ligne(s)
+                  seront effacées. Il n’y a pas de corbeille.
+                </p>
+                <p className="small muted">
+                  Si vous l’avez déjà envoyée au fournisseur, annulez-la plutôt : elle restera
+                  dans l’historique.
+                </p>
+                <Button variant="danger" block disabled={effacement} onClick={supprimer}>
+                  {effacement ? 'Suppression…' : 'Supprimer définitivement'}
+                </Button>
+              </Sheet>
+            ) : null}
 
             <details className="additional-details">
               <summary>Suivi des réceptions et statut administratif</summary>
