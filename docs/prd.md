@@ -2698,6 +2698,29 @@ La feuille de confirmation nomme la commande, compte ses lignes, dit qu'il n'y
 a **pas de corbeille**, et propose l'annulation à la place pour une commande
 déjà envoyée au fournisseur. Le geste reste réservé au propriétaire (§31).
 
+Elle s'ouvre **depuis la liste**, là où le gérant voit sa saisie fautive, et
+non seulement du fond de la fiche : ouvrir une commande pour l'effacer, c'est
+deux écrans pour défaire une faute de frappe. C'est le premier geste par ligne
+de l'application ; il est donc posé avec retenue.
+
+La corbeille ne paraît que sur les lignes qu'elle peut vraiment effacer. Pour
+le savoir, la liste reçoit avec chaque commande le nombre de ses réceptions,
+de ses règlements et de ses lignes : sans ces comptes elle offrirait le geste
+partout, pour le voir refusé une fois sur deux. C'est la même règle que la
+fiche et que la route, nourrie des mêmes trois nombres.
+
+Au bout d'une ligne, un seul signe : la corbeille **remplace** le chevron là
+où elle paraît. Côte à côte, ils se disputaient la largeur et renvoyaient la
+date à la ligne — les commandes effaçables devenaient plus hautes que les
+autres, et la liste perdait son peigne.
+
+Le bouton reste **hors** du lien de la ligne. Imbriqué, il serait un lien
+qu'on déclenche en visant la corbeille.
+
+La même feuille sert aux deux écrans. La phrase qui prévient qu'il n'y a pas
+de corbeille ne doit pas exister en deux exemplaires : l'une des deux finirait
+par être adoucie sans l'autre.
+
 L'identifiant de boutique reste dans la clé de l'effacement bien que le verrou
 ait déjà écarté la commande d'une autre boutique : le §29 veut cet identifiant
 dans la clé de toute écriture, jamais dans un simple filtre d'affichage.
@@ -2716,4 +2739,7 @@ dans la clé de toute écriture, jamais dans un simple filtre d'affichage.
 7. Modifier ne crée ni mouvement de stock ni réception : commander n'est pas
    posséder (§21).
 8. Supprimer efface la commande et ses lignes, et rien d'autre.
-9. Rien de tout cela ne franchit la frontière d'une boutique (§29).
+9. La corbeille de la liste ne paraît que sur une commande réellement
+   effaçable, et toucher le reste de la ligne ouvre toujours la fiche.
+10. La liste supprimée est relue au serveur, jamais corrigée de son côté.
+11. Rien de tout cela ne franchit la frontière d'une boutique (§29).

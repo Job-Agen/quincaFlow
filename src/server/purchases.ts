@@ -12,6 +12,7 @@ import type {
   DocumentRow,
   PurchaseOrder,
   PurchaseOrderItemRow,
+  PurchaseOrderListRow,
   PurchaseOrderRow,
   PurchaseOrderStatus,
   PurchaseReceiptRow,
@@ -79,16 +80,29 @@ export async function listPurchaseOrders(
     to?: string | null;
     limit?: number;
   } = {}
-): Promise<PurchaseOrderRow[]> {
+): Promise<PurchaseOrderListRow[]> {
   const sql = getSql();
   const term = search.trim() ? `%${search.trim()}%` : null;
   // Un filtre inconnu ne filtre rien plutôt que de ne rien rendre : une liste
   // vide ferait croire à une boutique sans commandes.
   const statuts = FILTRES[statut] ?? null;
 
-  return rows<PurchaseOrderRow>(
+  // Les deux comptes voyagent avec la ligne : sans eux, la liste ne saurait
+  // pas quelles commandes sont encore effaçables et offrirait la corbeille sur
+  // toutes, pour la voir refusée une fois sur deux (§58).
+  return rows<PurchaseOrderListRow>(
     await sql`
-    SELECT ${sql.unsafe(ORDER_COLUMNS)} FROM purchase_orders
+    SELECT ${sql.unsafe(ORDER_COLUMNS)},
+           (SELECT COUNT(*) FROM purchase_receipts r
+             WHERE r.purchase_order_id = purchase_orders.id
+               AND r.business_id = ${businessId})::int AS receptions,
+           (SELECT COUNT(*) FROM supplier_payments p
+             WHERE p.purchase_order_id = purchase_orders.id
+               AND p.business_id = ${businessId})::int AS reglements,
+           (SELECT COUNT(*) FROM purchase_order_items i
+             WHERE i.purchase_order_id = purchase_orders.id
+               AND i.business_id = ${businessId})::int AS lignes
+      FROM purchase_orders
      WHERE business_id = ${businessId}
        AND (${term}::text IS NULL OR reference ILIKE ${term} OR supplier_name ILIKE ${term})
        AND (${statuts === null} OR status = ANY(${statuts ?? []}::text[]))

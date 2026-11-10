@@ -402,6 +402,20 @@ export interface PurchaseOrderRow {
   updated_at: string;
 }
 
+/**
+ * Une commande telle que la liste la reçoit (§58).
+ *
+ * Elle porte en plus de quoi savoir si quelque chose dépend déjà d'elle. La
+ * fiche détaillée, elle, a les réceptions et les règlements en entier : elle
+ * n'a pas besoin qu'on les lui compte.
+ */
+export interface PurchaseOrderListRow extends PurchaseOrderRow {
+  receptions: number;
+  reglements: number;
+  /** Combien de lignes partiraient avec elle, pour l'annoncer avant d'effacer. */
+  lignes: number;
+}
+
 export interface PurchaseReceiptRow {
   id: string;
   reference: string;

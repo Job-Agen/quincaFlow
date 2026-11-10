@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import pg from 'pg';
 import type { Session } from '@/types';
+import { verrouDeCommande } from '@/domain/purchase';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -607,6 +608,32 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
         ...history_.periodBounds('30d'),
       });
       expect(vues.map((o) => o.reference)).toEqual([chezLautre.reference]);
+    });
+
+    it('dit sur chaque ligne ce qui dépend déjà de la commande', async () => {
+      const vitre = await seedCatalogue();
+      const libre = await commande(vitre);
+      const livree = await commande(vitre);
+      await purchases.receivePurchaseOrder(OWNER, livree.id, {
+        lines: [{ itemId: livree.items[0]!.id, quantity: 100 }],
+      });
+      await purchases.recordSupplierPayment(OWNER, livree.id, { amount: 1000 });
+
+      const liste = await purchases.listPurchaseOrders(OWNER.businessId, {});
+      const par = (id: string) => liste.find((o) => o.id === id)!;
+
+      // La liste décide d'offrir la corbeille à partir de ces comptes : s'ils
+      // ne voyageaient pas avec la ligne, elle l'offrirait sur tout (§58).
+      expect(par(libre.id)).toMatchObject({ receptions: 0, reglements: 0, lignes: 1 });
+      expect(par(livree.id)).toMatchObject({ receptions: 1, reglements: 1, lignes: 1 });
+      expect(verrouDeCommande(par(libre.id).status, 0, 0)).toBeNull();
+      expect(
+        verrouDeCommande(
+          par(livree.id).status,
+          par(livree.id).receptions,
+          par(livree.id).reglements
+        )
+      ).toMatch(/livraison/i);
     });
 
     it('réécrit les lignes, le fournisseur et les observations', async () => {

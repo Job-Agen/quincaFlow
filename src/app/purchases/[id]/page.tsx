@@ -42,6 +42,7 @@ import {
 } from '@/domain/purchase';
 import { paymentLabel } from '@/domain/sale';
 import SupplierPaymentSheet from '@/components/purchases/SupplierPaymentSheet';
+import SuppressionCommandeSheet from '@/components/purchases/SuppressionCommandeSheet';
 import { amount, dateTime, shortDate, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type { PurchaseOrder, PurchaseOrderItemRow, PurchaseOrderStatus } from '@/types';
@@ -63,26 +64,12 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
   const [receiving, setReceiving] = useState(false);
   const [paying, setPaying] = useState(false);
   const [suppression, setSuppression] = useState(false);
-  const [effacement, setEffacement] = useState(false);
-  const [erreurSuppression, setErreurSuppression] = useState<string | null>(null);
 
   // La même règle que le serveur, lue sur ce que la commande porte déjà (§58).
   const verrou = data
     ? verrouDeCommande(data.status, data.receipts.length, data.payments.length)
     : null;
 
-  async function supprimer() {
-    if (!data) return;
-    setEffacement(true);
-    setErreurSuppression(null);
-    try {
-      await api.delete(`/api/purchase-orders/${data.id}`);
-      router.replace('/purchases');
-    } catch (souci) {
-      setErreurSuppression(errorMessage(souci));
-      setEffacement(false);
-    }
-  }
   const [attaching, setAttaching] = useState(false);
   const [issue, setIssue] = useState<string | null>(null);
 
@@ -368,20 +355,13 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
             ) : null}
 
             {suppression ? (
-              <Sheet open title="Supprimer la commande" onClose={() => setSuppression(false)}>
-                {erreurSuppression ? <Notice tone="error">{erreurSuppression}</Notice> : null}
-                <p className="small">
-                  La commande <strong>{data.reference}</strong> et ses {data.items.length} ligne(s)
-                  seront effacées. Il n’y a pas de corbeille.
-                </p>
-                <p className="small muted">
-                  Si vous l’avez déjà envoyée au fournisseur, annulez-la plutôt : elle restera
-                  dans l’historique.
-                </p>
-                <Button variant="danger" block disabled={effacement} onClick={supprimer}>
-                  {effacement ? 'Suppression…' : 'Supprimer définitivement'}
-                </Button>
-              </Sheet>
+              <SuppressionCommandeSheet
+                id={data.id}
+                reference={data.reference}
+                lignes={data.items.length}
+                onClose={() => setSuppression(false)}
+                onSupprimee={() => router.replace('/purchases')}
+              />
             ) : null}
 
             <details className="additional-details">
