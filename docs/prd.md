@@ -2738,8 +2738,118 @@ dans la clé de toute écriture, jamais dans un simple filtre d'affichage.
    et aucune ligne retirée ne subsiste.
 7. Modifier ne crée ni mouvement de stock ni réception : commander n'est pas
    posséder (§21).
-8. Supprimer efface la commande et ses lignes, et rien d'autre.
+8. Supprimer efface la commande, ses lignes et ses pièces jointes (§59), et
+   rien d'autre.
 9. La corbeille de la liste ne paraît que sur une commande réellement
    effaçable, et toucher le reste de la ligne ouvre toujours la fiche.
 10. La liste supprimée est relue au serveur, jamais corrigée de son côté.
 11. Rien de tout cela ne franchit la frontière d'une boutique (§29).
+
+
+## 59. Joindre la pièce, pas son adresse
+
+**Objectif**
+
+L'écran savait enregistrer un **nom et un lien**. Le commentaire du code le
+disait sans détour : « QuincaFlow n'héberge pas les fichiers en V1 : le gérant
+colle le lien de la photo qu'il a déjà déposée sur son cloud. »
+
+Personne ne le faisait. Un gérant au comptoir de Lomé n'a pas d'hébergeur ; il
+a une facture dans la main et un téléphone dans l'autre. La section
+« Documents » restait vide sur toutes les commandes, et la facture du
+fournisseur continuait de vivre dans un classeur.
+
+**F71 — Le fichier d'abord, le lien ensuite**
+
+Le bouton ouvre le sélecteur du téléphone : appareil photo, galerie, fichiers.
+Sont acceptés le **PDF**, la **photo** (JPEG, PNG, WebP, HEIC), le **Word**
+(.doc, .docx), l'**Excel** (.xls, .xlsx), le CSV et le texte.
+
+Le lien reste, replié sous un détail, pour qui range déjà ses pièces dans un
+nuage. Les deux saisis, c'est le fichier qui l'emporte : c'est lui qu'on a sous
+les yeux.
+
+**Les photos sont réduites avant l'envoi**, comme le justificatif de dépense
+(§40). Un cliché moderne pèse quatre mégaoctets et ne part pas d'une connexion
+de comptoir ; réduit à 1 600 px, il en pèse deux cents kilo-octets et une
+facture A4 s'y lit encore. Le PDF et le Word, eux, ne se réduisent pas : ils
+passent tels quels sous la borne, ou sont refusés **tout de suite** plutôt
+qu'après une minute d'attente.
+
+**F72 — Où vivent les octets**
+
+Dans Postgres, en `data:` URL, dans la colonne qui portait déjà le lien — comme
+le justificatif de dépense (§40) et le logo (§51). Une seule mécanique pour
+toute l'application plutôt qu'un service de stockage de plus à provisionner, à
+payer et à surveiller.
+
+Ce choix a un plafond, et il faut le nommer : **2,5 Mo par pièce**. Deux bornes
+s'y superposent — l'hébergeur refuse une requête au-delà de 4,5 Mo, et le
+base64 gonfle d'un tiers ; la base, elle, n'est pas un coffre à archives. Le
+jour où les pièces pèseront plus que les ventes, il faudra un stockage
+d'objets ; ce jour-là, `mime` et `size_bytes` diront exactement quoi déplacer.
+
+**Le fichier ne voyage jamais avec la commande.** La fiche ne porte que le nom,
+le format et le poids de ses pièces ; les octets se demandent à leur propre
+route. Sans cela, ouvrir une commande à trois factures scannées coûterait dix
+mégaoctets de données mobiles à chaque fois — et le gérant les paie.
+
+**F73 — Une pièce jointe est un fichier qu'un inconnu a écrit**
+
+Trois gardes, parce qu'un fichier servi depuis notre propre domaine est du code
+qui s'exécute chez nous :
+
+1. **Le type vient de notre liste, jamais du fichier.** Ce qui n'y figure pas
+   est refusé ; ce qui y figure est servi sous le type que *nous* déclarons.
+2. **`nosniff`**, pour que le navigateur ne devine pas autre chose.
+3. **Tout ce qui n'est ni PDF ni photo se télécharge** au lieu de s'afficher.
+
+C'est pourquoi le **SVG** et le **HTML** sont absents de la liste : ce sont des
+documents qui portent du script, et aucun fournisseur n'envoie sa facture en
+SVG.
+
+Et la vérification est faite **deux fois** : à l'écran pour refuser tout de
+suite avec une phrase utile, sur la route parce que le serveur ne fait jamais
+confiance au client (§35).
+
+**F74 — Détacher**
+
+Permettre de joindre sans permettre de retirer, c'est laisser une facture mise
+sur la mauvaise commande y rester pour toujours — et son poids avec elle.
+
+Supprimer la commande emporte ses pièces, ce qui n'allait pas de soi :
+`documents` ne pointe pas la commande par une clé étrangère mais par un couple
+type/identifiant, générique à toute l'application. **Aucune cascade ne les
+emportait.** Avant le §59 cela laissait des lignes vides ; depuis, cela aurait
+laissé des fichiers.
+
+**Ce que la migration nous a appris**
+
+Les colonnes `mime` et `size_bytes` avaient d'abord été écrites en
+`ALTER TABLE … ADD COLUMN IF NOT EXISTS` au bas de `schema.sql`. Les tests
+passaient — ils exécutent le fichier en SQL brut sur une base vide.
+
+La production, elle, ne joue pas `schema.sql` : `scripts/db.mjs` le *lit*, et
+il ne cherche les colonnes que dans les blocs `CREATE TABLE`. Les deux colonnes
+n'auraient donc jamais existé en ligne, et la fonctionnalité serait tombée sur
+une colonne absente — avec une suite de tests verte pour dire le contraire.
+
+Une colonne nouvelle se déclare dans son `CREATE TABLE`. Un test le garde
+désormais : `schema.sql` ne doit contenir aucun `ALTER TABLE … ADD COLUMN`
+isolé.
+
+**Critères d'acceptation**
+
+1. Un PDF, une photo, un Word et un Excel se joignent depuis le téléphone.
+2. Une photo est réduite avant l'envoi ; le PDF et le Word partent tels quels.
+3. Au-delà de 2,5 Mo, le refus arrive avant l'envoi, et dit le poids.
+4. Un SVG, un HTML ou un exécutable sont refusés — à l'écran et sur la route.
+5. Le fichier est servi sous le type de notre liste, avec `nosniff`, et seul le
+   PDF et la photo s'affichent en place.
+6. La fiche d'une commande ne transporte jamais les octets de ses pièces.
+7. Chaque ligne dit le format et le poids.
+8. Une pièce se détache ; supprimer la commande emporte les siennes.
+9. Le lien d'un fichier rangé ailleurs reste possible.
+10. `schema.sql` n'ajoute aucune colonne par un `ALTER` isolé.
+11. Rien de tout cela ne franchit la frontière d'une boutique (§29) : une pièce
+    d'une autre quincaillerie est introuvable, pas masquée.

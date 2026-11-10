@@ -7,6 +7,7 @@ import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
 import { findUnit, weightedAverageCost } from '../domain/units';
 import { orderBalance, receivedValue, tooMuch } from '../domain/supplierDebt';
+import { entete, refus } from '../domain/pieceJointe';
 import { MOBILE_MONEY_PROVIDERS, PAYMENT_METHODS, providerFor } from '../domain/sale';
 import type {
   DocumentRow,
@@ -134,7 +135,15 @@ export async function getPurchaseOrder(
     sql`SELECT id, reference, notes, received_at FROM purchase_receipts
          WHERE purchase_order_id = ${orderId} AND business_id = ${businessId}
          ORDER BY received_at DESC`,
-    sql`SELECT id, kind, name, url, created_at FROM documents
+    // Le fichier ne voyage pas avec la fiche (§40, §59) : trois factures
+    // scannées feraient dix mégaoctets de réponse à chaque ouverture de la
+    // commande. La colonne `url` ne sort donc que lorsqu'elle porte un lien ;
+    // le fichier, lui, se demande à sa propre route.
+    sql`SELECT id, kind, name, created_at, mime,
+               size_bytes::int AS size_bytes,
+               CASE WHEN url LIKE 'data:%' THEN NULL ELSE url END AS url,
+               (url LIKE 'data:%') AS has_file
+          FROM documents
          WHERE business_id = ${businessId}
            AND reference_type = 'PURCHASE_ORDER' AND reference_id = ${orderId}
          ORDER BY created_at`,
@@ -360,15 +369,30 @@ export async function deletePurchaseOrder(session: Session, orderId: string): Pr
   const empeche = await verrou(session.businessId, orderId);
   if (empeche) throw conflict(empeche);
 
+  const sql = getSql();
   // `business_id` dans la clé, bien que `verrou` ait déjà refusé la commande
   // d'une autre boutique : le §29 veut l'identifiant de boutique dans la clé de
   // toute écriture, jamais dans un simple filtre d'affichage. Aucun test ne
   // peut l'atteindre — c'est précisément le but : la garde reste si un jour le
   // verrou change.
-  await getSql()`
-    DELETE FROM purchase_orders
-     WHERE id = ${orderId} AND business_id = ${session.businessId}
-  `;
+  //
+  // Les pièces jointes partent avec, et il faut le dire ici : `documents` ne
+  // pointe pas la commande par une clé étrangère mais par un couple
+  // type/identifiant, générique à toute l'application — aucune cascade ne les
+  // emporterait. Depuis le §59 elles portent des fichiers : laissées là, elles
+  // tiendraient la place sans commande pour les montrer ni écran pour les
+  // effacer.
+  await runTransaction([
+    sql`
+      DELETE FROM documents
+       WHERE business_id = ${session.businessId}
+         AND reference_type = 'PURCHASE_ORDER' AND reference_id = ${orderId}
+    `,
+    sql`
+      DELETE FROM purchase_orders
+       WHERE id = ${orderId} AND business_id = ${session.businessId}
+    `,
+  ]);
 }
 
 /**
@@ -395,7 +419,18 @@ export async function updatePurchaseOrderStatus(
   return getPurchaseOrder(session.businessId, orderId);
 }
 
-/** Pièce jointe : bon de commande, facture fournisseur, preuve de paiement (§20). */
+/**
+ * Pièce jointe : bon de commande, facture fournisseur, preuve de paiement (§20).
+ *
+ * Deux façons de joindre, et une seule colonne pour les deux (§59). Soit un
+ * **lien** vers une pièce rangée ailleurs — c'était la seule possibilité
+ * jusqu'ici —, soit le **fichier** lui-même, en `data:` URL, comme le
+ * justificatif de dépense (§40).
+ *
+ * Le fichier est vérifié ici et pas seulement à l'écran : le serveur ne fait
+ * jamais confiance au client (§35), et une pièce jointe est précisément ce
+ * qu'on voudrait lui faire avaler.
+ */
 export async function attachDocument(
   session: Session,
   orderId: string,
@@ -403,13 +438,72 @@ export async function attachDocument(
 ) {
   await getPurchaseOrder(session.businessId, orderId);
   const kind = enumValue(body.kind, 'type de document', Object.keys(DOCUMENT_KINDS));
+  const contenu = typeof body.content === 'string' ? body.content.trim() : '';
+  const lien = str(body.url, 'lien', { required: false, max: 2000 });
+
+  if (contenu) {
+    const empeche = refus(contenu);
+    if (empeche) throw badRequest(empeche);
+  } else if (!lien) {
+    throw badRequest('Joignez un fichier ou donnez un lien.');
+  }
+
+  const lu = contenu ? entete(contenu) : null;
   await getSql()`
-    INSERT INTO documents (id, business_id, kind, reference_type, reference_id, name, url)
+    INSERT INTO documents (id, business_id, kind, reference_type, reference_id,
+                           name, url, mime, size_bytes)
     VALUES (${newId('doc')}, ${session.businessId}, ${kind}, 'PURCHASE_ORDER', ${orderId},
             ${str(body.name, 'nom du document', { max: 200 })},
-            ${str(body.url, 'lien', { required: false, max: 2000 })})
+            ${contenu || lien}, ${lu?.mime ?? null}, ${lu ? Math.round(lu.octets) : null})
   `;
   return getPurchaseOrder(session.businessId, orderId);
+}
+
+/**
+ * Le fichier d'une pièce jointe, pour sa propre route (§59).
+ *
+ * L'identifiant de boutique est dans la clé et non dans un filtre : un
+ * document d'une autre quincaillerie n'est pas « masqué », il est introuvable
+ * (§29). Sans cela, une pièce jointe deviendrait la seule porte par laquelle
+ * on verrait la facture du voisin.
+ */
+export async function documentFile(
+  businessId: string,
+  documentId: string
+): Promise<{ name: string; mime: string; contenu: string }> {
+  const row = one<{ name: string; mime: string | null; url: string | null }>(
+    await getSql()`
+      SELECT name, mime, url FROM documents
+       WHERE id = ${documentId} AND business_id = ${businessId}
+    `
+  );
+  if (!row || !row.url || !row.url.startsWith('data:')) {
+    throw notFound('Ce document ne porte aucun fichier.');
+  }
+  const lu = entete(row.url);
+  if (!lu) throw notFound('Ce document ne porte aucun fichier.');
+  return { name: row.name, mime: row.mime || lu.mime, contenu: row.url };
+}
+
+/**
+ * Détache une pièce jointe (§59).
+ *
+ * Permettre d'en joindre sans permettre d'en retirer, c'est laisser une
+ * facture mise sur la mauvaise commande y rester pour toujours — et le poids
+ * avec elle.
+ */
+export async function deleteDocument(session: Session, documentId: string): Promise<void> {
+  const row = one<{ id: string }>(
+    await getSql()`
+      SELECT id FROM documents
+       WHERE id = ${documentId} AND business_id = ${session.businessId}
+         AND reference_type = 'PURCHASE_ORDER'
+    `
+  );
+  if (!row) throw notFound('Document introuvable.');
+  await getSql()`
+    DELETE FROM documents WHERE id = ${documentId} AND business_id = ${session.businessId}
+  `;
 }
 
 /**

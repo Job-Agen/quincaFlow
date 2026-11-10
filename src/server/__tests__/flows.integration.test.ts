@@ -610,6 +610,129 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       expect(vues.map((o) => o.reference)).toEqual([chezLautre.reference]);
     });
 
+    /** Un fichier factice du type et du poids demandés. */
+    const fichier = (mime: string, octets = 900) =>
+      `data:${mime};base64,${'A'.repeat(Math.ceil((octets * 4) / 3))}`;
+
+    it('joint un vrai fichier, et le pèse', async () => {
+      const vitre = await seedCatalogue();
+      const order = await commande(vitre);
+      const avec = await purchases.attachDocument(OWNER, order.id, {
+        kind: 'SUPPLIER_INVOICE',
+        name: 'Facture Bâtir Plus',
+        content: fichier('application/pdf', 1500),
+      });
+
+      expect(avec.documents).toHaveLength(1);
+      expect(avec.documents[0]).toMatchObject({
+        name: 'Facture Bâtir Plus',
+        mime: 'application/pdf',
+        size_bytes: 1500,
+        has_file: true,
+      });
+      // Le fichier ne voyage pas avec la fiche : trois factures scannées
+      // feraient dix mégaoctets à chaque ouverture de la commande (§59).
+      expect(avec.documents[0]!.url).toBeNull();
+      expect(JSON.stringify(avec)).not.toContain('AAAA');
+    });
+
+    it('garde le lien pour qui range ses pièces ailleurs', async () => {
+      const vitre = await seedCatalogue();
+      const order = await commande(vitre);
+      const avec = await purchases.attachDocument(OWNER, order.id, {
+        kind: 'SUPPLIER_INVOICE',
+        name: 'Facture sur le nuage',
+        url: 'https://exemple.tg/facture.pdf',
+      });
+      expect(avec.documents[0]).toMatchObject({
+        url: 'https://exemple.tg/facture.pdf',
+        has_file: false,
+        mime: null,
+      });
+    });
+
+    it('refuse un fichier qui porterait du script, et un fichier trop lourd', async () => {
+      const vitre = await seedCatalogue();
+      const order = await commande(vitre);
+      const joindre = (content: string) =>
+        purchases.attachDocument(OWNER, order.id, { kind: 'SUPPLIER_INVOICE', name: 'x', content });
+
+      await expect(joindre(fichier('image/svg+xml'))).rejects.toThrow(/Format non accepté/);
+      await expect(joindre(fichier('text/html'))).rejects.toThrow(/Format non accepté/);
+      await expect(joindre(fichier('application/pdf', 9_000_000))).rejects.toThrow(/trop lourd/);
+      await expect(
+        purchases.attachDocument(OWNER, order.id, { kind: 'SUPPLIER_INVOICE', name: 'x' })
+      ).rejects.toThrow(/fichier ou.*lien/i);
+
+      const apres = await purchases.getPurchaseOrder(OWNER.businessId, order.id);
+      expect(apres.documents).toHaveLength(0);
+    });
+
+    it('rend le fichier sur sa propre route, et jamais celui du voisin', async () => {
+      const vitre = await seedCatalogue();
+      const order = await commande(vitre);
+      const contenu = fichier('application/pdf', 1200);
+      const avec = await purchases.attachDocument(OWNER, order.id, {
+        kind: 'SUPPLIER_INVOICE',
+        name: 'Facture',
+        content: contenu,
+      });
+      const doc = avec.documents[0]!;
+
+      expect(await purchases.documentFile(OWNER.businessId, doc.id)).toEqual({
+        name: 'Facture',
+        mime: 'application/pdf',
+        contenu,
+      });
+      // Une pièce jointe serait la porte la plus discrète pour lire la
+      // facture du voisin : elle est introuvable, pas masquée (§29).
+      await expect(purchases.documentFile(RIVAL.businessId, doc.id)).rejects.toThrow(
+        /aucun fichier|introuvable/i
+      );
+    });
+
+    it('détache une pièce, et seulement la sienne', async () => {
+      const vitre = await seedCatalogue();
+      const order = await commande(vitre);
+      const avec = await purchases.attachDocument(OWNER, order.id, {
+        kind: 'SUPPLIER_INVOICE',
+        name: 'Facture',
+        content: fichier('application/pdf'),
+      });
+      const doc = avec.documents[0]!;
+
+      await expect(purchases.deleteDocument(RIVAL, doc.id)).rejects.toThrow(/introuvable/i);
+      expect(
+        (await purchases.getPurchaseOrder(OWNER.businessId, order.id)).documents
+      ).toHaveLength(1);
+
+      await purchases.deleteDocument(OWNER, doc.id);
+      expect(
+        (await purchases.getPurchaseOrder(OWNER.businessId, order.id)).documents
+      ).toHaveLength(0);
+      await expect(purchases.documentFile(OWNER.businessId, doc.id)).rejects.toThrow();
+    });
+
+    it('emporte les pièces jointes avec la commande supprimée', async () => {
+      const vitre = await seedCatalogue();
+      const order = await commande(vitre);
+      const avec = await purchases.attachDocument(OWNER, order.id, {
+        kind: 'SUPPLIER_INVOICE',
+        name: 'Facture',
+        content: fichier('application/pdf'),
+      });
+      const doc = avec.documents[0]!;
+
+      await purchases.deletePurchaseOrder(OWNER, order.id);
+      // Sans cela, une facture scannée resterait en base sans commande pour
+      // la montrer ni écran pour l'effacer.
+      const { rows } = await pool.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM documents WHERE id = $1',
+        [doc.id]
+      );
+      expect(rows[0]!.n).toBe(0);
+    });
+
     it('dit sur chaque ligne ce qui dépend déjà de la commande', async () => {
       const vitre = await seedCatalogue();
       const libre = await commande(vitre);

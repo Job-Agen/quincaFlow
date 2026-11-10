@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileText,
   PackageCheck,
+  Download,
   Paperclip,
   Pencil,
   Share2,
@@ -43,9 +44,16 @@ import {
 import { paymentLabel } from '@/domain/sale';
 import SupplierPaymentSheet from '@/components/purchases/SupplierPaymentSheet';
 import SuppressionCommandeSheet from '@/components/purchases/SuppressionCommandeSheet';
+import PieceJointeSheet from '@/components/purchases/PieceJointeSheet';
+import { TYPES_ACCEPTES, poidsLisible } from '@/domain/pieceJointe';
 import { amount, dateTime, shortDate, money, quantity } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
-import type { PurchaseOrder, PurchaseOrderItemRow, PurchaseOrderStatus } from '@/types';
+import type {
+  DocumentRow,
+  PurchaseOrder,
+  PurchaseOrderItemRow,
+  PurchaseOrderStatus,
+} from '@/types';
 
 /**
  * Détail d'une commande fournisseur (maquette 8, §20-22).
@@ -71,6 +79,23 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
     : null;
 
   const [attaching, setAttaching] = useState(false);
+  const [aDetacher, setADetacher] = useState<DocumentRow | null>(null);
+  const [detachement, setDetachement] = useState(false);
+  const [erreurDetachement, setErreurDetachement] = useState<string | null>(null);
+
+  async function detacher() {
+    if (!aDetacher) return;
+    setDetachement(true);
+    setErreurDetachement(null);
+    try {
+      await api.delete(`/api/documents/${aDetacher.id}`);
+      setData(await api.get<PurchaseOrder>(`/api/purchase-orders/${id}`));
+      setADetacher(null);
+    } catch (souci) {
+      setErreurDetachement(errorMessage(souci));
+    }
+    setDetachement(false);
+  }
   const [issue, setIssue] = useState<string | null>(null);
 
   /**
@@ -272,27 +297,66 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                 />
               ) : (
                 <div className="list">
-                  {data.documents.map((document) => (
-                    <div key={document.id} className="list__row">
-                      <span className="thumb">
-                        <FileText size={19} />
-                      </span>
-                      <div className="list__body">
-                        <div className="list__title">{document.name}</div>
+                  {data.documents.map((document) => {
+                    // Un fichier joint s'ouvre par sa propre route ; un lien
+                    // reste un lien vers ailleurs. Les deux cas se distinguent
+                    // ici et non à l'œil du gérant (§59).
+                    const type = document.mime ? TYPES_ACCEPTES[document.mime] : undefined;
+                    return (
+                      <div key={document.id} className="list__row">
+                        <span className="thumb">
+                          <FileText size={19} />
+                        </span>
+                        <div className="list__body">
+                          <div className="list__title">{document.name}</div>
+                          {/* Le format et le poids, et rien de plus : le nom
+                            que le gérant a écrit dit déjà de quelle pièce il
+                            s'agit, et une troisième mention renvoyait la ligne
+                            à la ligne — les pièces lourdes devenaient plus
+                            hautes que les légères. */}
+                          <div className="list__sub">
+                            {document.size_bytes
+                              ? `${type?.libelle ?? 'Fichier'} · ${poidsLisible(document.size_bytes)}`
+                              : document.url
+                                ? 'Lien'
+                                : (DOCUMENT_KINDS[document.kind as keyof typeof DOCUMENT_KINDS] ??
+                                  document.kind)}
+                          </div>
+                        </div>
+                        {document.has_file ? (
+                          <a
+                            href={`/api/documents/${document.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn--soft btn--sm"
+                          >
+                            {type?.enLigne ? 'Voir' : 'Ouvrir'}
+                            {type?.enLigne ? <ExternalLink size={14} /> : <Download size={14} />}
+                          </a>
+                        ) : document.url ? (
+                          <a
+                            href={document.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn--soft btn--sm"
+                          >
+                            Voir
+                            <ExternalLink size={14} />
+                          </a>
+                        ) : null}
+                        {isOwner ? (
+                          <button
+                            type="button"
+                            className="list__supprimer"
+                            aria-label={`Détacher ${document.name}`}
+                            onClick={() => setADetacher(document)}
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        ) : null}
                       </div>
-                      {document.url ? (
-                        <a
-                          href={document.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn--soft btn--sm"
-                        >
-                          Voir
-                          <ExternalLink size={14} />
-                        </a>
-                      ) : null}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </Card>
@@ -421,7 +485,7 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
               }}
             />
 
-            <AttachSheet
+            <PieceJointeSheet
               open={attaching}
               onClose={() => setAttaching(false)}
               onConfirm={async (body) => {
@@ -431,6 +495,25 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                 setAttaching(false);
               }}
             />
+
+            {aDetacher ? (
+              <Sheet
+                open
+                title="Détacher le document"
+                onClose={() => setADetacher(null)}
+              >
+                {erreurDetachement ? (
+                  <Notice tone="error">{erreurDetachement}</Notice>
+                ) : null}
+                <p className="small">
+                  <strong>{aDetacher.name}</strong> sera retiré de cette commande. Le fichier est
+                  effacé : il n’y a pas de corbeille.
+                </p>
+                <Button variant="danger" block disabled={detachement} onClick={detacher}>
+                  {detachement ? 'Retrait…' : 'Détacher'}
+                </Button>
+              </Sheet>
+            ) : null}
           </>
         ) : null}
       </main>
@@ -518,75 +601,6 @@ function ReceiveSheet({
         }}
       >
         {busy ? 'Enregistrement…' : 'Enregistrer la réception'}
-      </Button>
-    </Sheet>
-  );
-}
-
-/**
- * Pièce jointe.
- *
- * QuincaFlow n'héberge pas les fichiers en V1 : le gérant colle le lien de la
- * photo qu'il a déjà envoyée par WhatsApp ou déposée sur son cloud. C'est le
- * flux qu'il pratique déjà, et cela évite d'embarquer un service de stockage
- * dans un MVP.
- */
-function AttachSheet({
-  open,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onConfirm: (body: { kind: string; name: string; url: string }) => Promise<void>;
-}) {
-  const [form, setForm] = useState({ kind: 'PURCHASE_ORDER', name: '', url: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <Sheet open={open} title="Joindre un document" onClose={onClose}>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      <SelectField
-        label="Type"
-        value={form.kind}
-        onChange={(event) => setForm({ ...form, kind: event.target.value })}
-      >
-        {Object.entries(DOCUMENT_KINDS).map(([value, label]) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </SelectField>
-      <TextField
-        label="Nom"
-        placeholder="Facture Bâtir Plus mars"
-        value={form.name}
-        onChange={(event) => setForm({ ...form, name: event.target.value })}
-      />
-      <TextField
-        label="Lien (optionnel)"
-        type="url"
-        placeholder="https://…"
-        hint="Lien vers la photo ou le fichier, déjà stocké de votre côté."
-        value={form.url}
-        onChange={(event) => setForm({ ...form, url: event.target.value })}
-      />
-      <Button
-        block
-        disabled={busy || !form.name.trim()}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
-          try {
-            await onConfirm(form);
-          } catch (issue) {
-            setError(errorMessage(issue));
-          }
-          setBusy(false);
-        }}
-      >
-        {busy ? 'Enregistrement…' : 'Joindre'}
       </Button>
     </Sheet>
   );

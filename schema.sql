@@ -409,7 +409,14 @@ CREATE TABLE IF NOT EXISTS documents (
   reference_type text NOT NULL,
   reference_id   text NOT NULL,
   name           text NOT NULL,
+  -- `url` porte soit un lien vers une pièce rangée ailleurs, soit la pièce
+  -- elle-même en `data:` URL, comme le justificatif de dépense (§40).
   url            text,
+  -- Le type du fichier joint, `NULL` pour un simple lien (§59). Il tranche
+  -- entre les deux cas sans lire deux mégaoctets de base64, et c'est lui qui
+  -- dit au navigateur avec quoi ouvrir la pièce au téléchargement.
+  mime           text,
+  size_bytes     integer,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 

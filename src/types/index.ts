@@ -427,8 +427,14 @@ export interface DocumentRow {
   id: string;
   kind: string;
   name: string;
-  url: string;
+  /** Le lien vers une pièce rangée ailleurs, ou `null` si le fichier est joint. */
+  url: string | null;
   created_at: string;
+  /** Type du fichier joint, `null` pour un simple lien (§59). */
+  mime?: string | null;
+  size_bytes?: number | null;
+  /** Un fichier est attaché : il se demande à sa propre route, jamais ici. */
+  has_file?: boolean;
 }
 
 export interface PurchaseOrder extends PurchaseOrderRow {
