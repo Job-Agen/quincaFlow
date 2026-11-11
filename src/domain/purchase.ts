@@ -107,7 +107,18 @@ export function verrouDeSuppression(
   receptions: number,
   reglements: number
 ): string | null {
-  return dependances(receptions, reglements);
+  // Une livraison n'interdit plus d'effacer (§65) : la suppression rend au
+  // stock ce que la commande y avait fait entrer, donc l'inventaire reste
+  // vrai. Reste `receptions` dans la signature parce que l'appelant doit le
+  // compter de toute façon — et qu'un jour la règle pourrait le regarder de
+  // nouveau.
+  void receptions;
+  if (reglements > 0) {
+    // Celui-là tient : le règlement a fait sortir de la caisse, et son
+    // effacement emporterait une ligne du journal (§54).
+    return 'Cette commande porte un règlement fournisseur : elle ne peut plus être supprimée. Retirez d’abord le règlement.';
+  }
+  return null;
 }
 
 /** Ce qui dépend déjà de la commande, et interdit donc d'y toucher. */

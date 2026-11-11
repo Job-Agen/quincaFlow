@@ -2668,7 +2668,7 @@ développement du téléphone.
 | Situation | Modifier / supprimer | Pourquoi |
 |---|---|---|
 | Brouillon, envoyée | oui | rien n'a bougé dans la boutique |
-| Une réception, même partielle | non | du stock est entré ; l'effacer ferait mentir l'inventaire |
+| Une réception, même partielle | modification seule | du stock est entré ; la réécrire ferait mentir l'inventaire. La suppression, elle, est rouverte au §65 : elle rend le stock |
 | Un règlement fournisseur | non | une dette a été payée contre cette pièce (§54) |
 | Annulée | modification seule | l'annulation est la trace voulue ; la suppression, elle, est rouverte au §64 |
 
@@ -3187,7 +3187,7 @@ d'elle, donc rien ne s'effondre si elle part.
 |---|---|---|
 | Brouillon, envoyée | oui | oui |
 | **Annulée** | non | **oui** |
-| Une réception, même partielle | non | non |
+| Une réception, même partielle | non | oui, et le stock est rendu (§65) |
 | Un règlement fournisseur | non | non |
 
 La règle de suppression ne s'appuie pas sur les routes pour tenir : elle
@@ -3213,3 +3213,64 @@ et avec lui une sortie du journal de caisse.
    des deux.
 4. La règle de suppression refuse une annulée porteuse d'une réception ou
    d'un règlement, sans s'en remettre aux autres routes.
+
+
+## 65. Supprimer une commande livrée, et rendre le stock
+
+**Objectif**
+
+Le §64 avait rouvert la suppression d'une commande annulée, et laissé fermée
+celle d'une commande **livrée** : le stock est entré, l'effacer laisserait un
+mouvement sans commande pour l'expliquer.
+
+L'objection portait sur l'inventaire, pas sur le geste. Elle tombe si la
+suppression **rend ce qu'elle avait fait entrer**.
+
+**F89 — Effacer, c'est défaire**
+
+Supprimer une commande livrée, c'est dire que la livraison n'a jamais eu lieu.
+Alors tout part ensemble :
+
+- le stock **redescend** de ce que la commande y avait fait entrer, par
+  produit et en unité de base ;
+- les **mouvements de stock** de ses réceptions sont effacés — `stock_movements`
+  désigne sa pièce par un couple type/identifiant, comme `documents`, et
+  aucune cascade ne les emporterait. Un mouvement sans réception pour le
+  justifier serait pire qu'une ligne manquante ;
+- les reçus, les lignes et les pièces jointes suivent.
+
+**F90 — Ce qui refuse encore, et pourquoi**
+
+**La marchandise déjà partie.** S'il ne reste pas en stock de quoi rendre, la
+suppression est refusée, et la phrase dit l'état réel : « il ne reste que 40
+sacs de Ciment, et cette commande en avait fait entrer 100. Une partie est
+déjà vendue. »
+
+La contrainte de base arrêterait de toute façon l'écriture — `stock_quantity`
+ne peut pas devenir négatif — mais avec la phrase d'une vente ratée, qui ne
+dirait rien ici. La garde en amont existe pour le message ; la contrainte
+reste le vrai filet.
+
+**Un règlement fournisseur.** L'effacement emporterait une ligne du journal de
+caisse (§54). Celui-là tient, et la phrase dit par où sortir : retirer d'abord
+le règlement.
+
+**Ce qui n'est pas défait**
+
+Le **coût d'achat moyen**. La réception l'avait recalculé en moyenne pondérée,
+et une moyenne ne se renverse pas : repartir en arrière demanderait de
+connaître le stock et le coût d'avant, que rien ne conserve. C'est un
+indicateur de marge, pas une écriture comptable — la feuille de confirmation
+le dit plutôt que de le taire.
+
+**Critères d'acceptation**
+
+1. Une commande livrée s'efface, depuis la liste comme depuis sa fiche.
+2. Le stock redescend exactement de ce qu'elle avait fait entrer.
+3. Les mouvements de stock de ses réceptions partent avec elle.
+4. Si la marchandise est déjà vendue, la suppression est refusée et la phrase
+   dit ce qui reste.
+5. Un refus ne laisse rien à moitié fait : la commande et le stock sont
+   intacts.
+6. Une commande réglée refuse toujours, et dit quoi faire.
+7. L'écran prévient que le stock va redescendre.

@@ -57,20 +57,21 @@ describe('une commande annulée', () => {
   });
 });
 
-describe('ce que la suppression refuse encore', () => {
-  it('une commande livrée, parce que le stock est entré', () => {
-    // L'effacer laisserait un mouvement de stock sans commande pour
-    // l'expliquer : l'inventaire dirait que cinquante sacs sont arrivés de
-    // nulle part.
-    expect(verrouDeSuppression('RECEIVED', 1, 0)).toMatch(/livraison/i);
-    // Même annulée après coup — ce que les routes interdisent, mais la règle
-    // ne s'appuie pas sur elles pour tenir.
-    expect(verrouDeSuppression('CANCELLED', 1, 0)).toMatch(/livraison/i);
+describe('ce que la suppression laisse passer, et ce qu’elle refuse', () => {
+  it('laisse effacer une commande livrée : le stock lui est rendu (§65)', () => {
+    // Le §58 la verrouillait pour que l'inventaire ne mente pas. La
+    // suppression rend désormais au stock ce que la commande y avait fait
+    // entrer : l'objection tombe avec sa cause.
+    expect(verrouDeSuppression('RECEIVED', 1, 0)).toBeNull();
+    expect(verrouDeSuppression('PARTIALLY_RECEIVED', 1, 0)).toBeNull();
   });
 
-  it('une commande réglée, parce que la caisse est sortie', () => {
+  it('refuse une commande réglée, parce que la caisse est sortie', () => {
+    // Celui-là tient : l'effacement emporterait une ligne du journal (§54).
     expect(verrouDeSuppression('PAID', 0, 1)).toMatch(/règlement/i);
     expect(verrouDeSuppression('CANCELLED', 0, 1)).toMatch(/règlement/i);
+    // Et il dit quoi faire pour s'en sortir.
+    expect(verrouDeSuppression('PAID', 2, 1)).toMatch(/retirez/i);
   });
 
   it('laisse passer ce dont rien ne dépend', () => {

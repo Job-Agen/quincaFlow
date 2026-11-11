@@ -168,6 +168,7 @@ export default function PurchasesPage() {
           id={aSupprimer.id}
           reference={aSupprimer.reference}
           lignes={aSupprimer.lignes}
+          livree={aSupprimer.receptions > 0}
           onClose={() => setASupprimer(null)}
           onSupprimee={() => {
             setASupprimer(null);

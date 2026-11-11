@@ -476,6 +476,7 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                 id={data.id}
                 reference={data.reference}
                 lignes={data.items.length}
+                livree={data.receipts.length > 0}
                 onClose={() => setSuppression(false)}
                 onSupprimee={() => router.replace('/purchases')}
               />

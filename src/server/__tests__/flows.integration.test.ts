@@ -847,7 +847,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       expect(rows[0]!.n).toBe(0);
     });
 
-    it('refuse de modifier ou supprimer une commande livrée', async () => {
+    it('refuse de modifier une commande livrée', async () => {
       const vitre = await seedCatalogue();
       const livree = await commande(vitre);
       await purchases.receivePurchaseOrder(OWNER, livree.id, {
@@ -861,7 +861,8 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
           items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 1, unitCost: 1 }],
         })
       ).rejects.toThrow(/livraison/i);
-      await expect(purchases.deletePurchaseOrder(OWNER, livree.id)).rejects.toThrow(/livraison/i);
+      // La supprimer, en revanche, est devenu possible : le stock lui est
+      // rendu, et l'inventaire reste vrai (§65).
     });
 
     it('refuse de supprimer une commande qui porte un règlement', async () => {
@@ -891,15 +892,58 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       await expect(purchases.getPurchaseOrder(OWNER.businessId, annulee.id)).rejects.toThrow();
     });
 
-    it('refuse toujours de supprimer une commande livrée', async () => {
-      // Le stock est entré : l'effacer laisserait un mouvement sans commande
-      // pour l'expliquer.
+    it('rend au stock ce qu’une commande livrée y avait fait entrer (§65)', async () => {
+      const vitre = await seedCatalogue();
+      expect(await stockOf(vitre.id)).toBe(400);
+      const livree = await commande(vitre);
+      await purchases.receivePurchaseOrder(OWNER, livree.id, {
+        lines: [{ itemId: livree.items[0]!.id, quantity: 100 }],
+      });
+      expect(await stockOf(vitre.id)).toBe(500);
+
+      await purchases.deletePurchaseOrder(OWNER, livree.id);
+
+      // Supprimer, c'est dire que la livraison n'a jamais eu lieu : laisser
+      // les marchandises sur l'étagère ferait de l'inventaire un mensonge.
+      expect(await stockOf(vitre.id)).toBe(400);
+      // Et le mouvement part avec : `stock_movements` désigne sa pièce par un
+      // couple type/identifiant, qu'aucune cascade n'emporterait.
+      const { rows } = await pool.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM stock_movements
+          WHERE product_id = $1 AND reference_type = 'PURCHASE_RECEIPT'`,
+        [vitre.id]
+      );
+      expect(rows[0]!.n).toBe(0);
+    });
+
+    it('refuse si la marchandise est déjà partie', async () => {
       const vitre = await seedCatalogue();
       const livree = await commande(vitre);
       await purchases.receivePurchaseOrder(OWNER, livree.id, {
         lines: [{ itemId: livree.items[0]!.id, quantity: 100 }],
       });
-      await expect(purchases.deletePurchaseOrder(OWNER, livree.id)).rejects.toThrow(/livraison/i);
+      // Tout le stock s'en va, reçu compris.
+      await pool.query('UPDATE products SET stock_quantity = 40 WHERE id = $1', [vitre.id]);
+
+      await expect(purchases.deletePurchaseOrder(OWNER, livree.id)).rejects.toThrow(
+        /déjà vendue/i
+      );
+      // Et la commande est toujours là : rien n'a été fait à moitié.
+      expect(
+        (await purchases.getPurchaseOrder(OWNER.businessId, livree.id)).reference
+      ).toBe(livree.reference);
+      expect(await stockOf(vitre.id)).toBe(40);
+    });
+
+    it('refuse encore de supprimer une commande réglée', async () => {
+      const vitre = await seedCatalogue();
+      const reglee = await commande(vitre);
+      await purchases.receivePurchaseOrder(OWNER, reglee.id, {
+        lines: [{ itemId: reglee.items[0]!.id, quantity: 100 }],
+      });
+      await purchases.recordSupplierPayment(OWNER, reglee.id, { amount: 1000 });
+      // L'effacement emporterait une ligne du journal de caisse (§54).
+      await expect(purchases.deletePurchaseOrder(OWNER, reglee.id)).rejects.toThrow(/règlement/i);
     });
 
     it('refuse de modifier une commande annulée', async () => {

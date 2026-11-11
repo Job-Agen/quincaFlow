@@ -19,6 +19,7 @@ export default function SuppressionCommandeSheet({
   id,
   reference,
   lignes,
+  livree,
   onClose,
   onSupprimee,
 }: {
@@ -26,6 +27,8 @@ export default function SuppressionCommandeSheet({
   reference: string;
   /** Nombre de lignes de la commande, pour que le gérant mesure ce qui part. */
   lignes: number;
+  /** Elle a fait entrer du stock, qui lui sera repris (§65). */
+  livree?: boolean;
   onClose: () => void;
   onSupprimee: () => void;
 }) {
@@ -53,10 +56,20 @@ export default function SuppressionCommandeSheet({
         La commande <strong>{reference}</strong> et ses {lignes} ligne(s) seront effacées. Il n’y a
         pas de corbeille.
       </p>
-      <p className="small muted">
-        Si vous l’avez déjà envoyée au fournisseur, annulez-la plutôt : elle restera dans
-        l’historique.
-      </p>
+      {livree ? (
+        /* Supprimer une commande livrée, c'est dire que la livraison n'a
+          jamais eu lieu : le stock redescend d'autant. Le taire ferait
+          découvrir l'écart à l'inventaire, des semaines plus tard. */
+        <Notice tone="warn">
+          Cette commande a été livrée : le stock redescendra de ce qu’elle y avait fait
+          entrer. Le coût d’achat moyen, lui, reste tel qu’il a été recalculé.
+        </Notice>
+      ) : (
+        <p className="small muted">
+          Si vous l’avez déjà envoyée au fournisseur, annulez-la plutôt : elle restera dans
+          l’historique.
+        </p>
+      )}
       <Button variant="danger" block disabled={effacement} onClick={supprimer}>
         {effacement ? 'Suppression…' : 'Supprimer définitivement'}
       </Button>

@@ -402,7 +402,58 @@ export async function deletePurchaseOrder(session: Session, orderId: string): Pr
   // emporterait. Depuis le §59 elles portent des fichiers : laissées là, elles
   // tiendraient la place sans commande pour les montrer ni écran pour les
   // effacer.
+  //
+  // Et le stock qu'elle a fait entrer lui est rendu (§65). Supprimer une
+  // commande livrée, c'est dire « cette livraison n'a jamais eu lieu » :
+  // laisser les marchandises sur l'étagère ferait de l'inventaire un
+  // mensonge, découvert des semaines plus tard sans rien pour l'expliquer.
+  const order = await getPurchaseOrder(session.businessId, orderId);
+  const rendu = new Map<string, number>();
+  for (const item of order.items) {
+    if (!item.product_id || item.quantity_received <= 0) continue;
+    rendu.set(
+      item.product_id,
+      round3((rendu.get(item.product_id) || 0) + item.quantity_received * item.unit_factor)
+    );
+  }
+
+  // La contrainte de stock positif arrêterait de toute façon l'écriture, mais
+  // avec la phrase d'une vente ratée. Mieux vaut dire ici ce qui cloche : les
+  // marchandises sont parties, on ne peut plus faire comme si elles n'étaient
+  // jamais arrivées.
+  if (rendu.size > 0) {
+    const catalogue = await loadCatalog(session.businessId, [...rendu.keys()]);
+    for (const [productId, quantite] of rendu) {
+      const connu = catalogue.get(productId);
+      if (connu && connu.product.stock_quantity < quantite) {
+        throw conflict(
+          `Impossible : il ne reste que ${connu.product.stock_quantity} ${connu.product.base_unit} de ${connu.product.name} en stock, et cette commande en avait fait entrer ${quantite}. Une partie est déjà vendue.`
+        );
+      }
+    }
+  }
+
   await runTransaction([
+    ...[...rendu].map(
+      ([productId, quantite]) => sql`
+        UPDATE products
+           SET stock_quantity = stock_quantity - ${quantite}, updated_at = now()
+         WHERE id = ${productId} AND business_id = ${session.businessId}
+      `
+    ),
+    // Les mouvements de ses réceptions partent aussi : `stock_movements`
+    // désigne sa pièce par un couple type/identifiant, comme `documents`, et
+    // aucune cascade ne les emporterait. Un mouvement sans réception pour le
+    // justifier serait pire qu'une ligne manquante.
+    sql`
+      DELETE FROM stock_movements
+       WHERE business_id = ${session.businessId}
+         AND reference_type = 'PURCHASE_RECEIPT'
+         AND reference_id IN (
+           SELECT id FROM purchase_receipts
+            WHERE purchase_order_id = ${orderId} AND business_id = ${session.businessId}
+         )
+    `,
     sql`
       DELETE FROM documents
        WHERE business_id = ${session.businessId}
