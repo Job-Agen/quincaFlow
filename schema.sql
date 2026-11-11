@@ -485,6 +485,29 @@ CREATE TABLE IF NOT EXISTS recurring_charges (
 CREATE INDEX IF NOT EXISTS charges_business_due_idx
   ON recurring_charges (business_id, active, next_due_on);
 
+-- À qui envoyer les rappels (§68).
+--
+-- Un abonnement, c'est un navigateur sur un appareil — pas un compte. Le même
+-- gérant qui ouvre l'application sur son téléphone et sur l'ordinateur de la
+-- boutique en a deux, et doit être prévenu sur les deux. L'`endpoint` est
+-- l'adresse que le service de distribution a donnée ; elle identifie
+-- l'abonnement, d'où sa clé unique.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          text PRIMARY KEY,
+  business_id text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
+  user_id     text REFERENCES users (id) ON DELETE CASCADE,
+  endpoint    text NOT NULL,
+  p256dh      text NOT NULL,
+  auth        text NOT NULL,
+  -- Mis à jour à chaque envoi réussi : un abonnement qu'un navigateur a
+  -- oublié se reconnaît à ses refus, et se retire tout seul.
+  last_seen   timestamptz,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS push_endpoint_key ON push_subscriptions (endpoint);
+CREATE INDEX IF NOT EXISTS push_business_idx ON push_subscriptions (business_id);
+
 -- Encaissements hors vente (§42).
 --
 -- Le symétrique de `expenses`, et délibérément de la même forme : même colonnes,

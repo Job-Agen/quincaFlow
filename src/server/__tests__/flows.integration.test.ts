@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import pg from 'pg';
 import type { Session } from '@/types';
 import { verrouDeCommande } from '@/domain/purchase';
+import { money } from '@/utils/format';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -38,6 +39,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let reports: typeof import('../reports');
   let expenses: typeof import('../expenses');
   let charges: typeof import('../charges');
+  let push: typeof import('../push');
   let history: typeof import('../history');
   let cash: typeof import('../cash');
   let incomes: typeof import('../incomes');
@@ -82,6 +84,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     reports = await import('../reports');
     expenses = await import('../expenses');
     charges = await import('../charges');
+    push = await import('../push');
     history = await import('../history');
     cash = await import('../cash');
     incomes = await import('../incomes');
@@ -1298,6 +1301,88 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       await expect(charges.deleteCharge(RIVAL, charge.id)).rejects.toThrow(/introuvable/i);
       // Et rien n'a bougé chez le propriétaire.
       expect((await charges.getCharge(OWNER.businessId, charge.id)).next_due_on).toBe('2026-12-11');
+    });
+  });
+
+  describe('rappels d’échéance (§68)', () => {
+    const creer = (over: Record<string, unknown> = {}) =>
+      charges.createCharge(OWNER, {
+        category: 'RENT',
+        label: 'Loyer boutique',
+        amount: 150000,
+        intervalMonths: 1,
+        paidOn: '2026-10-11',
+        enregistrerDepense: false,
+        ...over,
+      });
+
+    it('ne retient que les charges échues, boutique par boutique', async () => {
+      await creer({ label: 'Loyer boutique', paidOn: '2026-10-11' }); // échéance 11/11
+      await creer({ label: 'Plus tard', paidOn: '2026-11-20' }); // échéance 20/12
+      await charges.createCharge(RIVAL, {
+        category: 'RENT',
+        label: 'Loyer du voisin',
+        amount: 90000,
+        intervalMonths: 1,
+        paidOn: '2026-10-05',
+        enregistrerDepense: false,
+      });
+
+      const parBoutique = await push.chargesARappeler('2026-11-11');
+      // Chaque boutique reçoit les siennes, et seulement les siennes (§29).
+      expect(parBoutique.get(OWNER.businessId)?.map((c) => c.label)).toEqual(['Loyer boutique']);
+      expect(parBoutique.get(RIVAL.businessId)?.map((c) => c.label)).toEqual(['Loyer du voisin']);
+    });
+
+    it('oublie une charge rangée', async () => {
+      const charge = await creer();
+      await charges.updateCharge(OWNER, charge.id, {
+        category: 'RENT',
+        label: 'Loyer boutique',
+        amount: 150000,
+        intervalMonths: 1,
+        active: false,
+      });
+      expect((await push.chargesARappeler('2026-11-11')).size).toBe(0);
+    });
+
+    it('nomme la charge quand il n’y en a qu’une, compte au-delà', async () => {
+      const seule = [
+        {
+          label: 'Loyer boutique',
+          amount: 150000,
+          next_due_on: '2026-11-08',
+        },
+      ] as Parameters<typeof push.phraseRappel>[0];
+
+      // Une seule : on la nomme, c'est ce qui fait agir.
+      // Le montant est composé par `money`, pas recopié : la mise en forme
+      // des nombres pose une espace fine insécable, qu'un test écrit à la
+      // main manquerait à chaque fois.
+      expect(push.phraseRappel(seule, '2026-11-11', 'FCFA')).toEqual({
+        title: `Loyer boutique — ${money(150000, 'FCFA')}`,
+        body: 'En retard de 3 jours',
+      });
+
+      // Plusieurs : on compte, car une notification tronquée au milieu d'une
+      // liste ne dit rien. Le total dit s'il faut passer à la banque.
+      const plusieurs = [
+        { label: 'Loyer', amount: 150000, next_due_on: '2026-11-08' },
+        { label: 'Salaire', amount: 80000, next_due_on: '2026-11-11' },
+      ] as Parameters<typeof push.phraseRappel>[0];
+      expect(push.phraseRappel(plusieurs, '2026-11-11', 'FCFA')).toEqual({
+        title: `2 charges à payer — ${money(230000, 'FCFA')}`,
+        body: 'Dont 1 en retard.',
+      });
+    });
+
+    it('se tait proprement sans clés configurées', async () => {
+      // Comme l'envoi de courriel du §57 : la fonctionnalité s'annonce
+      // indisponible au lieu d'échouer sur un refus illisible.
+      const avant = process.env.VAPID_PUBLIC_KEY;
+      delete process.env.VAPID_PUBLIC_KEY;
+      expect(push.clesVapid()).toBeNull();
+      if (avant) process.env.VAPID_PUBLIC_KEY = avant;
     });
   });
 

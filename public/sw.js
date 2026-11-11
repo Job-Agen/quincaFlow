@@ -94,3 +94,56 @@ self.addEventListener('fetch', (event) => {
     })()
   );
 });
+
+
+/**
+ * Les rappels d'échéance (§68).
+ *
+ * Le serveur n'envoie que de quoi écrire la notification — un titre, une
+ * phrase, un lien. Jamais de montants ni de noms de charges au-delà de ce qui
+ * s'affiche : une notification traverse un service de distribution que nous ne
+ * tenons pas, et s'affiche sur un écran verrouillé que d'autres voient.
+ */
+self.addEventListener('push', (event) => {
+  let avis = {};
+  try {
+    avis = event.data ? event.data.json() : {};
+  } catch {
+    avis = {};
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(avis.title || 'MaQuincaillerie', {
+      body: avis.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      // Une étiquette stable : le rappel du jour remplace celui d'hier au lieu
+      // de s'empiler. Un gérant parti trois jours ne doit pas retrouver douze
+      // notifications identiques.
+      tag: avis.tag || 'charges',
+      renotify: true,
+      data: { url: avis.url || '/charges' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const cible = (event.notification.data && event.notification.data.url) || '/charges';
+
+  event.waitUntil(
+    (async () => {
+      const fenetres = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      // Une fenêtre déjà ouverte est reprise plutôt que doublée : le gérant
+      // n'a pas besoin d'un second onglet de son application.
+      for (const fenetre of fenetres) {
+        if (fenetre.url.includes(cible) && 'focus' in fenetre) return fenetre.focus();
+      }
+      if (fenetres.length > 0 && 'navigate' in fenetres[0]) {
+        await fenetres[0].focus();
+        return fenetres[0].navigate(cible);
+      }
+      return self.clients.openWindow(cible);
+    })()
+  );
+});
