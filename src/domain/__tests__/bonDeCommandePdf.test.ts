@@ -137,6 +137,37 @@ describe('le bon de commande en PDF (§60)', () => {
     expect(avecNote.join(' ')).toMatch(/Observations : Livraison souhaitée avant vendredi/);
   });
 
+  it('annonce un projet quand la commande n’est pas encore enregistrée', () => {
+    // La saisie en cours n'a pas de numéro : la pièce doit le dire, sans quoi
+    // le fournisseur la classe comme un bon ferme et livre (§60bis).
+    // Un projet n'est pas une `PurchaseOrder` : il n'a ni numéro ni statut.
+    // C'est tout l'intérêt du type plus pauvre que le plan accepte.
+    const base = commande();
+    const p = planBonDeCommande(
+      { ...base, reference: null, status: null },
+      BOUTIQUE,
+      'FCFA'
+    );
+    const vus = textes(p);
+
+    // Le tiret cadratin devient un trait d'union : les polices PDF de base
+    // n'encodent que le latin-1, et `latin1()` le remplace plutôt que
+    // d'échouer. Le test attend donc ce que la pièce portera vraiment.
+    expect(vus).toContain('PROJET - NON ENREGISTRÉ');
+    expect(vus).toContain('Projet');
+    expect(vus.join(' ')).toMatch(/ne vaut ni commande ni engagement/);
+    // Rien à signer : une pièce sans numéro, signée, ne se retrouve nulle part
+    // le jour où l'un des deux la cite.
+    expect(vus).not.toContain('Le fournisseur');
+    expect(vus.join(' ')).toMatch(/à confirmer avant toute livraison/);
+    // Et le fichier ne peut pas porter un numéro qui n'existe pas.
+    expect(p.nomFichier).toBe('projet-de-commande.pdf');
+    // « Arrêté le présent bon de commande » est la formule d'une pièce ferme :
+    // sur un projet elle contredirait la mention qui la suit.
+    expect(vus.join(' ')).toMatch(/Montant estimé : trois cent trente mille FCFA/);
+    expect(vus.join(' ')).not.toMatch(/Arrêté le présent bon/);
+  });
+
   it('ne pose rien hors de la feuille, texte compris', () => {
     // Vérifier le seul point d'ancrage ne suffit pas : une mention centrée au
     // milieu de la feuille mais alignée à gauche sortirait du papier par la

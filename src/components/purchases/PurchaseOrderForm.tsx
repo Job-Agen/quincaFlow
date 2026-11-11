@@ -16,6 +16,7 @@ import {
   TextAreaField,
 } from '@/components/ui';
 import { api } from '@/client/api';
+import { envoyerBonDeCommande } from '@/client/partage';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import { orderTotal, purchaseOrderMessage, unitCostFor } from '@/domain/purchase';
@@ -76,6 +77,7 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [partage, setPartage] = useState(false);
 
   const catalog = useMemo(
     () => new Map((products.data || []).map((product) => [product.id, product])),
@@ -133,30 +135,72 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
     );
 
   /**
-   * La commande encore à l'écran, en message (§43).
+   * La commande encore à l'écran, en pièce jointe (§60bis).
    *
-   * Elle n'a pas de numéro : elle n'est pas enregistrée. Le message le dit —
-   * « (projet) » — plutôt que d'inventer une référence que le fournisseur
-   * citerait ensuite et qu'aucun écran ne retrouverait.
+   * Elle n'a pas de numéro : elle n'est pas enregistrée. Le PDF le dit en
+   * toutes lettres sous son titre — « PROJET — NON ENREGISTRÉ » — et ne porte
+   * aucune ligne à signer, plutôt que d'inventer une référence que le
+   * fournisseur citerait ensuite et qu'aucun écran ne retrouverait.
+   *
+   * C'est le geste du gérant qui demande « as-tu ça, et à quel prix ? » avant
+   * de s'engager : il mérite une pièce que le fournisseur puisse ouvrir sur un
+   * ordinateur, pas seulement une liste dans une bulle.
    */
-  function shareDraft() {
+  async function shareDraft() {
     const supplier = (suppliers.data || []).find((row) => row.id === supplierId);
+    const articles = lignes.map((item) => {
+      const product = catalog.get(item.productId);
+      const unit = (product?.units ?? []).find((row) => row.id === item.unitId);
+      return {
+        nom: product?.name || 'Article',
+        unite: unit?.label || product?.base_unit || null,
+        quantite: item.quantity,
+        cout: item.unitCost,
+      };
+    });
+
     const text = purchaseOrderMessage(
       { supplierName: supplier?.name, notes },
-      lignes.map((item) => {
-        const product = catalog.get(item.productId);
-        const unit = (product?.units ?? []).find((row) => row.id === item.unitId);
-        return {
-          productName: product?.name || 'Article',
-          unitLabel: unit?.label || product?.base_unit,
-          quantity: item.quantity,
-          unitCost: item.unitCost,
-        };
-      }),
+      articles.map((a) => ({
+        productName: a.nom,
+        unitLabel: a.unite ?? undefined,
+        quantity: a.quantite,
+        unitCost: a.cout,
+      })),
       business,
       currency
     );
-    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
+
+    const ouvrirWhatsApp = () =>
+      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+
+    setPartage(true);
+    try {
+      const issue = await envoyerBonDeCommande(
+        {
+          reference: null,
+          supplier_name: supplier?.name ?? null,
+          status: null,
+          created_at: new Date().toISOString(),
+          notes,
+          items: articles.map((a) => ({
+            product_name: a.nom,
+            unit_label: a.unite,
+            quantity_ordered: a.quantite,
+            unit_cost: a.cout,
+          })),
+        },
+        business,
+        currency,
+        text
+      );
+      if (issue === 'téléchargé') ouvrirWhatsApp();
+    } catch {
+      // Le PDF n'a pas pu être fabriqué : le message part quand même, c'est ce
+      // que ce bouton faisait avant le §60bis.
+      ouvrirWhatsApp();
+    }
+    setPartage(false);
   }
 
   async function submit() {
@@ -318,9 +362,14 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
         <Button block disabled={items.length === 0 || !supplierId || busy} onClick={submit}>
           {busy ? 'Enregistrement…' : initial ? 'Enregistrer les modifications' : 'Générer la commande'}
         </Button>
-        <Button block variant="soft" disabled={!items.length || !supplierId} onClick={shareDraft}>
+        <Button
+          block
+          variant="soft"
+          disabled={!items.length || !supplierId || partage}
+          onClick={shareDraft}
+        >
           <MessageCircle size={21} style={{ color: 'var(--green)' }} />
-          Partager sur WhatsApp
+          {partage ? 'Préparation…' : 'Envoyer le projet par WhatsApp'}
         </Button>
       </main>
 

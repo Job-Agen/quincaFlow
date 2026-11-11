@@ -2918,12 +2918,39 @@ Les tests ont été réécrits sur l'invariant et non sur le symptôme : les tra
 à signer tiennent dans l'espace libre entre le dernier texte de la page et le
 filet du pied. Les trois mutants meurent.
 
-**Ce qui reste en texte**
+**F79 — Le projet part aussi en pièce**
 
-Le partage depuis l'**écran de saisie**, avant enregistrement. La commande n'a
-pas encore de numéro : un PDF intitulé « (projet) » inviterait le fournisseur à
-le traiter comme une pièce, et aucun écran ne retrouverait la référence qu'il
-citerait ensuite. Ce bouton-là envoie toujours le message texte.
+Le partage depuis l'**écran de saisie** envoyait encore du texte : la commande
+n'a pas de numéro, et une pièce sans numéro se classe mal.
+
+La réserve était juste, la conclusion ne l'était pas. Le geste visé — « as-tu
+ça, et à quel prix ? », avant de s'engager — mérite une pièce que le
+fournisseur puisse ouvrir sur un ordinateur et faire circuler dans son magasin.
+Le risque n'était pas le PDF, c'était un PDF **muet sur son état**.
+
+Le projet le dit donc quatre fois, du plus gros au plus petit caractère :
+
+| Où | Ce qui est écrit |
+|---|---|
+| Sous le titre | **PROJET — NON ENREGISTRÉ** |
+| Dans le bloc d'identification | N° « — », Statut « Projet » |
+| Après le total | « Projet de commande — à confirmer avant toute livraison. » |
+| En pied de page | « sans numéro : il ne vaut ni commande ni engagement d'achat. Un bon numéroté suivra. » |
+
+Et il **ne porte aucune ligne à signer** : une pièce sans numéro, signée, ne se
+retrouve nulle part le jour où l'un des deux la cite.
+
+La formule du total change aussi. « Arrêté le présent bon de commande à la
+somme de… » est celle d'une pièce ferme ; sur un projet elle contredirait les
+quatre mentions ci-dessus. Le projet dit « Montant estimé : … ».
+
+Le fichier s'appelle `projet-de-commande.pdf` : il ne peut pas porter un numéro
+qui n'existe pas.
+
+Techniquement, le plan de page cesse d'exiger une commande enregistrée. Il
+accepte une forme plus pauvre — numéro, fournisseur, statut, date,
+observations, lignes — que `PurchaseOrder` satisfait telle quelle et que la
+saisie en cours sait fabriquer.
 
 **Critères d'acceptation**
 
@@ -2941,3 +2968,8 @@ citerait ensuite. Ce bouton-là envoie toujours le message texte.
     et WhatsApp s'ouvre avec le texte — l'écran le dit.
 11. Un caractère hors latin-1 dans un nom de produit ne fait pas échouer
     l'envoi.
+12. Le projet part lui aussi en PDF, et s'annonce comme projet au titre, au
+    bloc d'identification, après le total et au pied.
+13. Un projet ne porte aucune ligne à signer, et son total n'est pas
+    « arrêté ».
+14. Le fichier d'un projet ne porte pas de numéro de bon.

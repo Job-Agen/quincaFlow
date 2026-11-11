@@ -1,9 +1,9 @@
 'use client';
 
 import { planFacture, type PlanDocument } from '@/domain/facturePdf';
-import { planBonDeCommande } from '@/domain/bonDeCommandePdf';
+import { planBonDeCommande, type CommandeImprimable } from '@/domain/bonDeCommandePdf';
 import { tracerDocument } from '@/domain/tracePdf';
-import type { BusinessRow, PurchaseOrder, Sale } from '@/types';
+import type { BusinessRow, Sale } from '@/types';
 
 /**
  * Envoyer la facture, en pièce jointe (§57).
@@ -45,7 +45,7 @@ export const fichierFacture = (
 
 /** Le PDF du bon de commande, prêt à joindre (§60). */
 export const fichierBonDeCommande = (
-  order: PurchaseOrder,
+  order: CommandeImprimable,
   business: BusinessRow | null | undefined,
   currency: string
 ): Promise<File> => fichier(planBonDeCommande(order, business, currency));
@@ -86,7 +86,7 @@ export async function envoyerFacture(
  * reste pour son classeur.
  */
 export async function envoyerBonDeCommande(
-  order: PurchaseOrder,
+  order: CommandeImprimable,
   business: BusinessRow | null | undefined,
   currency: string,
   message: string

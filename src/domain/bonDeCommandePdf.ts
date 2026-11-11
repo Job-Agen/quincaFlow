@@ -11,7 +11,29 @@ import { montantEnLettres } from './lettres';
 import { PO_STATUS_LABELS, clotureCommande, orderTotal, purchaseOrderHeading } from './purchase';
 import { amount, money, quantity, shortDate } from '../utils/format';
 import { round2 } from '../utils/money';
-import type { BusinessRow, PurchaseOrder } from '@/types';
+import type { BusinessRow, PurchaseOrderStatus } from '@/types';
+
+/**
+ * Ce qu'il faut d'une commande pour en tirer une pièce.
+ *
+ * Volontairement plus pauvre que `PurchaseOrder`, qu'elle accepte tel quel :
+ * la saisie en cours n'est pas encore une commande enregistrée, et c'est
+ * pourtant la même pièce qu'elle doit produire (§60bis).
+ */
+export interface CommandeImprimable {
+  /** `null` tant que la commande n'est pas enregistrée : c'est un projet. */
+  reference: string | null;
+  supplier_name: string | null;
+  status: PurchaseOrderStatus | null;
+  created_at: string;
+  notes: string | null;
+  items: readonly {
+    product_name: string;
+    unit_label: string | null;
+    quantity_ordered: number | string;
+    unit_cost: number | string;
+  }[];
+}
 
 /**
  * Le bon de commande en PDF (§60).
@@ -61,11 +83,14 @@ function tronque(valeur: string, largeur: number, taille: number): string {
  * gratuite.
  */
 export function planBonDeCommande(
-  order: PurchaseOrder,
+  order: CommandeImprimable,
   business: BusinessRow | null | undefined,
   currency: string
 ): PlanDocument {
   const annulee = order.status === 'CANCELLED';
+  // Sans numéro, la commande n'existe que sur l'écran du gérant. La pièce doit
+  // le dire : un fournisseur qui classe un projet comme un bon ferme livrera.
+  const projet = !order.reference;
   const total = orderTotal(
     order.items.map((item) => ({ quantity: item.quantity_ordered, unitCost: item.unit_cost }))
   );
@@ -106,10 +131,19 @@ export function planBonDeCommande(
     aligne: 'droite',
   }));
   yDroite -= 20;
+  if (projet) {
+    // En toutes lettres sous le titre, pas en petit caractère au pied : c'est
+    // la première chose à lire.
+    blocs.push(texte(COL.total, yDroite, 'PROJET — NON ENREGISTRÉ', 10, {
+      gras: true,
+      aligne: 'droite',
+    }));
+    yDroite -= 16;
+  }
   for (const [label, valeur] of [
-    ['N°', order.reference],
+    ['N°', projet ? '—' : (order.reference ?? '—')],
     ['Date', shortDate(order.created_at)],
-    ['Statut', PO_STATUS_LABELS[order.status]],
+    ['Statut', projet ? 'Projet' : PO_STATUS_LABELS[order.status ?? 'DRAFT']],
   ] as const) {
     blocs.push(texte(COL.total - 112, yDroite, label, 8.5, { gris: true, aligne: 'droite' }));
     blocs.push(texte(COL.total, yDroite, valeur, 9, { gras: label === 'N°', aligne: 'droite' }));
@@ -192,7 +226,10 @@ export function planBonDeCommande(
   // change de page entier plutôt que par moitié.
   const lignesNotes = order.notes ? replie(`Observations : ${order.notes.trim()}`, 100).length : 0;
   const besoin =
-    (chiffre ? 58 + (annulee ? 0 : 24) : 24) + lignesNotes * 12 + (annulee ? 16 : 56) + 24;
+    (chiffre ? 58 + (annulee ? 0 : 24) : 24) +
+    lignesNotes * 12 +
+    (annulee || projet ? 16 : 56) +
+    24;
   if (y - besoin < BAS + 30) {
     pages.push({ blocs });
     blocs = [];
@@ -213,10 +250,12 @@ export function planBonDeCommande(
     // La somme en lettres n'est pas un ornement : un chiffre se retouche sur un
     // PDF transmis, une somme écrite en toutes lettres se contredit elle-même.
     if (!annulee) {
-      for (const ligne of replie(
-        `Arrêté le présent bon de commande à la somme de ${montantEnLettres(total, currency)}.`,
-        96
-      )) {
+      // « Arrêté le présent bon de commande » est la formule d'une pièce
+      // ferme : sur un projet, elle contredirait la mention qui le suit.
+      const phrase = projet
+        ? `Montant estimé : ${montantEnLettres(total, currency)}.`
+        : `Arrêté le présent bon de commande à la somme de ${montantEnLettres(total, currency)}.`;
+      for (const ligne of replie(phrase, 96)) {
         blocs.push(texte(MARGE, y, ligne, 9));
         y -= 12;
       }
@@ -246,6 +285,13 @@ export function planBonDeCommande(
         gras: true,
       })
     );
+  } else if (projet) {
+    // Rien à signer : une pièce sans numéro, signée, ne se retrouve nulle part
+    // le jour où l'un des deux la cite.
+    y -= 10;
+    blocs.push(
+      texte(MARGE, y, 'Projet de commande — à confirmer avant toute livraison.', 10, { gras: true })
+    );
   } else {
     // On signe en bas de la feuille, pas à la suite du texte : des traits
     // flottant au milieu d'une page à moitié blanche font un brouillon, pas
@@ -272,9 +318,11 @@ export function planBonDeCommande(
     .join(' - ');
   const mention = annulee
     ? 'Commande annulée. Merci de ne pas donner suite.'
-    : chiffre
-      ? 'Prix et quantités à confirmer par le fournisseur avant livraison.'
-      : "Document établi pour demande de prix. Il ne vaut pas engagement d'achat.";
+    : projet
+      ? "Projet de commande, sans numéro : il ne vaut ni commande ni engagement d'achat. Un bon numéroté suivra."
+      : chiffre
+        ? 'Prix et quantités à confirmer par le fournisseur avant livraison.'
+        : "Document établi pour demande de prix. Il ne vaut pas engagement d'achat.";
 
   let yPied = BAS + 14;
   for (const ligne of [pied, ...replie(mention, 112)]) {
@@ -287,7 +335,7 @@ export function planBonDeCommande(
   return {
     // Ce que le fournisseur verra dans sa messagerie : le numéro du bon, et
     // rien d'autre à déchiffrer.
-    nomFichier: `${order.reference}.pdf`,
+    nomFichier: projet ? 'projet-de-commande.pdf' : `${order.reference}.pdf`,
     pages,
   };
 }
