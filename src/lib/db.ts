@@ -99,7 +99,7 @@ export async function runTransaction(queries: Query[]): Promise<unknown> {
   } catch (rawError) {
     // Le pilote remonte une erreur Postgres brute, pas une `Error` typée : on ne
     // lit `code` et `message` qu'après avoir nommé la forme attendue.
-    const error = rawError as { code?: string; message?: string } | null;
+    const error = rawError as { code?: string; message?: string; constraint?: string } | null;
     const message = String(error?.message || '');
     if (error?.code === '23514' && message.includes('stock_quantity')) {
       throw new ApiError(409, "Stock insuffisant : la vente n'a pas été enregistrée.");
@@ -111,7 +111,14 @@ export async function runTransaction(queries: Query[]): Promise<unknown> {
       throw new ApiError(409, 'Quantité reçue supérieure à la quantité commandée.');
     }
     if (error?.code === '23505') {
-      throw new ApiError(409, 'Cette référence est déjà utilisée.');
+      // Le code et la contrainte voyagent avec l'erreur : l'appelant qui doit
+      // distinguer un doublon d'un autre — la création d'article reprend un
+      // numéro plutôt que d'échouer (§61) — n'a pas à reconnaître une phrase
+      // française, qui changerait au premier remaniement de texte.
+      throw new ApiError(409, 'Cette référence est déjà utilisée.', {
+        code: error.code,
+        constraint: error.constraint ?? null,
+      });
     }
     throw rawError;
   }

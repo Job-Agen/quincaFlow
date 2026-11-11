@@ -13,7 +13,13 @@
  * sérialisant les accès à la ligne du compteur.
  */
 
-type ReferenceKind = 'SALE' | 'INVOICE' | 'OUT_OF_STOCK' | 'PURCHASE_ORDER' | 'RECEIPT';
+type ReferenceKind =
+  | 'SALE'
+  | 'INVOICE'
+  | 'OUT_OF_STOCK'
+  | 'PURCHASE_ORDER'
+  | 'RECEIPT'
+  | 'PRODUCT';
 
 interface ReferenceFormat {
   prefix: string;
@@ -27,6 +33,10 @@ const FORMATS: Record<ReferenceKind, ReferenceFormat> = {
   OUT_OF_STOCK: { prefix: 'HS', pad: 4, yearly: false },
   PURCHASE_ORDER: { prefix: 'PO', pad: 4, yearly: false },
   RECEIPT: { prefix: 'RC', pad: 4, yearly: false },
+  // La référence d'un article, quand le gérant n'en fournit pas (§61). Elle ne
+  // numérote pas une pièce mais nomme une chose : un trou dans la suite n'y
+  // raconte rien, contrairement à une facture manquante.
+  PRODUCT: { prefix: 'ART', pad: 4, yearly: false },
 };
 
 /**

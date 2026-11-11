@@ -120,9 +120,18 @@ export default function ProductForm({
           required
         />
         <div className="grid-2">
+          {/* Laissée vide, la boutique en attribue une — ART-0001, puis
+            ART-0002 (§61). Le champ reste ouvert : un gérant qui travaille
+            avec la référence de son fournisseur cherche par elle au comptoir,
+            et la lui retirer lui coûterait ce geste-là. */}
           <TextField
             label="Référence"
-            placeholder="SAC-CIM-001"
+            placeholder={initial ? '' : 'Attribuée automatiquement'}
+            hint={
+              initial
+                ? undefined
+                : 'Laissez vide et l’application en attribue une (ART-0001).'
+            }
             value={form.sku}
             onChange={set('sku')}
           />

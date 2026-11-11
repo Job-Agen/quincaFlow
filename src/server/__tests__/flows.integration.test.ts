@@ -1083,6 +1083,71 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
 
   // ───────────────────────── Rayons du catalogue (§52) ─────────────────
 
+  describe('référence attribuée aux articles (§61)', () => {
+    const creer = (over: Record<string, unknown> = {}) =>
+      products.createProduct(OWNER, {
+        name: 'Ciment CIMTOGO 50 kg',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4800,
+        ...over,
+      });
+
+    it('attribue une référence quand le gérant n’en donne pas', async () => {
+      // Le catalogue d'une quincaillerie se remplit au comptoir, entre deux
+      // clients : inventer un code à chaque article n'arrive jamais.
+      expect((await creer()).sku).toBe('ART-0001');
+      expect((await creer({ name: 'Fer à béton 8 mm' })).sku).toBe('ART-0002');
+      expect((await creer({ name: 'Tôle bac alu' })).sku).toBe('ART-0003');
+    });
+
+    it('garde celle du gérant quand il en donne une', async () => {
+      // C'est souvent la référence du fournisseur, et c'est par elle qu'il
+      // cherchera l'article au comptoir.
+      expect((await creer({ sku: 'CIM-50' })).sku).toBe('CIM-50');
+      // Elle ne consomme pas de numéro : le suivant reste le premier.
+      expect((await creer({ name: 'Autre' })).sku).toBe('ART-0001');
+    });
+
+    it('ne reprend pas une référence déjà saisie à la main', async () => {
+      // Le gérant n'a pas à savoir qu'un ART-0001 traîne dans son catalogue.
+      await creer({ name: 'Saisi à la main', sku: 'ART-0001' });
+      const attribue = await creer({ name: 'Ciment' });
+      expect(attribue.sku).toBe('ART-0002');
+    });
+
+    it('compte pour chaque boutique séparément (§29)', async () => {
+      expect((await creer()).sku).toBe('ART-0001');
+      const voisine = await products.createProduct(RIVAL, {
+        name: 'Ciment',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4800,
+      });
+      // La voisine commence à 1 : sinon le numéro du catalogue d'à côté se
+      // devinerait depuis le sien.
+      expect(voisine.sku).toBe('ART-0001');
+    });
+
+    it('rend l’article trouvable par la référence attribuée', async () => {
+      const article = await creer();
+      const vus = await products.listProducts(OWNER.businessId, { search: article.sku! });
+      expect(vus.map((p) => p.id)).toEqual([article.id]);
+    });
+
+    it('ne touche pas à la référence en modification', async () => {
+      const article = await creer();
+      const apres = await products.updateProduct(OWNER, article.id, {
+        name: 'Ciment CIMTOGO 50 kg',
+        baseUnit: 'sac',
+        purchasePrice: 4000,
+        sellingPrice: 4900,
+        sku: article.sku,
+      });
+      expect(apres.sku).toBe('ART-0001');
+    });
+  });
+
   describe('rayons (§52)', () => {
     /** Trois produits, deux rayons, un sans rayon. */
     async function seedRayons() {

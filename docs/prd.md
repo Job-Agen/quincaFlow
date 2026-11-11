@@ -2973,3 +2973,67 @@ saisie en cours sait fabriquer.
 13. Un projet ne porte aucune ligne à signer, et son total n'est pas
     « arrêté ».
 14. Le fichier d'un projet ne porte pas de numéro de bon.
+
+
+## 61. La boutique numérote ses articles
+
+**Objectif**
+
+Le champ « Référence » de la fiche produit était libre et facultatif. Il
+restait vide : un catalogue se remplit au comptoir, entre deux clients, et
+inventer un code à chaque article n'arrive jamais. Les écrans affichaient donc
+« Sans référence » sur presque tout le catalogue.
+
+Une référence n'est pourtant pas un ornement. C'est ce qu'on dicte au
+téléphone, ce qu'on écrit sur un bac, ce qu'on cherche au comptoir quand le
+nom est long et que le client attend.
+
+**F80 — Attribuée, pas imposée**
+
+Référence laissée vide à la création : la boutique en attribue une —
+`ART-0001`, puis `ART-0002`. Le champ reste ouvert : un gérant qui travaille
+avec la référence de son fournisseur cherche par elle, et la lui retirer lui
+coûterait précisément le geste qu'on veut lui rendre. Le champ le dit :
+« Laissez vide et l'application en attribue une (ART-0001). »
+
+Une référence saisie à la main **ne consomme pas de numéro** : le prochain
+article attribué reprend la suite là où elle était.
+
+La **modification** ne touche à rien. Une référence déjà dictée, déjà écrite
+sur un bac, ne change pas parce qu'on a corrigé un prix.
+
+**F81 — Pourquoi ce compteur-ci se comporte autrement**
+
+Les ventes et les factures tirent leur numéro **dans** la transaction
+d'écriture (§20) : une vente refusée n'emporte pas un numéro avec elle, car
+une séquence de factures à trous se lit, lors d'un contrôle, comme des
+factures effacées.
+
+Pour un article, c'est l'inverse qui est vrai. `ART-0007` jamais attribué ne
+raconte rien — une référence nomme une chose, elle ne date pas un acte. Le
+compteur est donc incrémenté à part, et cet écart achète une propriété qui
+compte : si le gérant a saisi à la main un article nommé `ART-0007`, la
+création suivante prend `ART-0008` au lieu de buter indéfiniment sur le même
+numéro. Dans la transaction, le compteur serait rejoué à l'identique à chaque
+tentative, et la création serait **définitivement bloquée** à ce rang.
+
+**F82 — Une erreur de base de données qu'on peut distinguer**
+
+Reprendre un numéro suppose de reconnaître un doublon de référence parmi les
+autres échecs. La couche base traduisait déjà toute violation d'unicité en une
+phrase française unique : la reconnaître aurait voulu dire comparer du texte,
+qui change au premier remaniement.
+
+Le code Postgres et le nom de la contrainte voyagent désormais avec l'erreur.
+L'appelant décide sur eux, pas sur une phrase.
+
+**Critères d'acceptation**
+
+1. Un article créé sans référence en reçoit une, dans l'ordre.
+2. Une référence saisie est conservée telle quelle.
+3. Une référence saisie ne consomme pas de numéro.
+4. Une référence attribuée qui existerait déjà est remplacée par la suivante,
+   sans que le gérant ait à le savoir.
+5. Chaque boutique a son propre compteur (§29).
+6. L'article est trouvable par la référence attribuée.
+7. Modifier un article ne change pas sa référence.

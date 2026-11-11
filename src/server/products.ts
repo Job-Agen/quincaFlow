@@ -1,7 +1,8 @@
 import { getSql, one, rows, runTransaction, type Query, type Sql } from '../lib/db';
 import { newId } from '../lib/ids';
-import { notFound, badRequest } from '../lib/http';
+import { ApiError, notFound, badRequest } from '../lib/http';
 import { str, num } from '../lib/validate';
+import { referenceFormat } from '../lib/references';
 import { round2, round3 } from '../utils/money';
 import { unitsOf } from '../domain/units';
 import type {
@@ -276,6 +277,44 @@ function insertUnits(sql: Sql, businessId: string, productId: string, units: Uni
   );
 }
 
+/**
+ * La référence qu'une boutique donnera au prochain article (§61).
+ *
+ * Le compteur est incrémenté **à part**, et non dans la transaction d'écriture
+ * comme pour les ventes et les factures. C'est délibéré, et c'est l'inverse de
+ * la règle du §20 : un numéro de facture sauté se lit, lors d'un contrôle,
+ * comme une facture effacée, tandis qu'un `ART-0007` jamais attribué ne
+ * raconte rien — une référence nomme une chose, elle ne date pas un acte.
+ *
+ * Cet écart achète une propriété qui compte : si le gérant a déjà saisi à la
+ * main un article nommé `ART-0007`, la création suivante peut reprendre un
+ * numéro de plus au lieu de buter indéfiniment sur le même. Dans la
+ * transaction, le compteur serait rejoué à l'identique à chaque tentative.
+ */
+async function prochaineReference(businessId: string): Promise<string> {
+  const format = referenceFormat('PRODUCT');
+  const ligne = one<{ value: number }>(
+    await getSql()`
+      INSERT INTO counters (business_id, kind, value)
+      VALUES (${businessId}, ${format.counterKey}, 1)
+      ON CONFLICT (business_id, kind) DO UPDATE SET value = counters.value + 1
+      RETURNING value
+    `
+  );
+  return `${format.prefix}${String(ligne?.value ?? 1).padStart(format.pad, '0')}`;
+}
+
+/** Vrai si l'échec vient d'un doublon de référence, et non d'autre chose. */
+function referenceDejaPrise(erreur: unknown): boolean {
+  if (!(erreur instanceof ApiError)) return false;
+  const details = erreur.details as { code?: string; constraint?: string | null } | null;
+  // `23505` est le doublon Postgres. La contrainte n'est lue que si elle est
+  // nommée : une base créée avant qu'elle ne le soit remonte `null`, et mieux
+  // vaut reprendre un numéro à tort qu'échouer à coup sûr.
+  if (details?.code !== '23505') return false;
+  return !details.constraint || /sku/i.test(details.constraint);
+}
+
 export async function createProduct(session: Session, body: Record<string, unknown>) {
   const input = readProductInput(body);
   const initialStock = round3(
@@ -284,36 +323,59 @@ export async function createProduct(session: Session, body: Record<string, unkno
   const productId = newId('prd');
   const sql = getSql();
 
-  const queries = [
-    sql`
-      INSERT INTO products (
-        id, business_id, name, sku, description, base_unit, category,
-        purchase_price, selling_price, stock_quantity, low_stock_threshold
-      ) VALUES (
-        ${productId}, ${session.businessId}, ${input.name}, ${input.sku}, ${input.description},
-        ${input.baseUnit}, ${input.category}, ${input.purchasePrice}, ${input.sellingPrice},
-        ${initialStock}, ${input.lowStockThreshold}
-      )
-    `,
-    ...insertUnits(sql, session.businessId, productId, input.units),
-  ];
+  const ecriture = (reference: string) => {
+    const queries = [
+      sql`
+        INSERT INTO products (
+          id, business_id, name, sku, description, base_unit, category,
+          purchase_price, selling_price, stock_quantity, low_stock_threshold
+        ) VALUES (
+          ${productId}, ${session.businessId}, ${input.name}, ${reference}, ${input.description},
+          ${input.baseUnit}, ${input.category}, ${input.purchasePrice}, ${input.sellingPrice},
+          ${initialStock}, ${input.lowStockThreshold}
+        )
+      `,
+      ...insertUnits(sql, session.businessId, productId, input.units),
+    ];
 
-  // Un stock initial est un ajustement d'inventaire, pas une réception. Sans ce
-  // mouvement, le premier écart constaté sur le produit semblerait sorti de nulle part.
-  if (initialStock > 0) {
-    queries.push(sql`
-      INSERT INTO stock_movements (
-        id, business_id, product_id, type, quantity, stock_after,
-        reference_type, reference_id, user_id, note
-      ) VALUES (
-        ${newId('mv')}, ${session.businessId}, ${productId}, 'ADJUSTMENT', ${initialStock},
-        ${initialStock}, 'PRODUCT', ${productId}, ${session.userId}, 'Stock initial'
-      )
-    `);
+    // Un stock initial est un ajustement d'inventaire, pas une réception. Sans ce
+    // mouvement, le premier écart constaté sur le produit semblerait sorti de nulle part.
+    if (initialStock > 0) {
+      queries.push(sql`
+        INSERT INTO stock_movements (
+          id, business_id, product_id, type, quantity, stock_after,
+          reference_type, reference_id, user_id, note
+        ) VALUES (
+          ${newId('mv')}, ${session.businessId}, ${productId}, 'ADJUSTMENT', ${initialStock},
+          ${initialStock}, 'PRODUCT', ${productId}, ${session.userId}, 'Stock initial'
+        )
+      `);
+    }
+    return queries;
+  };
+
+  // Référence laissée vide : la boutique en attribue une. Le gérant qui a déjà
+  // celle du fournisseur la garde — c'est par elle qu'il cherchera l'article.
+  if (input.sku) {
+    await runTransaction(ecriture(input.sku));
+    return getProduct(session.businessId, productId);
   }
 
-  await runTransaction(queries);
-  return getProduct(session.businessId, productId);
+  // Une référence attribuée peut tomber sur une référence saisie à la main
+  // autrefois. On en prend alors une autre plutôt que de refuser la création :
+  // le gérant n'a pas à savoir qu'un `ART-0007` traîne dans son catalogue.
+  for (let essai = 0; essai < 5; essai += 1) {
+    const reference = await prochaineReference(session.businessId);
+    try {
+      await runTransaction(ecriture(reference));
+      return getProduct(session.businessId, productId);
+    } catch (erreur) {
+      if (!referenceDejaPrise(erreur)) throw erreur;
+    }
+  }
+  throw badRequest(
+    "Impossible d'attribuer une référence : trop de références occupées. Saisissez-en une."
+  );
 }
 
 export async function updateProduct(
