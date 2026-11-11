@@ -1,8 +1,10 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
+  CalendarClock,
   ArrowLeftRight,
   Bell,
   ChevronRight,
@@ -20,6 +22,7 @@ import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import SemaineChart from '@/components/dashboard/SemaineChart';
 import { amount, money, quantity, time, withUnit } from '@/utils/format';
+import { etatCharge, phraseEcheance } from '@/domain/charge';
 import type { DashboardSummary } from '@/types';
 
 /**
@@ -90,6 +93,15 @@ const TILES: readonly Tile[] = [
 export default function DashboardPage() {
   const { business, currency, isOwner } = useSession();
   const { data, loading, error } = useResource<DashboardSummary>('/api/dashboard');
+  // Le jour courant, lu une fois par rendu : les échéances se disent en jours
+  // restants, et deux lectures d'horloge dans la même liste pourraient tomber
+  // de part et d'autre de minuit.
+  const jourCourant = useMemo(() => {
+    const jour = new Date();
+    return `${jour.getFullYear()}-${String(jour.getMonth() + 1).padStart(2, '0')}-${String(
+      jour.getDate()
+    ).padStart(2, '0')}`;
+  }, []);
 
   return (
     <>
@@ -183,6 +195,51 @@ export default function DashboardPage() {
                     </li>
                   ))}
                 </ol>
+              </Card>
+            ) : null}
+
+            {/* Les charges échues passent avant le stock faible : un loyer en
+              retard coûte plus cher qu'un article à réassortir, et c'est le
+              seul écran que le gérant ouvre tous les jours (§66). */}
+            {(data.chargesDues?.length ?? 0) > 0 ? (
+              <Card className="stock-alerts">
+                <CardHead
+                  title="À payer"
+                  action={
+                    <Link href="/charges" className="link">
+                      Voir tout
+                    </Link>
+                  }
+                />
+                <div className="list">
+                  {data.chargesDues.map((charge) => {
+                    const retard = etatCharge(charge.next_due_on, jourCourant) === 'en-retard';
+                    return (
+                      <Link key={charge.id} href="/charges" className="list__row">
+                        <span
+                          className="thumb"
+                          style={{
+                            background: retard ? 'var(--red-soft)' : 'var(--amber-soft)',
+                            borderColor: 'transparent',
+                            color: retard ? 'var(--red)' : 'var(--amber)',
+                          }}
+                        >
+                          <CalendarClock size={20} />
+                        </span>
+                        <div className="list__body">
+                          <div className="list__title">{charge.label}</div>
+                          <div className="list__sub">
+                            {phraseEcheance(charge.next_due_on, jourCourant)}
+                          </div>
+                        </div>
+                        <strong className="num small">
+                          {money(charge.amount, currency)}
+                        </strong>
+                        <ChevronRight size={18} className="muted" />
+                      </Link>
+                    );
+                  })}
+                </div>
               </Card>
             ) : null}
 

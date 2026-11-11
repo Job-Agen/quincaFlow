@@ -453,6 +453,35 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 CREATE INDEX IF NOT EXISTS expenses_business_date_idx ON expenses (business_id, spent_on DESC);
 
+-- Les charges qui reviennent (§66).
+--
+-- Le loyer, les salaires, l'électricité : l'application savait déjà les
+-- enregistrer comme dépenses, mais pas qu'il faudrait repayer. Cette table ne
+-- porte que l'échéance ; le paiement, lui, reste une dépense ordinaire, et
+-- c'est elle qui entre dans les rapports et dans la caisse. Il n'y a pas deux
+-- façons de sortir de l'argent.
+CREATE TABLE IF NOT EXISTS recurring_charges (
+  id           text PRIMARY KEY,
+  business_id  text NOT NULL REFERENCES businesses (id) ON DELETE CASCADE,
+  category     text NOT NULL DEFAULT 'OTHER',
+  label        text NOT NULL,
+  amount       numeric(14, 2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  periode      text NOT NULL DEFAULT 'MONTHLY',
+  -- Le jour où il faudra repayer. Avancé à chaque paiement, depuis la date du
+  -- paiement et non depuis l'ancienne échéance : c'est un chrono.
+  next_due_on  date NOT NULL,
+  last_paid_on date,
+  -- Une charge qui s'arrête — un employé qui part, un bail qui finit — se
+  -- range plutôt que de s'effacer : les dépenses passées la citent.
+  active       boolean NOT NULL DEFAULT true,
+  note         text,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS charges_business_due_idx
+  ON recurring_charges (business_id, active, next_due_on);
+
 -- Encaissements hors vente (§42).
 --
 -- Le symétrique de `expenses`, et délibérément de la même forme : même colonnes,

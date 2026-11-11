@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {
   ArrowLeftRight,
   BookOpen,
+  CalendarClock,
   ChevronRight,
   LineChart,
   LogOut,
@@ -42,6 +43,9 @@ interface MoreLink {
 const LINKS: readonly MoreLink[] = [
   { href: '/reports', label: 'Rapports financiers', icon: LineChart, ownerOnly: true },
   { href: '/cash', label: 'Journal de caisse', icon: Wallet, ownerOnly: true },
+  // Le loyer, les salaires, l'électricité : ce qui revient, et qu'on oublie
+  // (§66). Réservé au propriétaire, comme les dépenses dont elles naissent.
+  { href: '/charges', label: 'Charges récurrentes', icon: CalendarClock, ownerOnly: true },
   // Le cahier du §42 n'est pas réservé au propriétaire : il ne montre que ce qui
   // est entré, jamais une marge ni un coût, et le vendeur doit pouvoir y
   // inscrire la réparation qu'il vient d'encaisser au comptoir.

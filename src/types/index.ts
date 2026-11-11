@@ -572,6 +572,8 @@ export interface DashboardSummary {
   debtorCount: number;
   /** Ce qui reste dû aux fournisseurs sur ce qui a été livré (§53). */
   supplierDebt: Money;
+  /** Les charges échues ou dues dans la semaine (§66). */
+  chargesDues: import('@/domain/charge').ChargeRow[];
 }
 
 // ---------------------------------------------------------------------------

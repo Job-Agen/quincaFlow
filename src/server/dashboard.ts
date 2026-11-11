@@ -2,6 +2,7 @@ import { getSql, one, rows } from '../lib/db';
 import { round2 } from '../utils/money';
 import { grossMargin } from '../domain/sale';
 import { lowStockProducts } from './products';
+import { JOURS_AVERTISSEMENT, type ChargeRow } from '../domain/charge';
 import type { DashboardDay, DashboardSummary, DashboardTopProduct, HistoryEntry } from '@/types';
 
 /**
@@ -61,6 +62,7 @@ export async function dashboard(
     recentSales,
     recentOos,
     lowStock,
+    chargesRow,
     weekRows,
     topRows,
     owedRow,
@@ -99,6 +101,16 @@ export async function dashboard(
        ORDER BY created_at DESC LIMIT 8
     `,
       lowStockProducts(businessId, 10),
+      sql`
+        SELECT id, business_id, category, label, amount::float8 AS amount, periode,
+               next_due_on::text AS next_due_on, last_paid_on::text AS last_paid_on,
+               active, note, created_at, updated_at
+          FROM recurring_charges
+         WHERE business_id = ${businessId} AND active
+           AND next_due_on <= CURRENT_DATE + ${JOURS_AVERTISSEMENT}::int
+         ORDER BY next_due_on ASC
+         LIMIT 10
+      `,
 
       // La semaine écoulée, un seau par jour. `generate_series` fournit les sept
       // jours, y compris ceux sans vente : un trou dans la série ferait lire une
@@ -190,6 +202,10 @@ export async function dashboard(
     outOfStockRevenue: round2(oos.revenue),
     lowStockCount: lowStock.length,
     lowStock,
+    // Les charges échues ou proches de l'être (§66). Le tableau de bord est le
+    // seul écran que le gérant ouvre tous les jours : un rappel ailleurs ne
+    // serait jamais lu.
+    chargesDues: rows<ChargeRow>(chargesRow),
     recent: activity,
     week: rows<DashboardDay>(weekRows).map((jour) => ({
       ...jour,

@@ -3274,3 +3274,95 @@ le dit plutôt que de le taire.
    intacts.
 6. Une commande réglée refuse toujours, et dit quoi faire.
 7. L'écran prévient que le stock va redescendre.
+
+
+## 66. Les charges qui reviennent
+
+**Objectif**
+
+Le loyer, les salaires, la facture d'électricité. L'application savait déjà les
+enregistrer comme dépenses (§39) — mais pas qu'il faudrait **repayer**. Rien
+ne rappelait l'échéance, et l'oubli d'un loyer coûte plus cher qu'un article
+en rupture.
+
+**F91 — Une charge n'est pas une dépense**
+
+Deux tables, et c'est la décision qui porte le reste.
+`recurring_charges` tient **le calendrier** — ce qu'il faudra payer, quand, et
+tous les combien. `expenses` tient **l'argent sorti**.
+
+Payer une charge écrit **une dépense ordinaire**. Les rapports, le journal de
+caisse et le bénéfice net n'ont rien à apprendre de neuf : il n'y a pas deux
+façons de sortir de l'argent, et une charge qui aurait sa propre comptabilité
+finirait par diverger de l'autre.
+
+**F92 — Le chrono, pas le calendrier**
+
+L'échéance suivante se compte **depuis le jour du paiement**, non depuis
+l'ancienne échéance. Payer les salaires le 11 reporte au 11 du mois suivant.
+
+C'est délibéré, et c'est ce que le gérant attend : payer avec cinq jours de
+retard ne doit pas le rappeler cinq jours plus tard — il veut un mois de
+tranquillité, pas un rattrapage.
+
+Périodes : chaque mois, tous les 3 mois, tous les 6 mois, chaque année, chaque
+semaine.
+
+**Le 31 est la seule vraie question.** Un mois après le 31 janvier n'existe
+pas. La date est ramenée au dernier jour du mois atteint — 28, ou 29 en année
+bissextile — plutôt que de déborder sur le 3 mars, ce que fait l'arithmétique
+naïve de JavaScript. Sans cela, l'échéance glisserait d'année en année.
+
+**F93 — Ce que le gérant lit**
+
+Pas une date : **des jours**. « En retard de 3 jours », « Dans 4 jours », « À
+payer aujourd'hui ». Une date seule oblige à compter, et le retard se perd
+dans le calcul.
+
+Les plus pressantes sont en tête, et le tableau de bord — le seul écran qu'on
+ouvre tous les jours — porte une carte **« À payer »** pour ce qui est échu ou
+dû dans la semaine. Elle passe **avant** le stock faible : un loyer en retard
+coûte plus cher qu'un article à réassortir.
+
+**F94 — Payer dit ce qu'il va faire**
+
+La feuille annonce les deux effets avant de les produire : la dépense qui sera
+écrite, et la date où passera l'échéance. La seconde surprendrait si on la
+taisait — le gérant ne verrait pas pourquoi l'échéance a bougé.
+
+Le montant est modifiable à chaque paiement sans changer celui de la charge :
+l'électricité ne coûte pas la même chose deux mois de suite.
+
+Les deux écritures tiennent dans **une seule transaction**. Séparées, un échec
+entre elles laisserait soit une dépense sans échéance repoussée — rappel le
+lendemain pour un loyer déjà payé —, soit une échéance repoussée sans dépense,
+et l'argent sorti ne figurerait nulle part.
+
+**F95 — Ranger plutôt qu'effacer**
+
+Un employé qui part, un bail qui finit : la charge se **range**. Elle ne
+rappelle plus, garde son historique, et revient d'un geste. L'effacer est
+possible aussi, et les dépenses déjà payées restent — l'argent est sorti,
+effacer la promesse n'efface pas le fait.
+
+**Ce que cette section ne fait pas**
+
+**Prévenir téléphone éteint.** Le rappel vit dans l'application : il se voit à
+l'ouverture. Une notification qui arrive sur le téléphone sans qu'on ouvre
+l'application demande autre chose — un service de notification, une clé, et un
+travail planifié côté serveur, qu'aucune de ces pièces ne porte aujourd'hui.
+
+**Critères d'acceptation**
+
+1. Une charge porte un poste, un libellé, un montant habituel, une périodicité
+   et une prochaine échéance.
+2. Payer écrit une dépense ordinaire au poste de la charge.
+3. L'échéance suivante se compte depuis le jour du paiement.
+4. Le report ne déborde jamais sur le mois suivant quand le jour n'existe pas.
+5. Le montant payé peut différer du montant habituel sans le changer.
+6. Dépense et échéance sont écrites ensemble, ou pas du tout.
+7. Les charges sont listées par urgence.
+8. Le tableau de bord montre ce qui est échu ou dû dans la semaine.
+9. Une charge rangée ne rappelle plus et garde son historique.
+10. Effacer une charge n'efface pas les dépenses déjà payées.
+11. Rien de tout cela ne franchit la frontière d'une boutique (§29).
