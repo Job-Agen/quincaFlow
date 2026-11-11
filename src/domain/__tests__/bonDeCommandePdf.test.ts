@@ -45,6 +45,7 @@ function commande(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     reference: 'PO-0042',
     supplier_id: 'sup_1',
     supplier_name: 'Bâtir Plus',
+    manager_name: 'Kossi Amegan',
     status: 'DRAFT',
     total_estimated: 330000,
     amount_paid: 0,
@@ -122,6 +123,21 @@ describe('le bon de commande en PDF (§60)', () => {
   it('fait signer les deux parties, sauf si la commande est annulée', () => {
     expect(textes()).toContain('Le fournisseur');
     expect(textes()).toContain('Le gérant');
+    // Chacune est nommée au-dessus de son trait (§62) : « Le fournisseur »
+    // tout seul ne dit pas qui signe quand le bon circule entre trois dépôts.
+    //
+    // Et chacun sous SON libellé : vérifier leur seule présence laisserait
+    // passer deux noms intervertis, qui feraient signer le fournisseur à la
+    // place du gérant.
+    const blocs = plan().pages.at(-1)!.blocs.filter(
+      (bloc): bloc is BlocTexte => bloc.type === 'texte'
+    );
+    const sous = (libelle: string) => {
+      const etiquette = blocs.find((bloc) => bloc.texte === libelle)!;
+      return blocs.find((bloc) => bloc.x === etiquette.x && bloc.y === etiquette.y - 13)?.texte;
+    };
+    expect(sous('Le gérant')).toBe('Kossi Amegan');
+    expect(sous('Le fournisseur')).toBe('Bâtir Plus');
 
     // Faire signer un bon annulé reviendrait à le remettre en vigueur.
     const annulee = textes(plan(commande({ status: 'CANCELLED' })));
@@ -250,11 +266,15 @@ describe('le bon de commande en PDF (§60)', () => {
       expect(signature.y - 24, `${n} lignes : trait sous le pied`).toBeGreaterThan(pied);
 
       // Et rien du contenu ne doit descendre dans la bande des signatures.
+      //
+      // Le bloc des signatures, ce sont les deux libellés et, depuis le §62,
+      // les deux noms posés treize points dessous. On les reconnaît à leur
+      // hauteur plutôt qu'à leur texte : exclure « Bâtir Plus » par son nom
+      // excuserait aussi celui de l'encadré du destinataire, tout en haut.
+      const bande = new Set([signature.y, signature.y - 13]);
       const contenu = page!.blocs.filter(
         (bloc): bloc is BlocTexte =>
-          bloc.type === 'texte' &&
-          !['Le gérant', 'Le fournisseur'].includes(bloc.texte) &&
-          bloc.y > pied + 4
+          bloc.type === 'texte' && !bande.has(bloc.y) && bloc.y > pied + 4
       );
       for (const bloc of contenu) {
         expect(bloc.y, `${n} lignes : « ${bloc.texte} » chevauche les signatures`).toBeGreaterThan(

@@ -243,15 +243,22 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
                   Commande annulée. Ce document ne vaut pas bon de commande.
                 </p>
               ) : (
+                /* Chaque partie est nommée au-dessus de son trait, comme sur
+                  le PDF (§62) : « Le fournisseur » tout seul ne dit pas qui
+                  signe quand le bon circule entre trois dépôts. */
                 <div className="invoice__signatures">
-                  <div>
-                    <span className="invoice__meta">Le gérant</span>
-                    <span className="invoice__rule" />
-                  </div>
-                  <div>
-                    <span className="invoice__meta">Le fournisseur</span>
-                    <span className="invoice__rule" />
-                  </div>
+                  {(
+                    [
+                      ['Le gérant', data.manager_name],
+                      ['Le fournisseur', data.supplier_name],
+                    ] as const
+                  ).map(([qui, nom]) => (
+                    <div key={qui}>
+                      <span className="invoice__meta">{qui}</span>
+                      {nom ? <strong className="doc__signataire">{nom}</strong> : null}
+                      <span className="invoice__rule" />
+                    </div>
+                  ))}
                 </div>
               )}
               <footer className="doc__pied">

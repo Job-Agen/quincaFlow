@@ -1206,7 +1206,16 @@ select.input {
 .invoice__signatures > div {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  /* L'écart tombe de 26 à 6 : le nom du signataire s'intercale entre le
+     libellé et le trait (§62), et trois éléments à 26 points d'écart
+     poussaient le trait hors du cadre à l'impression. */
+  gap: 6px;
+}
+
+/* Le nom du signataire colle à son trait, et garde l'espace pour signer. */
+.doc__signataire {
+  font-size: 13px;
+  margin-bottom: 20px;
 }
 
 .invoice__rule {

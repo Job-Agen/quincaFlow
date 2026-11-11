@@ -27,6 +27,8 @@ export interface CommandeImprimable {
   status: PurchaseOrderStatus | null;
   created_at: string;
   notes: string | null;
+  /** Le nom qui signe, du côté de la boutique (§62). */
+  manager_name?: string | null;
   items: readonly {
     product_name: string;
     unit_label: string | null;
@@ -228,7 +230,7 @@ export function planBonDeCommande(
   const besoin =
     (chiffre ? 58 + (annulee ? 0 : 24) : 24) +
     lignesNotes * 12 +
-    (annulee || projet ? 16 : 56) +
+    (annulee || projet ? 16 : 68) +
     24;
   if (y - besoin < BAS + 30) {
     pages.push({ blocs });
@@ -297,13 +299,17 @@ export function planBonDeCommande(
     // flottant au milieu d'une page à moitié blanche font un brouillon, pas
     // une pièce. Si le tableau descend trop bas, les signatures reculent, et
     // au pire passent sur une page à elles plutôt que de chevaucher le pied.
-    const ySignature = Math.min(y - 26, BAS + 86);
-    for (const [x, qui] of [
-      [MARGE, 'Le gérant'],
-      [COL.total - 170, 'Le fournisseur'],
+    const ySignature = Math.min(y - 26, BAS + 92);
+    // Chaque partie est nommée au-dessus de son trait. « Le fournisseur » tout
+    // seul ne dit pas qui doit signer quand la commande circule entre trois
+    // dépôts, et « Le gérant » tout seul ne dit pas qui l'a passée.
+    for (const [x, qui, nom] of [
+      [MARGE, 'Le gérant', (order.manager_name || '').trim()],
+      [COL.total - 170, 'Le fournisseur', (order.supplier_name || '').trim()],
     ] as const) {
       blocs.push(texte(x, ySignature, qui, 8, { gris: true }));
-      blocs.push({ type: 'filet', x1: x, x2: x + 170, y: ySignature - 24, epaisseur: 0.5 });
+      if (nom) blocs.push(texte(x, ySignature - 13, nom, 10, { gras: true }));
+      blocs.push({ type: 'filet', x1: x, x2: x + 170, y: ySignature - 30, epaisseur: 0.5 });
     }
   }
 

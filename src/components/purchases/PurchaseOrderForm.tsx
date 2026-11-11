@@ -14,6 +14,7 @@ import {
   Sheet,
   Skeleton,
   TextAreaField,
+  TextField,
 } from '@/components/ui';
 import { api } from '@/client/api';
 import { envoyerBonDeCommande } from '@/client/partage';
@@ -56,12 +57,17 @@ interface OrderLine {
  */
 export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder | null }) {
   const router = useRouter();
-  const { business, currency } = useSession();
+  const { business, currency, user } = useSession();
   const products = useResource<Product[]>('/api/products');
   const suppliers = useResource<ContactRow[]>('/api/suppliers');
 
   const [supplierId, setSupplierId] = useState(initial?.supplier_id || '');
   const [notes, setNotes] = useState(initial?.notes || '');
+  // À la création, le nom du compte qui saisit : le cas courant est que le
+  // gérant commande lui-même, et lui faire retaper son nom à chaque bon serait
+  // un impôt. Il reste modifiable — un vendeur saisit parfois pour le compte
+  // du patron, et c'est le patron que le fournisseur attend (§62).
+  const [gerant, setGerant] = useState(initial?.manager_name || user?.name || '');
   const [items, setItems] = useState<OrderLine[]>(() =>
     (initial?.items || []).map((item) => ({
       key: item.id,
@@ -209,6 +215,7 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
     const corps = {
       supplierId: supplierId || null,
       notes,
+      managerName: gerant,
       items: lignes.map(({ productId, unitId, quantity, unitCost }) => ({
         productId,
         unitId: unitId || null,
@@ -343,6 +350,14 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
           <Plus size={18} />
           Ajouter un produit
         </button>
+
+        <TextField
+          label="Gérant"
+          placeholder="Nom de qui passe la commande"
+          hint="S’imprime au-dessus de la ligne à signer sur le bon."
+          value={gerant}
+          onChange={(event) => setGerant(event.target.value)}
+        />
 
         <TextAreaField
           label="Notes (optionnel)"

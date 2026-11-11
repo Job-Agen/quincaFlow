@@ -398,6 +398,8 @@ export interface PurchaseOrderRow {
   amount_paid: Money;
   /** La colonne s'appelle `notes` au pluriel, contrairement aux ventes. */
   notes: string | null;
+  /** Le nom qui signe la commande, tel qu'il s'imprime (§62). */
+  manager_name: string | null;
   created_at: string;
   updated_at: string;
 }

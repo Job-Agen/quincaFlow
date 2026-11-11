@@ -296,6 +296,10 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   -- l'autre côté du comptoir.
   amount_paid   numeric(14, 2) NOT NULL DEFAULT 0,
   notes         text,
+  -- Qui commande, tel qu'il signera (§62). `user_id` dit quel compte a saisi la
+  -- commande ; ceci dit quel nom porte la pièce — ce n'est pas toujours le
+  -- même, un vendeur pouvant saisir pour le compte du gérant.
+  manager_name  text,
   user_id       text REFERENCES users (id) ON DELETE SET NULL,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now(),

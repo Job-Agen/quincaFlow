@@ -1083,6 +1083,56 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
 
   // ───────────────────────── Rayons du catalogue (§52) ─────────────────
 
+  describe('qui signe la commande (§62)', () => {
+    async function seed() {
+      await pool.query(`INSERT INTO suppliers (id, business_id, name) VALUES ('sup_1', $1, 'Bâtir Plus')`, [
+        OWNER.businessId,
+      ]);
+      return seedVitre(400);
+    }
+    const commander = async (vitre: { id: string; units: { id: string }[] }, over = {}) =>
+      purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_1',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10, unitCost: 320 }],
+        ...over,
+      });
+
+    it('retient le nom saisi', async () => {
+      const vitre = await seed();
+      const order = await commander(vitre, { managerName: 'Kossi Amegan' });
+      expect(order.manager_name).toBe('Kossi Amegan');
+    });
+
+    it('prend celui du compte qui saisit, à défaut', async () => {
+      // Le cas courant est que le gérant commande lui-même : lui faire retaper
+      // son nom à chaque bon serait un impôt.
+      const vitre = await seed();
+      expect((await commander(vitre)).manager_name).toBe(OWNER.name);
+      expect((await commander(vitre, { managerName: '  ' })).manager_name).toBe(OWNER.name);
+    });
+
+    it('se corrige comme le reste de la commande', async () => {
+      // Un vendeur a saisi pour le compte du patron : c'est le patron que le
+      // fournisseur attend sur la pièce.
+      const vitre = await seed();
+      const order = await commander(vitre, { managerName: 'Le vendeur' });
+      const apres = await purchases.updatePurchaseOrder(OWNER, order.id, {
+        supplierId: 'sup_1',
+        managerName: 'Kossi Amegan',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10, unitCost: 320 }],
+      });
+      expect(apres.manager_name).toBe('Kossi Amegan');
+      expect(apres.reference).toBe(order.reference);
+    });
+
+    it('voyage avec la commande jusqu’à la liste', async () => {
+      const vitre = await seed();
+      await commander(vitre, { managerName: 'Kossi Amegan' });
+      const liste = await purchases.listPurchaseOrders(OWNER.businessId, {});
+      expect(liste[0]!.manager_name).toBe('Kossi Amegan');
+    });
+  });
+
   describe('référence attribuée aux articles (§61)', () => {
     const creer = (over: Record<string, unknown> = {}) =>
       products.createProduct(OWNER, {

@@ -3037,3 +3037,65 @@ L'appelant décide sur eux, pas sur une phrase.
 5. Chaque boutique a son propre compteur (§29).
 6. L'article est trouvable par la référence attribuée.
 7. Modifier un article ne change pas sa référence.
+
+
+## 62. Qui commande, qui signe
+
+**Objectif**
+
+Le bon de commande portait deux traits à signer, surmontés de « Le gérant » et
+« Le fournisseur ». Deux étiquettes, aucun nom.
+
+Le nom du fournisseur figurait pourtant déjà sur la pièce, dans l'encadré
+« Commande adressée à ». Il manquait là où on le cherche vraiment : au-dessus
+du trait. Un bon qui circule entre trois dépôts ne dit pas, sans nom, lequel
+des trois doit signer — et côté boutique, il ne dit pas qui a passé la
+commande le jour où le fournisseur rappelle.
+
+**F83 — Un champ « Gérant » à la saisie**
+
+Il apparaît sur l'écran de création d'une commande, sous les observations, et
+il est **pré-rempli avec le nom du compte qui saisit**. Le cas courant est que
+le gérant commande lui-même : lui faire retaper son nom à chaque bon serait un
+impôt sur le geste le plus fréquent.
+
+Il reste modifiable, parce qu'un vendeur saisit parfois pour le compte du
+patron, et que c'est le patron que le fournisseur attend sur la pièce. Il se
+corrige ensuite comme le reste de la commande (§58).
+
+Le nom est enregistré **sur la commande**, pas déduit du compte à l'affichage.
+`user_id` dit quel compte a saisi — c'est une trace, elle ne bouge pas ;
+`manager_name` dit quel nom porte la pièce, et ce n'est pas toujours le même.
+
+**F84 — Les deux parties nommées**
+
+Sur le PDF comme sur la feuille imprimée, chaque trait porte son nom :
+
+```
+Le gérant                       Le fournisseur
+Kossi Amegan                    Bâtir Plus
+______________                  ______________
+```
+
+L'espace pour signer est préservé : sur la feuille, l'écart entre les trois
+éléments tombe de 26 à 6 points, sans quoi le trait sortait du cadre à
+l'impression.
+
+**Ce que les mutants ont appris**
+
+Un mutant a survécu à la première série : **intervertir les deux noms**. Les
+tests vérifiaient que « Kossi Amegan » et « Bâtir Plus » figuraient sur la
+pièce, pas sous quelle étiquette. C'est précisément l'erreur qui ferait signer
+le fournisseur à la place du gérant.
+
+Le test lit désormais le nom posé treize points sous chaque libellé, à la même
+abscisse. Le mutant meurt.
+
+**Critères d'acceptation**
+
+1. Le champ « Gérant » est pré-rempli avec le nom du compte qui saisit.
+2. Un nom saisi est conservé ; vide, c'est celui du compte qui s'applique.
+3. Il se corrige à la modification, sans changer le numéro du bon.
+4. Chaque nom s'imprime sous **son** libellé, sur le PDF et sur la feuille.
+5. L'espace pour signer reste.
+6. Une commande annulée ne porte toujours aucune signature (§60).

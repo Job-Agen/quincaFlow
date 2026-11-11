@@ -73,6 +73,7 @@ function order(over: Partial<PurchaseOrder> = {}): PurchaseOrder {
     reference: 'PO-0042',
     supplier_id: 'sup_1',
     supplier_name: 'Ets Kodjo',
+    manager_name: 'Kossi Amegan',
     status: 'SENT',
     total_estimated: 242000,
     amount_paid: 0,

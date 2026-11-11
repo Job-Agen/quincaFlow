@@ -42,7 +42,7 @@ import {
 const ORDER_COLUMNS = `
   id, business_id, reference, supplier_id, supplier_name, status,
   total_estimated::float8 AS total_estimated,
-  amount_paid::float8 AS amount_paid, notes, created_at, updated_at
+  amount_paid::float8 AS amount_paid, notes, manager_name, created_at, updated_at
 `;
 
 const ITEM_COLUMNS = `
@@ -243,13 +243,14 @@ export async function createPurchaseOrder(session: Session, body: Record<string,
       )
       INSERT INTO purchase_orders (
         id, business_id, reference, supplier_id, supplier_name,
-        status, total_estimated, notes, user_id
+        status, total_estimated, notes, manager_name, user_id
       ) VALUES (
         ${orderId}, ${session.businessId},
         ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
         ${supplierId}, ${supplierName},
         'DRAFT', ${orderTotal(items.map((item) => ({ quantity: item.quantityOrdered, unitCost: item.unitCost })))},
-        ${str(body.notes, 'notes', { required: false, max: 1000 })}, ${session.userId}
+        ${str(body.notes, 'notes', { required: false, max: 1000 })},
+        ${nomDuGerant(session, body)}, ${session.userId}
       )
     `,
     ...items.map(
@@ -266,6 +267,18 @@ export async function createPurchaseOrder(session: Session, body: Record<string,
   ]);
 
   return getPurchaseOrder(session.businessId, orderId);
+}
+
+/**
+ * Le nom qui signera la commande (§62).
+ *
+ * À défaut de saisie, celui du compte qui enregistre : le cas courant est que
+ * le gérant commande lui-même, et lui faire retaper son nom à chaque bon
+ * serait un impôt. Le champ reste ouvert parce qu'un vendeur saisit parfois
+ * pour le compte du patron, et c'est le patron que le fournisseur attend.
+ */
+function nomDuGerant(session: Session, body: Record<string, unknown>): string {
+  return str(body.managerName, 'gérant', { required: false, max: 120 }) || session.name || '';
 }
 
 /**
@@ -329,6 +342,7 @@ export async function updatePurchaseOrder(
                items.map((item) => ({ quantity: item.quantityOrdered, unitCost: item.unitCost }))
              )},
              notes = ${str(body.notes, 'notes', { required: false, max: 1000 })},
+             manager_name = ${nomDuGerant(session, body)},
              updated_at = now()
        WHERE id = ${orderId} AND business_id = ${session.businessId}
     `,
