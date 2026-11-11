@@ -47,7 +47,7 @@ import SupplierPaymentSheet from '@/components/purchases/SupplierPaymentSheet';
 import SuppressionCommandeSheet from '@/components/purchases/SuppressionCommandeSheet';
 import PieceJointeSheet from '@/components/purchases/PieceJointeSheet';
 import { TYPES_ACCEPTES, poidsLisible } from '@/domain/pieceJointe';
-import { amount, dateTime, shortDate, money, quantity } from '@/utils/format';
+import { amount, dateTime, shortDate, money, quantity, withUnit } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type {
   DocumentRow,
@@ -71,6 +71,8 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
     `/api/purchase-orders/${id}`
   );
   const [receiving, setReceiving] = useState(false);
+  const [livraison, setLivraison] = useState(false);
+  const [reception, setReception] = useState(false);
   const [paying, setPaying] = useState(false);
   const [suppression, setSuppression] = useState(false);
 
@@ -141,11 +143,32 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
 
   async function setStatus(status: PurchaseOrderStatus) {
     setIssue(null);
+    // « Livrée » fait entrer du stock (§63) : on nomme ce qui va entrer avant
+    // de le faire. Un choix mal visé dans une liste déroulante ajouterait
+    // cinquante sacs à l'inventaire, et rien ne le dirait.
+    if (status === 'RECEIVED') {
+      if (data && data.items.some((item) => remainingOf(item) > 0)) setLivraison(true);
+      return;
+    }
     try {
       setData(await api.patch<PurchaseOrder>(`/api/purchase-orders/${id}`, { status }));
     } catch (error_) {
       setIssue(errorMessage(error_));
     }
+  }
+
+  /** Reçoit tout ce qui reste, par le chemin ordinaire de la réception. */
+  async function recevoirTout() {
+    if (!data) return;
+    setReception(true);
+    setIssue(null);
+    try {
+      setData(await api.patch<PurchaseOrder>(`/api/purchase-orders/${id}`, { status: 'RECEIVED' }));
+      setLivraison(false);
+    } catch (error_) {
+      setIssue(errorMessage(error_));
+    }
+    setReception(false);
   }
 
   return (
@@ -478,7 +501,7 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                 {data.status !== 'CANCELLED' && isOwner ? (
                   <SelectField
                     label="Statut administratif"
-                    hint="La livraison, elle, est déduite des quantités reçues."
+                    hint="« Livrée » reçoit tout ce qui reste et met le stock à jour."
                     value={PO_MANUAL_STATUSES.includes(data.status) ? data.status : ''}
                     onChange={(event) => setStatus(event.target.value as PurchaseOrderStatus)}
                   >
@@ -494,6 +517,48 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                 ) : null}
               </div>
             </details>
+
+            {livraison ? (
+              <Sheet
+                open
+                title="Marquer la commande livrée"
+                onClose={() => setLivraison(false)}
+              >
+                <p className="small">
+                  Tout ce qui reste à livrer sera reçu, le stock augmentera d’autant et le coût
+                  d’achat sera recalculé en moyenne pondérée.
+                </p>
+                <ul className="purchase-items">
+                  {data.items
+                    .filter((item) => remainingOf(item) > 0)
+                    .map((item) => (
+                      <li key={item.id} className="total-line">
+                        <span>{item.product_name}</span>
+                        <strong className="num">
+                          {withUnit(remainingOf(item), item.unit_label)}
+                        </strong>
+                      </li>
+                    ))}
+                </ul>
+                <Button variant="success" block disabled={reception} onClick={recevoirTout}>
+                  <PackageCheck size={18} />
+                  {reception ? 'Réception…' : 'Confirmer la réception'}
+                </Button>
+                {/* Tout n'arrive pas toujours d'un coup : l'autre porte reste
+                  ouverte, celle où l'on corrige ligne par ligne. */}
+                <Button
+                  variant="soft"
+                  block
+                  disabled={reception}
+                  onClick={() => {
+                    setLivraison(false);
+                    setReceiving(true);
+                  }}
+                >
+                  Saisir des quantités différentes
+                </Button>
+              </Sheet>
+            ) : null}
 
             <ReceiveSheet
               open={receiving}

@@ -426,6 +426,30 @@ export async function updatePurchaseOrderStatus(
     throw conflict('Cette commande a déjà été partiellement livrée.');
   }
 
+  /*
+   * « Livrée » n'est pas une étiquette qu'on pose : c'est une réception (§63).
+   *
+   * Elle emprunte donc le seul chemin qui fasse entrer du stock, celui du
+   * bouton « Marquer comme livrée » (§21-22). Écrire le statut à la main
+   * laisserait une commande dite livrée sans reçu, sans mouvement de stock,
+   * sans coût d'achat recalculé — et le stock mentirait dès la première.
+   *
+   * Ne reste à recevoir que ce qui reste : sur une commande déjà livrée aux
+   * trois quarts, seul le dernier quart entre. Et sur une commande déjà
+   * entièrement reçue, rien ne bouge — choisir « Livrée » deux fois ne double
+   * pas le stock.
+   */
+  if (status === 'RECEIVED') {
+    const lignes = order.items
+      .map((item) => ({ itemId: item.id, quantity: remainingOf(item) }))
+      .filter((ligne) => ligne.quantity > 0);
+    if (lignes.length === 0) return order;
+    return receivePurchaseOrder(session, orderId, {
+      lines: lignes,
+      notes: 'Commande marquée livrée',
+    });
+  }
+
   await getSql()`
     UPDATE purchase_orders SET status = ${status}, updated_at = now()
      WHERE id = ${orderId} AND business_id = ${session.businessId}

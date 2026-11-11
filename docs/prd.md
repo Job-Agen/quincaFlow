@@ -3099,3 +3099,65 @@ abscisse. Le mutant meurt.
 4. Chaque nom s'imprime sous **son** libellé, sur le PDF et sur la feuille.
 5. L'espace pour signer reste.
 6. Une commande annulée ne porte toujours aucune signature (§60).
+
+
+## 63. « Livrée », un statut qui reçoit vraiment
+
+**Objectif**
+
+Le statut administratif d'une commande — brouillon, envoyée, facture reçue,
+payée — se posait à la main. La livraison, elle, se constatait : elle venait
+des quantités reçues, et le seul chemin pour la déclarer passait par l'écran
+de réception, ligne par ligne.
+
+Le cas courant est pourtant « tout est arrivé comme commandé ». Trois gestes
+pour le dire, alors que la liste des statuts est là, sous les yeux.
+
+**F85 — Le statut déclenche la réception, il ne la remplace pas**
+
+« Livrée » rejoint les statuts que le gérant pose. C'est le seul de la liste
+qui ne soit pas qu'une étiquette : le choisir **reçoit tout ce qui reste**.
+
+Et il le fait par le chemin ordinaire (§21-22), celui du bouton « Marquer
+comme livrée ». C'est la décision qui porte tout le reste : écrire le statut à
+la main aurait donné une commande dite livrée **sans reçu, sans mouvement de
+stock, sans coût d'achat recalculé**. Le stock aurait menti dès la première,
+et l'écart se serait découvert à l'inventaire, des semaines plus tard, sans
+rien pour l'expliquer.
+
+Trois propriétés en découlent, qui n'ont rien coûté :
+
+| Situation | Ce qui se passe |
+|---|---|
+| Rien n'est encore arrivé | tout entre, un reçu est créé |
+| Trois quarts déjà reçus | seul le dernier quart entre |
+| Déjà entièrement reçue | **rien ne bouge** — la choisir deux fois ne double pas le stock |
+
+Le coût d'achat suit la même règle qu'une réception saisie à la main : moyenne
+pondérée. Douze sacs à 3 900 et cinquante à 4 100 donnent 4 061,29 — pas
+4 100.
+
+« Partiellement livrée » n'entre pas dans la liste : elle se constate, elle ne
+se décrète pas. On ne peut pas dire à l'avance de combien.
+
+**F86 — Nommer ce qui va entrer**
+
+Choisir « Livrée » touche au stock. Une liste déroulante mal visée ajouterait
+cinquante sacs à l'inventaire sans que rien ne le dise.
+
+Une feuille nomme donc ce qui va entrer, article par article, avant de le
+faire — et laisse l'autre porte ouverte : « Saisir des quantités
+différentes » rouvre la réception ligne à ligne, pour le jour où tout n'est
+pas arrivé.
+
+**Critères d'acceptation**
+
+1. « Livrée » figure parmi les statuts que le gérant pose.
+2. La choisir fait entrer en stock tout ce qui reste à livrer.
+3. Elle crée un reçu et un mouvement de stock, comme une réception saisie.
+4. Le coût d'achat est recalculé en moyenne pondérée.
+5. Sur une commande partiellement reçue, seul le reliquat entre.
+6. La choisir deux fois ne double pas le stock.
+7. Une commande annulée la refuse.
+8. L'écran nomme les quantités avant de les faire entrer.
+9. Rien de tout cela ne franchit la frontière d'une boutique (§29).

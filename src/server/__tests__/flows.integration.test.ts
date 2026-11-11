@@ -1083,6 +1083,95 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
 
   // ───────────────────────── Rayons du catalogue (§52) ─────────────────
 
+  describe('statut « livrée » qui reçoit vraiment (§63)', () => {
+    async function seed() {
+      await pool.query(
+        `INSERT INTO suppliers (id, business_id, name) VALUES ('sup_1', $1, 'Bâtir Plus')`,
+        [OWNER.businessId]
+      );
+      return seedVitre(80);
+    }
+    const commander = async (vitre: { id: string; units: { id: string }[] }, quantite = 100) =>
+      purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_1',
+        items: [
+          { productId: vitre.id, unitId: vitre.units[0]!.id, quantity: quantite, unitCost: 320 },
+        ],
+      });
+    const livrer = (id: string) =>
+      purchases.updatePurchaseOrderStatus(OWNER, id, { status: 'RECEIVED' });
+
+    it('fait entrer le stock, et non seulement l’étiquette', async () => {
+      const vitre = await seed();
+      const order = await commander(vitre);
+      const apres = await livrer(order.id);
+
+      expect(apres.status).toBe('RECEIVED');
+      expect(await stockOf(vitre.id)).toBe(180);
+      // Et par le chemin ordinaire : un reçu, un mouvement, une trace.
+      expect(apres.receipts).toHaveLength(1);
+      const { rows } = await pool.query<{ type: string; q: number }>(
+        `SELECT type, quantity::float8 AS q FROM stock_movements
+          WHERE product_id = $1 AND reference_type = 'PURCHASE_RECEIPT'`,
+        [vitre.id]
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.q).toBe(100);
+    });
+
+    it('recalcule le coût d’achat en moyenne pondérée', async () => {
+      // Ce que l'écriture directe du statut aurait laissé faux : 80 à 318,75
+      // et 100 à 320 ne font pas 320.
+      const vitre = await seed();
+      await livrer((await commander(vitre)).id);
+      const { rows } = await pool.query<{ c: number }>(
+        'SELECT purchase_price::float8 AS c FROM products WHERE id = $1',
+        [vitre.id]
+      );
+      expect(rows[0]!.c).toBeCloseTo(319.44, 2);
+    });
+
+    it('ne reçoit que ce qui reste', async () => {
+      const vitre = await seed();
+      const order = await commander(vitre);
+      await purchases.receivePurchaseOrder(OWNER, order.id, {
+        lines: [{ itemId: order.items[0]!.id, quantity: 30 }],
+      });
+      expect(await stockOf(vitre.id)).toBe(110);
+
+      const apres = await livrer(order.id);
+      expect(await stockOf(vitre.id)).toBe(180);
+      expect(apres.status).toBe('RECEIVED');
+      expect(apres.receipts).toHaveLength(2);
+    });
+
+    it('ne double pas le stock si on la marque livrée deux fois', async () => {
+      const vitre = await seed();
+      const order = await commander(vitre);
+      await livrer(order.id);
+      const encore = await livrer(order.id);
+      expect(await stockOf(vitre.id)).toBe(180);
+      expect(encore.receipts).toHaveLength(1);
+    });
+
+    it('refuse de livrer une commande annulée', async () => {
+      const vitre = await seed();
+      const order = await commander(vitre);
+      await purchases.updatePurchaseOrderStatus(OWNER, order.id, { status: 'CANCELLED' });
+      await expect(livrer(order.id)).rejects.toThrow(/annulée/i);
+      expect(await stockOf(vitre.id)).toBe(80);
+    });
+
+    it('ne touche pas au stock de la quincaillerie voisine (§29)', async () => {
+      const vitre = await seed();
+      const order = await commander(vitre);
+      await expect(
+        purchases.updatePurchaseOrderStatus(RIVAL, order.id, { status: 'RECEIVED' })
+      ).rejects.toThrow(/introuvable/i);
+      expect(await stockOf(vitre.id)).toBe(80);
+    });
+  });
+
   describe('qui signe la commande (§62)', () => {
     async function seed() {
       await pool.query(`INSERT INTO suppliers (id, business_id, name) VALUES ('sup_1', $1, 'Bâtir Plus')`, [

@@ -105,9 +105,23 @@ export const PO_STATUS_TONES: Record<PurchaseOrderStatus, Tone> = {
 };
 
 /** Statuts que le gérant peut poser à la main ; la réception, elle, est déduite. */
+/**
+ * Les statuts que le gérant pose lui-même, dans l'ordre où une commande les
+ * traverse.
+ *
+ * « Livrée » y figure depuis le §63, et c'est le seul qui ne soit pas qu'une
+ * étiquette : le choisir **déclenche la réception** de tout ce qui reste, donc
+ * une entrée en stock. Il n'y a pas deux façons de faire entrer du stock —
+ * celle-ci passe par la même porte que le bouton « Marquer comme livrée »
+ * (§21-22).
+ *
+ * « Partiellement livrée » n'y est pas : elle se constate, elle ne se décrète
+ * pas. On ne peut pas dire à l'avance de combien.
+ */
 export const PO_MANUAL_STATUSES: readonly PurchaseOrderStatus[] = [
   'DRAFT',
   'SENT',
+  'RECEIVED',
   'INVOICE_RECEIVED',
   'PAID',
   'CANCELLED',
