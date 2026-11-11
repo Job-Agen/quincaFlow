@@ -4,7 +4,7 @@ import { email as champEmail } from '../lib/validate';
 import { getSale } from './sales';
 import { envoyerMail } from './mail';
 import { planFacture } from '../domain/facturePdf';
-import { tracerFacture } from '../domain/tracePdf';
+import { tracerDocument } from '../domain/tracePdf';
 import { money } from '../utils/format';
 import { saleBalance } from '../domain/credit';
 import type { BusinessRow, Session } from '@/types';
@@ -39,7 +39,7 @@ export async function emailSale(session: Session, saleId: string, destinataire: 
   }
 
   const currency = business.currency || 'FCFA';
-  const octets = await tracerFacture(planFacture(sale, business, currency));
+  const octets = await tracerDocument(planFacture(sale, business, currency));
   const reste = saleBalance(sale.total, sale.amount_paid);
 
   const texte = [

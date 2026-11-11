@@ -1,8 +1,9 @@
 'use client';
 
-import { planFacture } from '@/domain/facturePdf';
-import { tracerFacture } from '@/domain/tracePdf';
-import type { BusinessRow, Sale } from '@/types';
+import { planFacture, type PlanDocument } from '@/domain/facturePdf';
+import { planBonDeCommande } from '@/domain/bonDeCommandePdf';
+import { tracerDocument } from '@/domain/tracePdf';
+import type { BusinessRow, PurchaseOrder, Sale } from '@/types';
 
 /**
  * Envoyer la facture, en pièce jointe (§57).
@@ -27,18 +28,27 @@ import type { BusinessRow, Sale } from '@/types';
 
 export type Issue = 'partagé' | 'téléchargé';
 
-/** Le PDF de la facture, prêt à joindre. */
-export async function fichierFacture(
-  sale: Sale,
-  business: BusinessRow | null | undefined,
-  currency: string
-): Promise<File> {
-  const plan = planFacture(sale, business, currency);
-  const octets = await tracerFacture(plan);
+/** Un plan tracé, empaqueté en fichier prêt à joindre. */
+async function fichier(plan: PlanDocument): Promise<File> {
+  const octets = await tracerDocument(plan);
   // `Uint8Array` et non le tableau brut : certaines implémentations de `File`
   // refusent un ArrayBuffer nu.
   return new File([new Uint8Array(octets)], plan.nomFichier, { type: 'application/pdf' });
 }
+
+/** Le PDF de la facture, prêt à joindre. */
+export const fichierFacture = (
+  sale: Sale,
+  business: BusinessRow | null | undefined,
+  currency: string
+): Promise<File> => fichier(planFacture(sale, business, currency));
+
+/** Le PDF du bon de commande, prêt à joindre (§60). */
+export const fichierBonDeCommande = (
+  order: PurchaseOrder,
+  business: BusinessRow | null | undefined,
+  currency: string
+): Promise<File> => fichier(planBonDeCommande(order, business, currency));
 
 function telecharger(fichier: File): void {
   const url = URL.createObjectURL(fichier);
@@ -65,8 +75,27 @@ export async function envoyerFacture(
   currency: string,
   message: string
 ): Promise<Issue> {
-  const fichier = await fichierFacture(sale, business, currency);
-  const partage = { files: [fichier], title: fichier.name, text: message };
+  return envoyer(await fichierFacture(sale, business, currency), message);
+}
+
+/**
+ * Partage le bon de commande en PDF, avec les mêmes replis (§60).
+ *
+ * Le message texte reste joint au partage : le fournisseur voit de quoi il
+ * s'agit dans la conversation sans avoir à ouvrir la pièce, et le PDF lui
+ * reste pour son classeur.
+ */
+export async function envoyerBonDeCommande(
+  order: PurchaseOrder,
+  business: BusinessRow | null | undefined,
+  currency: string,
+  message: string
+): Promise<Issue> {
+  return envoyer(await fichierBonDeCommande(order, business, currency), message);
+}
+
+async function envoyer(piece: File, message: string): Promise<Issue> {
+  const partage = { files: [piece], title: piece.name, text: message };
 
   if (navigator.canShare?.(partage)) {
     try {
@@ -79,6 +108,6 @@ export async function envoyerFacture(
     }
   }
 
-  telecharger(fichier);
+  telecharger(piece);
   return 'téléchargé';
 }

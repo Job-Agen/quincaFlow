@@ -28,6 +28,7 @@ import {
   TextField,
 } from '@/components/ui';
 import { api } from '@/client/api';
+import { envoyerBonDeCommande } from '@/client/partage';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
 import {
@@ -79,6 +80,7 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
     : null;
 
   const [attaching, setAttaching] = useState(false);
+  const [envoi, setEnvoi] = useState<'en-cours' | null>(null);
   const [aDetacher, setADetacher] = useState<DocumentRow | null>(null);
   const [detachement, setDetachement] = useState(false);
   const [erreurDetachement, setErreurDetachement] = useState<string | null>(null);
@@ -120,11 +122,21 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
       currency
     );
 
-    if (navigator.share) {
-      await navigator.share({ title: `Bon de commande ${data.reference}`, text }).catch(() => {});
-    } else {
+    // Le bon part en PDF joint, comme depuis le document lui-même (§60) : le
+    // fournisseur reçoit une pièce qu'il peut classer et signer, pas une liste
+    // dans une bulle de conversation.
+    setEnvoi('en-cours');
+    try {
+      const issue = await envoyerBonDeCommande(data, business, currency, text);
+      if (issue === 'téléchargé') {
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+      }
+    } catch {
+      // Le PDF n'a pas pu être fabriqué : plutôt que de ne rien faire, le
+      // message texte part quand même — c'est ce que ce bouton faisait avant.
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
     }
+    setEnvoi(null);
   }
 
   async function setStatus(status: PurchaseOrderStatus) {
@@ -143,7 +155,15 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
         title={data ? `Commande ${data.reference}` : 'Commande'}
         right={
           data ? (
-            <button type="button" className="appbar__icon" aria-label="Partager" onClick={share}>
+            <button
+              type="button"
+              className="appbar__icon"
+              aria-label="Partager"
+              // Fabriquer le PDF prend un instant : sans cette garde, deux
+              // appuis lanceraient deux feuilles de partage.
+              disabled={envoi === 'en-cours'}
+              onClick={share}
+            >
               <Share2 size={20} />
             </button>
           ) : null

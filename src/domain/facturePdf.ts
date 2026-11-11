@@ -75,7 +75,13 @@ export interface PlanPage {
   blocs: Bloc[];
 }
 
-export interface PlanFacture {
+/**
+ * Un document paginé, prêt à tracer.
+ *
+ * Rien ici n'est propre à la facture : c'est une suite de pages et un nom de
+ * fichier. Le bon de commande s'en sert aussi (§60).
+ */
+export interface PlanDocument {
   nomFichier: string;
   pages: PlanPage[];
 }
@@ -154,7 +160,7 @@ export function planFacture(
   sale: Sale,
   business: BusinessRow | null | undefined,
   currency: string
-): PlanFacture {
+): PlanDocument {
   const annulee = sale.status === 'CANCELLED';
   const reste = saleBalance(sale.total, sale.amount_paid);
   const pages: PlanPage[] = [];

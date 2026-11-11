@@ -1,4 +1,4 @@
-import { PAGE, type Bloc, type PlanFacture } from './facturePdf';
+import { PAGE, type Bloc, type PlanDocument } from './facturePdf';
 
 /**
  * Le tracé d'un plan de facture (§57).
@@ -14,7 +14,7 @@ import { PAGE, type Bloc, type PlanFacture } from './facturePdf';
  * Isomorphe à dessein : la même fonction sert au téléphone qui prépare un
  * partage WhatsApp et au serveur qui prépare une pièce jointe de courriel.
  */
-export async function tracerFacture(plan: PlanFacture): Promise<Uint8Array> {
+export async function tracerDocument(plan: PlanDocument): Promise<Uint8Array> {
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
 
   const pdf = await PDFDocument.create();

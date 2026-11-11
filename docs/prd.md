@@ -2853,3 +2853,91 @@ isolé.
 10. `schema.sql` n'ajoute aucune colonne par un `ALTER` isolé.
 11. Rien de tout cela ne franchit la frontière d'une boutique (§29) : une pièce
     d'une autre quincaillerie est introuvable, pas masquée.
+
+
+## 60. Le bon de commande part en pièce, pas en message
+
+**Objectif**
+
+Le partage du bon de commande envoyait **du texte** : une liste d'articles et
+un total, dans le corps du message. Lisible sur un téléphone, mais ce n'est pas
+une pièce — le fournisseur ne peut ni la classer, ni la signer, ni la donner à
+son magasinier. La facture de vente, elle, partait déjà en PDF joint depuis le
+§57 : les deux documents de la boutique ne voyageaient pas de la même façon.
+
+**F75 — Le même document, en PDF**
+
+Le PDF copie la pièce imprimée (§56) : même en-tête, mêmes colonnes, mêmes
+signatures, même mention de pied. Le fournisseur qui reçoit le fichier et celui
+qui reçoit la feuille doivent tenir le même document — sinon le second se
+demande lequel fait foi.
+
+Le fichier porte le numéro du bon et rien d'autre : `PO-0042.pdf`. C'est ce que
+le fournisseur verra dans sa messagerie.
+
+Le message texte **reste joint au partage** : dans la conversation, il dit de
+quoi il s'agit sans qu'on ouvre la pièce, et le PDF reste pour le classeur.
+
+**F76 — Sans prix, ce n'est pas un bon de commande**
+
+Aucun coût saisi : le titre devient **DEMANDE DE PRIX**, les deux colonnes de
+montants disparaissent, le total aussi — « 0 FCFA » en bas d'une page se lirait
+comme une commande gratuite —, et la clôture demande des prix au lieu d'un
+délai. La colonne des quantités prend alors le bord droit : laissée au milieu,
+elle donnait un tableau à moitié vide sous un filet qui, lui, allait jusqu'à la
+marge, et le fournisseur y cherchait une colonne effacée.
+
+**F77 — Ce que le PDF ajoute à la feuille**
+
+La **somme en lettres** (§55). Un chiffre se retouche sur un PDF transmis ; une
+somme écrite en toutes lettres se contredit elle-même.
+
+Les deux **signatures** — le gérant, le fournisseur — se posent en bas de la
+feuille et non à la suite du texte : des traits flottant au milieu d'une page à
+moitié blanche font un brouillon, pas une pièce. Une commande **annulée** n'en
+porte aucune : faire signer un bon annulé reviendrait à le remettre en vigueur.
+
+**F78 — Le bas de la pièce ne se coupe pas**
+
+Total, somme en lettres, observations et signatures forment un bloc. Mesuré
+avant d'être écrit : s'il ne tient pas, il passe **entier** à la page suivante.
+
+Sans cela — et c'est ce qu'un PDF rendu a montré, pas le code relu — une
+commande de vingt et une lignes donnait une seconde page **blanche portant deux
+traits à signer**. Le total tenait sur la première ; les signatures basculaient
+seules.
+
+**Ce que les mutants ont appris**
+
+Le premier test écrit contre ce défaut vérifiait qu'« aucune page ne porte que
+des signatures ». Il passait — et il passait **aussi** quand on retirait le
+correctif, parce que la page blanche n'était qu'un symptôme parmi d'autres de
+la mauvaise césure. Trois mutants ont survécu à la première série.
+
+Les tests ont été réécrits sur l'invariant et non sur le symptôme : les traits
+à signer tiennent dans l'espace libre entre le dernier texte de la page et le
+filet du pied. Les trois mutants meurent.
+
+**Ce qui reste en texte**
+
+Le partage depuis l'**écran de saisie**, avant enregistrement. La commande n'a
+pas encore de numéro : un PDF intitulé « (projet) » inviterait le fournisseur à
+le traiter comme une pièce, et aucun écran ne retrouverait la référence qu'il
+citerait ensuite. Ce bouton-là envoie toujours le message texte.
+
+**Critères d'acceptation**
+
+1. Le bon de commande part en PDF joint depuis la fiche et depuis le document.
+2. Le fichier porte le numéro du bon.
+3. Le message texte accompagne la pièce dans le partage.
+4. Le PDF dit la même chose que la feuille imprimée.
+5. Sans prix : titre, colonnes, total et clôture changent ensemble.
+6. La somme est arrêtée en lettres sur un bon chiffré et non annulé.
+7. Une commande annulée ne porte pas de signatures.
+8. Le bas de la pièce ne se coupe jamais entre le total et les signatures.
+9. Le tableau se pagine, l'en-tête de colonnes est redessiné, le total ne
+   figure que sur la dernière page.
+10. Là où le navigateur ne sait pas joindre un fichier, le PDF est téléchargé
+    et WhatsApp s'ouvre avec le texte — l'écran le dit.
+11. Un caractère hors latin-1 dans un nom de produit ne fait pas échouer
+    l'envoi.

@@ -268,8 +268,14 @@ export function orderMessageLines(
   }));
 }
 
-/** La phrase de clôture : ce qu'on attend du fournisseur, et rien d'autre. */
-function cloture(cancelled: boolean, priced: boolean): string {
+/**
+ * La phrase de clôture : ce qu'on attend du fournisseur, et rien d'autre.
+ *
+ * Exportée depuis le §60 : le message WhatsApp, la pièce imprimée et le PDF
+ * joint doivent demander la même chose. Trois formulations pour un seul bon,
+ * c'est le fournisseur qui arbitre.
+ */
+export function clotureCommande(cancelled: boolean, priced: boolean): string {
   // Demander un délai de livraison sous un bandeau « ANNULÉE » annulerait
   // l'annulation dans la tête de celui qui lit.
   if (cancelled) return 'Merci de ne pas donner suite à cette commande.';
@@ -318,7 +324,7 @@ export function purchaseOrderMessage(
     priced ? `*TOTAL ESTIMÉ : ${money(total, currency)}*` : '',
     order.notes ? `\nObservations : ${order.notes.trim()}` : '',
     '',
-    cloture(order.cancelled === true, priced),
+    clotureCommande(order.cancelled === true, priced),
     signature ? `\n${signature}` : '',
   ]
     .join('\n')

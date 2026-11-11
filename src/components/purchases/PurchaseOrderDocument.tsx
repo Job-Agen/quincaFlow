@@ -18,10 +18,13 @@
  * nommé, et parce qu'un test doit pouvoir le monter sans fabriquer la promesse
  * de paramètres que Next lui passe.
  */
+import { useState } from 'react';
 import { FileDown, MessageCircle, Printer, Share2 } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Notice, Skeleton } from '@/components/ui';
 import { useResource } from '@/client/useResource';
+import { envoyerBonDeCommande } from '@/client/partage';
+import { errorMessage } from '@/utils/errors';
 import { useSession } from '@/client/session';
 import {
   PO_STATUS_LABELS,
@@ -48,8 +51,19 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
     lines.map((line) => ({ quantity: line.quantity, unitCost: line.unitCost ?? 0 }))
   );
   const priced = total > 0;
+  const [envoi, setEnvoi] = useState<'en-cours' | 'téléchargé' | null>(null);
+  const [erreurEnvoi, setErreurEnvoi] = useState<string | null>(null);
 
-  async function share(target: 'native' | 'whatsapp' = 'native') {
+  /**
+   * Le bon part en PDF joint, pas en texte (§60).
+   *
+   * Le message accompagne la pièce : le fournisseur voit de quoi il s'agit
+   * dans la conversation sans ouvrir le fichier, et garde le PDF pour son
+   * classeur. Là où le navigateur ne sait pas joindre un fichier — les
+   * bureaux —, le PDF est téléchargé et WhatsApp s'ouvre avec le texte : deux
+   * gestes, plutôt qu'un bouton qui ne fait rien.
+   */
+  async function share() {
     if (!data) return;
     const text = purchaseOrderMessage(
       {
@@ -64,12 +78,19 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
       currency
     );
 
-    if (target !== 'whatsapp' && navigator.share) {
-      await navigator
-        .share({ title: `${purchaseOrderHeading(priced)} ${data.reference}`, text })
-        .catch(() => {});
-    } else {
-      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    setEnvoi('en-cours');
+    setErreurEnvoi(null);
+    try {
+      const issue = await envoyerBonDeCommande(data, business, currency, text);
+      if (issue === 'téléchargé') {
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+        setEnvoi('téléchargé');
+      } else {
+        setEnvoi(null);
+      }
+    } catch (souci) {
+      setEnvoi(null);
+      setErreurEnvoi(errorMessage(souci));
     }
   }
 
@@ -104,6 +125,18 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
             {cancelled ? (
               <Notice tone="warn">
                 Commande annulée. Ce document ne vaut plus commande — ne l’envoyez pas.
+              </Notice>
+            ) : null}
+
+            {erreurEnvoi ? (
+              <Notice tone="error" className="no-print">
+                {erreurEnvoi}
+              </Notice>
+            ) : null}
+            {envoi === 'téléchargé' ? (
+              <Notice tone="warn" className="no-print">
+                Ce navigateur ne sait pas joindre un fichier à un message. Le bon de commande a été
+                téléchargé : joignez-le à la conversation WhatsApp qui vient de s’ouvrir.
               </Notice>
             ) : null}
 
@@ -233,9 +266,9 @@ export default function PurchaseOrderDocument({ id }: { id: string }) {
             </article>
 
             <div className="invoice-actions no-print">
-              <Button variant="success" onClick={() => share('whatsapp')}>
+              <Button variant="success" disabled={envoi === 'en-cours'} onClick={() => share()}>
                 <MessageCircle size={23} />
-                Partager WhatsApp
+                {envoi === 'en-cours' ? 'Préparation…' : 'Envoyer par WhatsApp'}
               </Button>
               <Button
                 onClick={() => window.print()}

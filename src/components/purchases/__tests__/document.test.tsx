@@ -220,7 +220,9 @@ describe('commande annulée', () => {
 describe('ce qui sort de l’imprimante', () => {
   it('écarte les boutons : ils ne sont pas du document', async () => {
     await afficher(order());
-    const partager = screen.getByRole('button', { name: /Partager WhatsApp/ });
+    // Le libellé a changé au §60 : le bouton n'envoie plus un texte mais la
+    // pièce elle-même, en PDF joint.
+    const partager = screen.getByRole('button', { name: /Envoyer par WhatsApp/ });
     expect(partager.closest('.no-print')).not.toBeNull();
   });
 
