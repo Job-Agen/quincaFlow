@@ -2670,7 +2670,7 @@ développement du téléphone.
 | Brouillon, envoyée | oui | rien n'a bougé dans la boutique |
 | Une réception, même partielle | non | du stock est entré ; l'effacer ferait mentir l'inventaire |
 | Un règlement fournisseur | non | une dette a été payée contre cette pièce (§54) |
-| Annulée | non | l'annulation est déjà la trace voulue |
+| Annulée | modification seule | l'annulation est la trace voulue ; la suppression, elle, est rouverte au §64 |
 
 Une commande verrouillée n'affiche pas des boutons grisés : elle affiche la
 phrase. Un bouton qu'on ne peut pas appuyer n'apprend rien.
@@ -3161,3 +3161,55 @@ pas arrivé.
 7. Une commande annulée la refuse.
 8. L'écran nomme les quantités avant de les faire entrer.
 9. Rien de tout cela ne franchit la frontière d'une boutique (§29).
+
+
+## 64. Effacer une commande annulée
+
+**Objectif**
+
+Le §58 verrouillait **modification et suppression ensemble** sur une commande
+annulée, au motif que l'annulation est déjà la trace voulue.
+
+L'argument tient pour la modification : réécrire une commande annulée serait
+une résurrection silencieuse. Il ne tient pas pour la suppression, et il
+créait un piège — une commande ouverte par erreur, puis **annulée au lieu
+d'être effacée**, ne pouvait plus jamais l'être. Elle encombrait la liste à
+jamais, et le gérant n'avait aucun moyen de revenir sur son choix.
+
+**F87 — Deux gestes, deux règles**
+
+Une commande annulée ne porte rien, et les deux routes le garantissent :
+`updatePurchaseOrderStatus` refuse d'annuler ce qui a déjà été livré,
+`recordSupplierPayment` refuse de régler ce qui est annulé. Rien ne dépend
+d'elle, donc rien ne s'effondre si elle part.
+
+| État | Modifier | Supprimer |
+|---|---|---|
+| Brouillon, envoyée | oui | oui |
+| **Annulée** | non | **oui** |
+| Une réception, même partielle | non | non |
+| Un règlement fournisseur | non | non |
+
+La règle de suppression ne s'appuie pas sur les routes pour tenir : elle
+refuse une commande annulée **qui porterait** une réception ou un règlement,
+même si aucun chemin ne permet aujourd'hui d'en fabriquer une. Une garde qui
+ne vaut que par une autre garde ne vaut rien le jour où celle-ci change.
+
+**F88 — Ce que la suppression refuse encore**
+
+Une commande **livrée**. Le stock est entré : l'effacer laisserait un
+mouvement de stock sans commande pour l'expliquer, et l'inventaire dirait que
+cinquante sacs sont arrivés de nulle part. Pour une livraison saisie par
+erreur, le geste juste est un ajustement d'inventaire, qui se raconte.
+
+Une commande **réglée**. La suppression emporterait le règlement en cascade,
+et avec lui une sortie du journal de caisse.
+
+**Critères d'acceptation**
+
+1. Une commande annulée s'efface, depuis la liste comme depuis sa fiche.
+2. Elle ne se modifie toujours pas.
+3. Une commande livrée ou réglée ne s'efface pas, et la phrase dit laquelle
+   des deux.
+4. La règle de suppression refuse une annulée porteuse d'une réception ou
+   d'un règlement, sans s'en remettre aux autres routes.

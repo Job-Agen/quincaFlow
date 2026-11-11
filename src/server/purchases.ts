@@ -26,6 +26,7 @@ import {
   PO_MANUAL_STATUSES,
   orderTotal,
   receptionStatus,
+  verrouDeSuppression,
   remainingOf,
   verrouDeCommande,
 } from '../domain/purchase';
@@ -288,7 +289,11 @@ function nomDuGerant(session: Session, body: Record<string, unknown>): string {
  * question — quelque chose dépend-il déjà de cette commande ? — et qu'un aller
  * de plus vers la base pour la poser deux fois ne dirait rien de neuf.
  */
-async function verrou(businessId: string, orderId: string): Promise<string | null> {
+async function verrou(
+  businessId: string,
+  orderId: string,
+  geste: 'modifier' | 'supprimer' = 'modifier'
+): Promise<string | null> {
   const sql = getSql();
   const compte = one<{ receptions: number; reglements: number }>(
     await sql`
@@ -307,7 +312,8 @@ async function verrou(businessId: string, orderId: string): Promise<string | nul
     `
   );
   if (!order) throw notFound('Commande introuvable.');
-  return verrouDeCommande(order.status, compte?.receptions ?? 0, compte?.reglements ?? 0);
+  const regle = geste === 'supprimer' ? verrouDeSuppression : verrouDeCommande;
+  return regle(order.status, compte?.receptions ?? 0, compte?.reglements ?? 0);
 }
 
 /**
@@ -380,7 +386,7 @@ export async function updatePurchaseOrder(
  * précisément pourquoi leur présence l'interdit.
  */
 export async function deletePurchaseOrder(session: Session, orderId: string): Promise<void> {
-  const empeche = await verrou(session.businessId, orderId);
+  const empeche = await verrou(session.businessId, orderId, 'supprimer');
   if (empeche) throw conflict(empeche);
 
   const sql = getSql();

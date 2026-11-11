@@ -84,6 +84,34 @@ export function verrouDeCommande(
   reglements: number
 ): string | null {
   if (statut === 'CANCELLED') return 'Cette commande est annulée.';
+  return dependances(receptions, reglements);
+}
+
+/**
+ * Ce qui empêche de **supprimer** une commande (§64).
+ *
+ * Pas tout à fait la même chose que ce qui empêche de la modifier. Le §58
+ * verrouillait les deux gestes ensemble sur une commande annulée, au motif que
+ * l'annulation est déjà la trace voulue. L'argument tient pour la
+ * modification — rouvrir une commande annulée en la réécrivant serait une
+ * résurrection silencieuse — mais il créait un piège pour la suppression : une
+ * commande ouverte par erreur puis annulée au lieu d'être effacée ne pouvait
+ * plus jamais l'être, et encombrait la liste à jamais.
+ *
+ * Or une commande annulée ne porte rien : les deux routes refusent d'annuler
+ * ce qui a été livré, et de régler ce qui est annulé. Rien ne dépend d'elle,
+ * donc rien ne s'effondre si elle part.
+ */
+export function verrouDeSuppression(
+  statut: PurchaseOrderStatus,
+  receptions: number,
+  reglements: number
+): string | null {
+  return dependances(receptions, reglements);
+}
+
+/** Ce qui dépend déjà de la commande, et interdit donc d'y toucher. */
+function dependances(receptions: number, reglements: number): string | null {
   if (receptions > 0) {
     return 'Cette commande a déjà reçu une livraison : elle ne peut plus être modifiée ni supprimée. Annulez-la si elle ne doit plus courir.';
   }

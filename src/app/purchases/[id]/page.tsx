@@ -38,6 +38,7 @@ import {
   PO_STATUS_TONES,
   canReceive,
   verrouDeCommande,
+  verrouDeSuppression,
   orderMessageLines,
   purchaseOrderMessage,
   remainingOf,
@@ -76,9 +77,14 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
   const [paying, setPaying] = useState(false);
   const [suppression, setSuppression] = useState(false);
 
-  // La même règle que le serveur, lue sur ce que la commande porte déjà (§58).
+  // Les mêmes règles que le serveur, lues sur ce que la commande porte déjà.
+  // Modifier et supprimer ne répondent plus tout à fait à la même : une
+  // commande annulée ne se réécrit pas, mais elle s'efface (§64).
   const verrou = data
     ? verrouDeCommande(data.status, data.receipts.length, data.payments.length)
+    : null;
+  const verrouSuppression = data
+    ? verrouDeSuppression(data.status, data.receipts.length, data.payments.length)
     : null;
 
   const [attaching, setAttaching] = useState(false);
@@ -444,18 +450,22 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
               promesse qu'on ne tient pas. */}
             {isOwner ? (
               <div className="exports-row no-print">
-                {verrou ? (
+                {verrou && verrouSuppression ? (
                   <p className="small muted">{verrou}</p>
                 ) : (
                   <>
-                    <Link href={`/purchases/${data.id}/edit`} className="btn btn--soft btn--sm">
-                      <Pencil size={16} />
-                      Modifier
-                    </Link>
-                    <Button variant="soft" size="sm" onClick={() => setSuppression(true)}>
-                      <Trash2 size={16} />
-                      Supprimer
-                    </Button>
+                    {verrou ? null : (
+                      <Link href={`/purchases/${data.id}/edit`} className="btn btn--soft btn--sm">
+                        <Pencil size={16} />
+                        Modifier
+                      </Link>
+                    )}
+                    {verrouSuppression ? null : (
+                      <Button variant="soft" size="sm" onClick={() => setSuppression(true)}>
+                        <Trash2 size={16} />
+                        Supprimer
+                      </Button>
+                    )}
                   </>
                 )}
               </div>

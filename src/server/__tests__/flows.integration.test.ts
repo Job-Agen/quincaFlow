@@ -879,6 +879,29 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       expect(journal.entries.some((ligne) => ligne.kind === 'SUPPLIER_PAYMENT')).toBe(true);
     });
 
+    it('supprime une commande annulée, qui ne porte rien (§64)', async () => {
+      const vitre = await seedCatalogue();
+      const annulee = await commande(vitre);
+      await purchases.updatePurchaseOrderStatus(OWNER, annulee.id, { status: 'CANCELLED' });
+
+      // Annuler au lieu d'effacer ne doit pas condamner la commande à
+      // encombrer la liste à jamais : les deux routes refusent d'annuler ce
+      // qui a été livré et de régler ce qui est annulé, donc rien n'en dépend.
+      await purchases.deletePurchaseOrder(OWNER, annulee.id);
+      await expect(purchases.getPurchaseOrder(OWNER.businessId, annulee.id)).rejects.toThrow();
+    });
+
+    it('refuse toujours de supprimer une commande livrée', async () => {
+      // Le stock est entré : l'effacer laisserait un mouvement sans commande
+      // pour l'expliquer.
+      const vitre = await seedCatalogue();
+      const livree = await commande(vitre);
+      await purchases.receivePurchaseOrder(OWNER, livree.id, {
+        lines: [{ itemId: livree.items[0]!.id, quantity: 100 }],
+      });
+      await expect(purchases.deletePurchaseOrder(OWNER, livree.id)).rejects.toThrow(/livraison/i);
+    });
+
     it('refuse de modifier une commande annulée', async () => {
       const vitre = await seedCatalogue();
       const annulee = await commande(vitre);

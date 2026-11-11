@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verrouDeCommande } from '../purchase';
+import { verrouDeCommande, verrouDeSuppression } from '../purchase';
 
 /**
  * Ce qui fige une commande fournisseur (§58).
@@ -43,6 +43,38 @@ describe('dès qu’un règlement est saisi', () => {
 
 describe('une commande annulée', () => {
   it('ne se modifie plus : elle est close', () => {
+    // La réécrire serait une résurrection silencieuse.
     expect(verrouDeCommande('CANCELLED', 0, 0)).toMatch(/annulée/i);
+  });
+
+  it('s’efface, elle : rien ne dépend d’elle (§64)', () => {
+    // Le §58 verrouillait les deux gestes ensemble, et créait un piège : une
+    // commande ouverte par erreur puis annulée au lieu d'être effacée
+    // encombrait la liste à jamais. Or les deux routes refusent d'annuler ce
+    // qui a été livré et de régler ce qui est annulé : une commande annulée
+    // ne porte rien.
+    expect(verrouDeSuppression('CANCELLED', 0, 0)).toBeNull();
+  });
+});
+
+describe('ce que la suppression refuse encore', () => {
+  it('une commande livrée, parce que le stock est entré', () => {
+    // L'effacer laisserait un mouvement de stock sans commande pour
+    // l'expliquer : l'inventaire dirait que cinquante sacs sont arrivés de
+    // nulle part.
+    expect(verrouDeSuppression('RECEIVED', 1, 0)).toMatch(/livraison/i);
+    // Même annulée après coup — ce que les routes interdisent, mais la règle
+    // ne s'appuie pas sur elles pour tenir.
+    expect(verrouDeSuppression('CANCELLED', 1, 0)).toMatch(/livraison/i);
+  });
+
+  it('une commande réglée, parce que la caisse est sortie', () => {
+    expect(verrouDeSuppression('PAID', 0, 1)).toMatch(/règlement/i);
+    expect(verrouDeSuppression('CANCELLED', 0, 1)).toMatch(/règlement/i);
+  });
+
+  it('laisse passer ce dont rien ne dépend', () => {
+    expect(verrouDeSuppression('DRAFT', 0, 0)).toBeNull();
+    expect(verrouDeSuppression('SENT', 0, 0)).toBeNull();
   });
 });

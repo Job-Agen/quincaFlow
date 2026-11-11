@@ -16,7 +16,7 @@ import {
 } from '@/components/ui';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { PO_STATUS_LABELS, PO_STATUS_TONES, verrouDeCommande } from '@/domain/purchase';
+import { PO_STATUS_LABELS, PO_STATUS_TONES, verrouDeSuppression } from '@/domain/purchase';
 import SuppressionCommandeSheet from '@/components/purchases/SuppressionCommandeSheet';
 import { dayLabel, money } from '@/utils/format';
 import type { PurchaseOrderListRow } from '@/types';
@@ -112,9 +112,14 @@ export default function PurchasesPage() {
               <div className="list">
                 {data.map((order) => {
                   // La même règle que le serveur, sur ce que la ligne porte
-                  // déjà (§58). Une commande livrée, réglée ou annulée n'a pas
-                  // de corbeille ici : la fiche, elle, explique pourquoi.
-                  const fige = verrouDeCommande(order.status, order.receptions, order.reglements);
+                  // déjà (§58). Une commande livrée ou réglée n'a pas de
+                  // corbeille ici : la fiche, elle, explique pourquoi. Une
+                  // commande annulée, si — rien ne dépend d'elle (§64).
+                  const fige = verrouDeSuppression(
+                    order.status,
+                    order.receptions,
+                    order.reglements
+                  );
                   return (
                     <div key={order.id} className="list__row list__row--geste">
                       <Link href={`/purchases/${order.id}`} className="list__link">
