@@ -4,7 +4,7 @@ import { notFound } from '../lib/http';
 import { str, num, enumValue } from '../lib/validate';
 import { round2 } from '../utils/money';
 import { EXPENSE_CATEGORIES } from '../domain/report';
-import { PERIODES, prochaineEcheance, type ChargeRow } from '../domain/charge';
+import { MOIS_MAX, MOIS_MIN, prochaineEcheance, type ChargeRow } from '../domain/charge';
 import type { Session } from '@/types';
 
 /**
@@ -18,7 +18,7 @@ import type { Session } from '@/types';
  */
 
 const COLUMNS = `
-  id, business_id, category, label, amount::float8 AS amount, periode,
+  id, business_id, category, label, amount::float8 AS amount, interval_months,
   next_due_on::text AS next_due_on, last_paid_on::text AS last_paid_on,
   active, note, created_at, updated_at
 `;
@@ -28,7 +28,9 @@ function champs(body: Record<string, unknown>) {
     category: enumValue(body.category, 'poste de dépense', EXPENSE_CATEGORIES),
     label: str(body.label, 'libellé', { max: 160 }),
     amount: round2(num(body.amount, 'montant', { min: 0, required: false })),
-    periode: enumValue(body.periode, 'périodicité', Object.keys(PERIODES)),
+    intervalMonths: Math.round(
+      num(body.intervalMonths, 'nombre de mois', { min: MOIS_MIN, max: MOIS_MAX })
+    ),
     note: str(body.note, 'note', { required: false, max: 500 }),
   };
 }
@@ -75,19 +77,51 @@ export async function getCharge(businessId: string, chargeId: string): Promise<C
  * calculée : au premier enregistrement, il n'y a pas encore de paiement d'où
  * compter.
  */
+/**
+ * Crée une charge à partir du **dernier paiement** (§67).
+ *
+ * Le gérant ne choisit pas d'échéance : il dit quand il a payé, combien, et
+ * tous les combien de mois cela revient. L'échéance en découle — c'est le
+ * calcul, pas lui, qui doit compter les mois.
+ *
+ * Le paiement déclaré écrit aussi la dépense, à moins qu'on ne le lui
+ * interdise : il l'a payé, l'argent est sorti, et une charge qui démarre sans
+ * laisser de trace ferait un trou dans le mois en cours. `enregistrerDepense:
+ * false` existe pour le gérant qui a déjà saisi cette dépense à la main et ne
+ * veut pas la compter deux fois.
+ */
 export async function createCharge(session: Session, body: Record<string, unknown>) {
   const valeurs = champs(body);
   const id = newId('chg');
-  const debut = str(body.nextDueOn, 'prochaine échéance', { required: false, max: 10 });
+  const paye = str(body.paidOn, 'date du paiement', { required: false, max: 10 }) || aujourdhui();
+  const suivante = prochaineEcheance(paye, valeurs.intervalMonths);
+  const avecDepense = body.enregistrerDepense !== false;
+  const sql = getSql();
 
-  await getSql()`
-    INSERT INTO recurring_charges (
-      id, business_id, category, label, amount, periode, next_due_on, note
-    ) VALUES (
-      ${id}, ${session.businessId}, ${valeurs.category}, ${valeurs.label}, ${valeurs.amount},
-      ${valeurs.periode}, COALESCE(${debut}::date, CURRENT_DATE), ${valeurs.note}
-    )
-  `;
+  await runTransaction([
+    sql`
+      INSERT INTO recurring_charges (
+        id, business_id, category, label, amount, interval_months,
+        next_due_on, last_paid_on, note
+      ) VALUES (
+        ${id}, ${session.businessId}, ${valeurs.category}, ${valeurs.label}, ${valeurs.amount},
+        ${valeurs.intervalMonths}, ${suivante}::date, ${paye}::date, ${valeurs.note}
+      )
+    `,
+    ...(avecDepense && valeurs.amount > 0
+      ? [
+          sql`
+            INSERT INTO expenses (
+              id, business_id, category, label, amount, spent_on, note, user_id
+            ) VALUES (
+              ${newId('exp')}, ${session.businessId}, ${valeurs.category}, ${valeurs.label},
+              ${valeurs.amount}, ${paye}::date, ${valeurs.note}, ${session.userId}
+            )
+          `,
+        ]
+      : []),
+  ]);
+
   return getCharge(session.businessId, id);
 }
 
@@ -104,7 +138,7 @@ export async function updateCharge(
   await getSql()`
     UPDATE recurring_charges
        SET category = ${valeurs.category}, label = ${valeurs.label}, amount = ${valeurs.amount},
-           periode = ${valeurs.periode}, note = ${valeurs.note},
+           interval_months = ${valeurs.intervalMonths}, note = ${valeurs.note},
            next_due_on = COALESCE(${echeance}::date, next_due_on),
            active = COALESCE(${active}::boolean, active),
            updated_at = now()
@@ -141,7 +175,7 @@ export async function payCharge(session: Session, chargeId: string, body: Record
     num(body.amount, 'montant', { min: 0, required: false }) || charge.amount
   );
   const paye = str(body.paidOn, 'date du paiement', { required: false, max: 10 }) || aujourdhui();
-  const suivante = prochaineEcheance(paye, charge.periode);
+  const suivante = prochaineEcheance(paye, charge.interval_months);
   const sql = getSql();
 
   await runTransaction([

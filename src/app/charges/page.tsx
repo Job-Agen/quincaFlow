@@ -9,7 +9,7 @@ import PaiementChargeSheet from '@/components/charges/PaiementChargeSheet';
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { PERIODES, etatCharge, phraseEcheance, type ChargeRow } from '@/domain/charge';
+import { etatCharge, phraseEcheance, phrasePeriode, type ChargeRow } from '@/domain/charge';
 import { money, shortDate } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 
@@ -102,7 +102,9 @@ export default function ChargesPage() {
                             — « Salaire Kodjo », « Loyer boutique » — dit déjà
                             le poste, et une troisième mention renvoyait la
                             ligne à la ligne. */}
-                          <div className="list__sub">{PERIODES[charge.periode].label}</div>
+                          <div className="list__sub">
+                            {phrasePeriode(charge.interval_months)}
+                          </div>
                         </div>
                         <div className="list__end">
                           <strong className="num">{money(charge.amount, currency)}</strong>

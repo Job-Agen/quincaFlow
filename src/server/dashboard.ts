@@ -102,7 +102,7 @@ export async function dashboard(
     `,
       lowStockProducts(businessId, 10),
       sql`
-        SELECT id, business_id, category, label, amount::float8 AS amount, periode,
+        SELECT id, business_id, category, label, amount::float8 AS amount, interval_months,
                next_due_on::text AS next_due_on, last_paid_on::text AS last_paid_on,
                active, note, created_at, updated_at
           FROM recurring_charges

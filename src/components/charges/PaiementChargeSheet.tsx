@@ -5,7 +5,12 @@ import { Banknote } from 'lucide-react';
 import { Button, Notice, Sheet, TextAreaField, TextField } from '@/components/ui';
 import { api } from '@/client/api';
 import { useSession } from '@/client/session';
-import { PERIODES, phraseEcheance, prochaineEcheance, type ChargeRow } from '@/domain/charge';
+import {
+  phraseEcheance,
+  phrasePeriode,
+  prochaineEcheance,
+  type ChargeRow,
+} from '@/domain/charge';
 import { money, shortDate } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 
@@ -42,7 +47,7 @@ export default function PaiementChargeSheet({
 
   // Calculée ici aussi, par la même fonction que le serveur : annoncer une
   // date puis en écrire une autre vaudrait mieux ne rien annoncer.
-  const suivante = prochaineEcheance(paye || aujourdhui(), charge.periode);
+  const suivante = prochaineEcheance(paye || aujourdhui(), charge.interval_months);
 
   async function payer() {
     setBusy(true);
@@ -94,7 +99,7 @@ export default function PaiementChargeSheet({
       <Notice tone="info">
         Une dépense de {money(Number(montant) || 0, currency)} sera enregistrée au poste de cette
         charge, et la prochaine échéance passera au <strong>{shortDate(suivante)}</strong> —{' '}
-        {PERIODES[charge.periode].label.toLowerCase()} à compter du jour du paiement.
+        {phrasePeriode(charge.interval_months).toLowerCase()} à compter du jour du paiement.
       </Notice>
 
       <Button block disabled={busy} onClick={payer}>

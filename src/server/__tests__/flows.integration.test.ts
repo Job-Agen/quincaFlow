@@ -1158,20 +1158,48 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
         category: 'SALARY',
         label: 'Salaire Kodjo',
         amount: 80000,
-        periode: 'MONTHLY',
-        nextDueOn: '2026-11-11',
+        intervalMonths: 1,
+        paidOn: '2026-11-11',
+        enregistrerDepense: false,
         ...over,
       });
 
-    it('pose la première échéance là où le gérant la met', async () => {
+    it('calcule la première échéance depuis le paiement déclaré (§67)', async () => {
+      // Le gérant ne choisit pas de date : il dit quand il a payé et tous les
+      // combien cela revient. C'est au calcul de compter les mois.
       const charge = await creer();
-      expect(charge.next_due_on).toBe('2026-11-11');
-      expect(charge.last_paid_on).toBeNull();
+      expect(charge.next_due_on).toBe('2026-12-11');
+      expect(charge.last_paid_on).toBe('2026-11-11');
       expect(charge.active).toBe(true);
+
+      expect((await creer({ intervalMonths: 3 })).next_due_on).toBe('2027-02-11');
+      expect((await creer({ intervalMonths: 2, paidOn: '2026-12-31' })).next_due_on).toBe(
+        '2027-02-28'
+      );
+    });
+
+    it('enregistre la dépense du paiement déclaré, sauf si on l’en empêche', async () => {
+      await creer({ enregistrerDepense: true, paidOn: '2026-11-11' });
+      const vues = await expenses.listExpenses(OWNER.businessId, {
+        fromDate: '2026-11-01',
+        toDate: '2026-11-30',
+      });
+      expect(vues).toHaveLength(1);
+      expect(vues[0]).toMatchObject({ amount: 80000, category: 'SALARY', spent_on: '2026-11-11' });
+
+      // Le gérant qui a déjà saisi cette dépense à la main ne veut pas la
+      // compter deux fois.
+      await creer({ label: 'Loyer', enregistrerDepense: false });
+      expect(
+        await expenses.listExpenses(OWNER.businessId, {
+          fromDate: '2026-11-01',
+          toDate: '2026-11-30',
+        })
+      ).toHaveLength(1);
     });
 
     it('écrit une dépense et relance le chrono, d’un seul geste', async () => {
-      const charge = await creer();
+      const charge = await creer({ paidOn: '2026-10-11' });
       const apres = await charges.payCharge(OWNER, charge.id, { paidOn: '2026-11-11' });
 
       // Le chrono part du paiement : payer le 11 reporte au 11.
@@ -1211,15 +1239,16 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     it('compte depuis le paiement, même payé en retard', async () => {
       // Payer avec cinq jours de retard ne doit pas rappeler cinq jours plus
       // tard : le gérant veut un mois de tranquillité.
-      const charge = await creer({ nextDueOn: '2026-11-06' });
+      const charge = await creer({ paidOn: '2026-10-06' });
+      expect(charge.next_due_on).toBe('2026-11-06');
       const apres = await charges.payCharge(OWNER, charge.id, { paidOn: '2026-11-11' });
       expect(apres.next_due_on).toBe('2026-12-11');
     });
 
     it('range les plus pressantes en tête', async () => {
-      await creer({ label: 'Loyer', periode: 'QUARTERLY', nextDueOn: '2027-01-01' });
-      await creer({ label: 'Salaire Kodjo', nextDueOn: '2026-11-11' });
-      await creer({ label: 'CEET', nextDueOn: '2026-12-02' });
+      await creer({ label: 'Loyer', intervalMonths: 3, paidOn: '2026-10-01' });
+      await creer({ label: 'Salaire Kodjo', paidOn: '2026-10-11' });
+      await creer({ label: 'CEET', paidOn: '2026-11-02' });
       const vues = await charges.listCharges(OWNER.businessId);
       expect(vues.map((c) => c.label)).toEqual(['Salaire Kodjo', 'CEET', 'Loyer']);
     });
@@ -1233,7 +1262,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
         category: 'SALARY',
         label: 'Salaire Kodjo',
         amount: 80000,
-        periode: 'MONTHLY',
+        intervalMonths: 1,
         active: false,
       });
 
@@ -1268,7 +1297,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       await expect(charges.payCharge(RIVAL, charge.id, {})).rejects.toThrow(/introuvable/i);
       await expect(charges.deleteCharge(RIVAL, charge.id)).rejects.toThrow(/introuvable/i);
       // Et rien n'a bougé chez le propriétaire.
-      expect((await charges.getCharge(OWNER.businessId, charge.id)).next_due_on).toBe('2026-11-11');
+      expect((await charges.getCharge(OWNER.businessId, charge.id)).next_due_on).toBe('2026-12-11');
     });
   });
 

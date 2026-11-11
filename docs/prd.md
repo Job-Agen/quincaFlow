@@ -3305,8 +3305,7 @@ C'est délibéré, et c'est ce que le gérant attend : payer avec cinq jours de
 retard ne doit pas le rappeler cinq jours plus tard — il veut un mois de
 tranquillité, pas un rattrapage.
 
-Périodes : chaque mois, tous les 3 mois, tous les 6 mois, chaque année, chaque
-semaine.
+La périodicité est **un nombre de mois** (§67).
 
 **Le 31 est la seule vraie question.** Un mois après le 31 janvier n'existe
 pas. La date est ramenée au dernier jour du mois atteint — 28, ou 29 en année
@@ -3354,8 +3353,8 @@ travail planifié côté serveur, qu'aucune de ces pièces ne porte aujourd'hui.
 
 **Critères d'acceptation**
 
-1. Une charge porte un poste, un libellé, un montant habituel, une périodicité
-   et une prochaine échéance.
+1. Une charge porte un poste, un libellé, un montant, un nombre de mois et la
+   date du dernier paiement ; l'échéance en découle (§67).
 2. Payer écrit une dépense ordinaire au poste de la charge.
 3. L'échéance suivante se compte depuis le jour du paiement.
 4. Le report ne déborde jamais sur le mois suivant quand le jour n'existe pas.
@@ -3366,3 +3365,52 @@ travail planifié côté serveur, qu'aucune de ces pièces ne porte aujourd'hui.
 9. Une charge rangée ne rappelle plus et garde son historique.
 10. Effacer une charge n'efface pas les dépenses déjà payées.
 11. Rien de tout cela ne franchit la frontière d'une boutique (§29).
+
+
+## 67. Trois nombres, et l'échéance se calcule
+
+**Objectif**
+
+Le §66 demandait au gérant de **choisir une périodicité dans une liste** —
+mensuel, trimestriel, semestriel, annuel, hebdomadaire — puis de **saisir la
+prochaine échéance**. Deux fois trop de décisions.
+
+Ranger sa charge dans une case que quelqu'un d'autre a dessinée ne marche pas :
+un bail payé tous les deux mois n'entrait dans aucune. Et poser soi-même une
+échéance, c'est compter les mois à la place du calcul.
+
+**F96 — Ce que le gérant dit, et ce que l'application en déduit**
+
+Il dit trois choses, toutes des faits :
+
+| Il saisit | Exemple |
+|---|---|
+| Combien il a payé | 80 000 FCFA |
+| Quand il a payé | 11/11/2026 |
+| Tous les combien de **mois** | 1 |
+
+L'application calcule le reste : prochaine échéance au **11/12/2026**. Elle
+l'annonce avant d'enregistrer, par la même fonction que le serveur — annoncer
+une date puis en écrire une autre vaudrait mieux ne rien annoncer.
+
+« Tous les N mois » contient toutes les cases de l'ancienne liste et celles
+qu'elle n'avait pas : 1, 2, 3, 6, 12, 18. La phrase se forme toute seule —
+« Chaque mois », « Tous les 2 mois », « Chaque année ».
+
+**F97 — Déclarer un paiement, c'est une dépense**
+
+Créer une charge, c'est dire « j'ai payé ». L'argent est sorti : la dépense
+est donc écrite, au même poste, à la date déclarée. Une charge qui démarre
+sans laisser de trace ferait un trou dans le mois en cours.
+
+Une case permet de ne pas l'écrire, pour le gérant qui a déjà saisi cette
+dépense à la main : compter deux fois un loyer fausserait son bénéfice, et
+c'est le genre d'erreur qu'on ne remarque qu'au bilan.
+
+**Critères d'acceptation**
+
+1. La périodicité est un nombre de mois, pas une case dans une liste.
+2. L'échéance est calculée depuis la date de paiement déclarée.
+3. L'écran annonce l'échéance calculée avant d'enregistrer.
+4. Un nombre de mois absurde — zéro, décimal — est ramené à un mois entier.
+5. Créer une charge écrit la dépense déclarée, sauf refus explicite.

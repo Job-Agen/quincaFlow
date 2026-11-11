@@ -13,23 +13,23 @@ import type { ExpenseCategory } from '@/types';
  * n'y a pas deux façons de sortir de l'argent.
  */
 
-export type PeriodeCharge = 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'HALF_YEARLY' | 'YEARLY';
+/**
+ * La périodicité est **un nombre de mois**, et rien d'autre (§67).
+ *
+ * Une liste de périodes nommées — mensuel, trimestriel, semestriel, annuel —
+ * oblige le gérant à ranger sa charge dans une case que quelqu'un d'autre a
+ * dessinée. Un bail payé tous les deux mois n'y entrait pas. « Tous les N
+ * mois » les contient toutes, et se lit sans apprendre de vocabulaire.
+ */
+export const MOIS_MIN = 1;
+export const MOIS_MAX = 60;
 
-export const PERIODES: Record<PeriodeCharge, { label: string; mois: number; jours: number }> = {
-  WEEKLY: { label: 'Chaque semaine', mois: 0, jours: 7 },
-  MONTHLY: { label: 'Chaque mois', mois: 1, jours: 0 },
-  QUARTERLY: { label: 'Tous les 3 mois', mois: 3, jours: 0 },
-  HALF_YEARLY: { label: 'Tous les 6 mois', mois: 6, jours: 0 },
-  YEARLY: { label: 'Chaque année', mois: 12, jours: 0 },
-};
-
-export const PERIODES_ORDRE: readonly PeriodeCharge[] = [
-  'MONTHLY',
-  'QUARTERLY',
-  'HALF_YEARLY',
-  'YEARLY',
-  'WEEKLY',
-];
+/** « Chaque mois », « Tous les 3 mois » : la phrase, pas le nombre nu. */
+export function phrasePeriode(mois: number): string {
+  if (mois <= 1) return 'Chaque mois';
+  if (mois === 12) return 'Chaque année';
+  return `Tous les ${mois} mois`;
+}
 
 /** Une date `YYYY-MM-DD` telle que la base la range, sans fuseau. */
 const enJour = (date: Date): string =>
@@ -56,18 +56,19 @@ function lire(jour: string): Date {
  * février — plutôt que de déborder sur mars, ce que ferait l'arithmétique
  * naïve de JavaScript.
  */
-export function prochaineEcheance(depuis: string, periode: PeriodeCharge): string {
-  const { mois, jours } = PERIODES[periode];
+export function prochaineEcheance(depuis: string, mois: number): string {
   const base = lire(depuis);
-
-  if (jours > 0) {
-    base.setDate(base.getDate() + jours);
-    return enJour(base);
-  }
-
   const jourVoulu = base.getDate();
   // Le 1er du mois d'arrivée, d'où l'on ne peut pas déborder.
-  const cible = new Date(base.getFullYear(), base.getMonth() + mois, 1, 12, 0, 0, 0);
+  const cible = new Date(
+    base.getFullYear(),
+    base.getMonth() + Math.max(MOIS_MIN, Math.round(mois)),
+    1,
+    12,
+    0,
+    0,
+    0
+  );
   const dernierJour = new Date(cible.getFullYear(), cible.getMonth() + 1, 0, 12).getDate();
   cible.setDate(Math.min(jourVoulu, dernierJour));
   return enJour(cible);
@@ -113,7 +114,8 @@ export interface ChargeRow {
   category: ExpenseCategory;
   label: string;
   amount: number;
-  periode: PeriodeCharge;
+  /** Tous les combien de mois elle revient (§67). */
+  interval_months: number;
   /** `YYYY-MM-DD` : le jour où il faudra repayer. */
   next_due_on: string;
   last_paid_on: string | null;

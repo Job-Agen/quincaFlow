@@ -6,9 +6,17 @@ import { Button, Notice, SelectField, Sheet, TextAreaField, TextField } from '@/
 import { api } from '@/client/api';
 import { useSession } from '@/client/session';
 import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from '@/domain/report';
-import { PERIODES, PERIODES_ORDRE, type ChargeRow } from '@/domain/charge';
-import { money } from '@/utils/format';
+import { MOIS_MAX, MOIS_MIN, phrasePeriode, prochaineEcheance, type ChargeRow } from '@/domain/charge';
+import { money, shortDate } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
+
+/** Aujourd'hui en `YYYY-MM-DD`, comme la base la range. */
+const aujourdhui = () => {
+  const jour = new Date();
+  return `${jour.getFullYear()}-${String(jour.getMonth() + 1).padStart(2, '0')}-${String(
+    jour.getDate()
+  ).padStart(2, '0')}`;
+};
 
 /**
  * Saisie d'une charge récurrente (§66).
@@ -39,22 +47,30 @@ export default function ChargeSheet({
     category: charge?.category || 'RENT',
     label: charge?.label || '',
     amount: charge?.amount ?? '',
-    periode: charge?.periode || 'MONTHLY',
-    nextDueOn: charge?.next_due_on || '',
+    intervalMonths: charge?.interval_months ?? 1,
+    paidOn: charge?.last_paid_on || aujourdhui(),
     note: charge?.note || '',
   });
+  const [avecDepense, setAvecDepense] = useState(true);
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
   const set = (champ: keyof typeof form) => (event: { target: { value: string } }) =>
     setForm({ ...form, [champ]: event.target.value });
 
+  // Calculée ici par la même fonction que le serveur : annoncer une date puis
+  // en écrire une autre vaudrait mieux ne rien annoncer.
+  const echeance = prochaineEcheance(
+    form.paidOn || aujourdhui(),
+    Number(form.intervalMonths) || 1
+  );
+
   async function enregistrer() {
     setBusy(true);
     setErreur(null);
     try {
       if (charge) await api.put(`/api/charges/${charge.id}`, { ...form, active: charge.active });
-      else await api.post('/api/charges', form);
+      else await api.post('/api/charges', { ...form, enregistrerDepense: avecDepense });
       onEnregistree();
     } catch (souci) {
       setErreur(errorMessage(souci));
@@ -116,9 +132,12 @@ export default function ChargeSheet({
         required
       />
 
+      {/* Trois nombres, et l'échéance s'en déduit (§67). Le gérant ne choisit
+        pas de date : il dit ce qu'il a fait — payé tel jour, tel montant — et
+        tous les combien cela revient. C'est au calcul de compter les mois. */}
       <div className="grid-2">
         <TextField
-          label={`Montant habituel (${currency})`}
+          label={`Montant payé (${currency})`}
           type="number"
           inputMode="decimal"
           min="0"
@@ -126,27 +145,52 @@ export default function ChargeSheet({
           hint="Modifiable à chaque paiement."
           value={form.amount}
           onChange={set('amount')}
+          required
         />
-        <SelectField label="Revient" value={form.periode} onChange={set('periode')}>
-          {PERIODES_ORDRE.map((periode) => (
-            <option key={periode} value={periode}>
-              {PERIODES[periode].label}
-            </option>
-          ))}
-        </SelectField>
+        <TextField
+          label="Revient tous les… (mois)"
+          type="number"
+          inputMode="numeric"
+          min={MOIS_MIN}
+          max={MOIS_MAX}
+          step="1"
+          hint={phrasePeriode(Number(form.intervalMonths) || 1).toLowerCase()}
+          value={form.intervalMonths}
+          onChange={set('intervalMonths')}
+        />
       </div>
 
       <TextField
-        label="Prochaine échéance"
+        label="Payé le"
         type="date"
-        hint={
-          charge
-            ? 'Avancée toute seule à chaque paiement.'
-            : 'Le prochain jour où il faudra payer. Vide : aujourd’hui.'
-        }
-        value={form.nextDueOn}
-        onChange={set('nextDueOn')}
+        hint="C’est de ce jour que part le compte à rebours."
+        value={form.paidOn}
+        onChange={set('paidOn')}
       />
+
+      <Notice>
+        Prochaine échéance : <strong>{shortDate(echeance)}</strong>.
+        {charge ? null : (
+          <>
+            {' '}
+            Une dépense de {money(Number(form.amount) || 0, currency)} du{' '}
+            {shortDate(form.paidOn || aujourdhui())} sera enregistrée au poste de cette charge.
+          </>
+        )}
+      </Notice>
+
+      {charge ? null : (
+        <label className="field field--inline">
+          <input
+            type="checkbox"
+            checked={avecDepense}
+            onChange={(event) => setAvecDepense(event.target.checked)}
+          />
+          <span className="small">
+            Enregistrer aussi la dépense. Décochez si vous l’avez déjà saisie à la main.
+          </span>
+        </label>
+      )}
 
       <TextAreaField label="Note (optionnel)" rows={2} value={form.note} onChange={set('note')} />
 
@@ -168,7 +212,8 @@ export default function ChargeSheet({
       {charge && !charge.active ? (
         <p className="small muted">
           Rangée. Elle ne sera plus rappelée ; sa dernière échéance était le{' '}
-          {charge.next_due_on}. Le montant habituel reste {money(charge.amount, currency)}.
+          {shortDate(charge.next_due_on)}. Le montant habituel reste{' '}
+          {money(charge.amount, currency)}.
         </p>
       ) : null}
     </Sheet>

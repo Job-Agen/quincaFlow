@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   etatCharge,
+  phrasePeriode,
   joursAvant,
   phraseEcheance,
   prochaineEcheance,
@@ -17,36 +18,50 @@ import {
 describe('l’échéance suivante se compte depuis le paiement', () => {
   it('reporte d’un mois, au même jour', () => {
     // Le chrono, pas le calendrier : payer le 11 reporte au 11, pas au 1er.
-    expect(prochaineEcheance('2026-11-11', 'MONTHLY')).toBe('2026-12-11');
-    expect(prochaineEcheance('2026-12-11', 'MONTHLY')).toBe('2027-01-11');
+    expect(prochaineEcheance('2026-11-11', 1)).toBe('2026-12-11');
+    expect(prochaineEcheance('2026-12-11', 1)).toBe('2027-01-11');
   });
 
   it('compte les trimestres, semestres et années', () => {
-    expect(prochaineEcheance('2026-11-11', 'QUARTERLY')).toBe('2027-02-11');
-    expect(prochaineEcheance('2026-11-11', 'HALF_YEARLY')).toBe('2027-05-11');
-    expect(prochaineEcheance('2026-11-11', 'YEARLY')).toBe('2027-11-11');
+    expect(prochaineEcheance('2026-11-11', 3)).toBe('2027-02-11');
+    expect(prochaineEcheance('2026-11-11', 6)).toBe('2027-05-11');
+    expect(prochaineEcheance('2026-11-11', 12)).toBe('2027-11-11');
   });
 
-  it('compte la semaine en jours', () => {
-    expect(prochaineEcheance('2026-11-11', 'WEEKLY')).toBe('2026-11-18');
-    // Et elle traverse les fins de mois sans se poser de question.
-    expect(prochaineEcheance('2026-11-28', 'WEEKLY')).toBe('2026-12-05');
+  it('accepte n’importe quel nombre de mois (§67)', () => {
+    // Une liste de périodes nommées obligeait à ranger un bail payé tous les
+    // deux mois dans une case qui n'existait pas.
+    expect(prochaineEcheance('2026-11-11', 2)).toBe('2027-01-11');
+    expect(prochaineEcheance('2026-11-11', 4)).toBe('2027-03-11');
+    expect(prochaineEcheance('2026-11-11', 18)).toBe('2028-05-11');
+  });
+
+  it('se défend d’un nombre de mois absurde', () => {
+    // Zéro reporterait au même jour, et le rappel sonnerait sans fin.
+    expect(prochaineEcheance('2026-11-11', 0)).toBe('2026-12-11');
+    expect(prochaineEcheance('2026-11-11', 1.4)).toBe('2026-12-11');
+  });
+
+  it('nomme la périodicité pour l’écran', () => {
+    expect(phrasePeriode(1)).toBe('Chaque mois');
+    expect(phrasePeriode(3)).toBe('Tous les 3 mois');
+    expect(phrasePeriode(12)).toBe('Chaque année');
   });
 
   it('ne déborde pas sur le mois suivant quand le jour n’existe pas', () => {
     // Un mois après le 31 janvier n'existe pas. L'arithmétique naïve de
     // JavaScript donnerait le 3 mars ; le loyer se paierait alors le 3, puis
     // le 3, et la date glisserait d'année en année.
-    expect(prochaineEcheance('2026-01-31', 'MONTHLY')).toBe('2026-02-28');
-    expect(prochaineEcheance('2028-01-31', 'MONTHLY')).toBe('2028-02-29');
-    expect(prochaineEcheance('2026-03-31', 'MONTHLY')).toBe('2026-04-30');
-    expect(prochaineEcheance('2026-08-31', 'QUARTERLY')).toBe('2026-11-30');
+    expect(prochaineEcheance('2026-01-31', 1)).toBe('2026-02-28');
+    expect(prochaineEcheance('2028-01-31', 1)).toBe('2028-02-29');
+    expect(prochaineEcheance('2026-03-31', 1)).toBe('2026-04-30');
+    expect(prochaineEcheance('2026-08-31', 3)).toBe('2026-11-30');
   });
 
   it('garde le jour voulu dès que le mois le permet', () => {
     // Ramenée au 28 en février, l'échéance ne doit pas y rester coincée : on
     // compte toujours depuis le paiement, et le gérant paiera le 28.
-    expect(prochaineEcheance('2026-02-28', 'MONTHLY')).toBe('2026-03-28');
+    expect(prochaineEcheance('2026-02-28', 1)).toBe('2026-03-28');
   });
 });
 

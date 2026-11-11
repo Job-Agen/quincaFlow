@@ -466,7 +466,10 @@ CREATE TABLE IF NOT EXISTS recurring_charges (
   category     text NOT NULL DEFAULT 'OTHER',
   label        text NOT NULL,
   amount       numeric(14, 2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
-  periode      text NOT NULL DEFAULT 'MONTHLY',
+  -- Tous les combien de mois elle revient (§67). Un nombre, pas une case à
+  -- cocher dans une liste que quelqu'un d'autre a dessinée : un bail payé tous
+  -- les deux mois n'entrait dans aucune.
+  interval_months integer NOT NULL DEFAULT 1 CHECK (interval_months >= 1),
   -- Le jour où il faudra repayer. Avancé à chaque paiement, depuis la date du
   -- paiement et non depuis l'ancienne échéance : c'est un chrono.
   next_due_on  date NOT NULL,

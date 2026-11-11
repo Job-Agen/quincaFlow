@@ -1212,6 +1212,22 @@ select.input {
   gap: 6px;
 }
 
+/* Une case à cocher et sa phrase, sur une ligne : le libellé d'un champ
+   ordinaire la mettrait au-dessus, loin de la case qu'elle explique (§67). */
+.field--inline {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.field--inline input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--blue);
+}
+
 /* Le nom du signataire colle à son trait, et garde l'espace pour signer. */
 .doc__signataire {
   font-size: 13px;
