@@ -23,6 +23,31 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 const CONNECTION = process.env.TEST_DATABASE_URL;
 
+/**
+ * Le service de distribution des notifications, simulé (§68).
+ *
+ * Il refuse tout endpoint contenant « mort » avec un 410 — le code par lequel
+ * un navigateur dit qu'il a oublié cet abonnement — et accepte le reste. Sans
+ * cela, l'auto-nettoyage ne se vérifierait qu'en attendant qu'un vrai
+ * téléphone soit réinitialisé.
+ */
+const envoisSimules: string[] = [];
+vi.mock('web-push', () => ({
+  default: {
+    setVapidDetails: () => undefined,
+    sendNotification: (abonnement: { endpoint: string }) => {
+      if (abonnement.endpoint.includes('mort')) {
+        return Promise.reject(Object.assign(new Error('Gone'), { statusCode: 410 }));
+      }
+      if (abonnement.endpoint.includes('panne')) {
+        return Promise.reject(Object.assign(new Error('Boom'), { statusCode: 500 }));
+      }
+      envoisSimules.push(abonnement.endpoint);
+      return Promise.resolve({});
+    },
+  },
+}));
+
 vi.mock('@neondatabase/serverless', async () => {
   const { createNeonOverPg: create } = await import('../../lib/postgres');
   return { neon: (url: string) => create(url) };
@@ -1374,6 +1399,45 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
         title: `2 charges à payer — ${money(230000, 'FCFA')}`,
         body: 'Dont 1 en retard.',
       });
+    });
+
+    it('envoie, oublie les abonnements morts, garde ceux en panne', async () => {
+      process.env.VAPID_PUBLIC_KEY ||= 'cle-publique-de-test';
+      process.env.VAPID_PRIVATE_KEY ||= 'cle-privee-de-test';
+      envoisSimules.length = 0;
+      await creer({ paidOn: '2026-10-11' }); // échue le 11/11
+
+      const poser = (endpoint: string) =>
+        pool.query(
+          `INSERT INTO push_subscriptions (id, business_id, endpoint, p256dh, auth)
+           VALUES ($1, $2, $3, 'p', 'a')`,
+          [`sub_${endpoint}`, OWNER.businessId, endpoint]
+        );
+      await poser('https://push.test/vivant');
+      await poser('https://push.test/mort');
+      await poser('https://push.test/panne');
+
+      const bilan = await push.envoyerRappelsDuJour('2026-11-11');
+      expect(bilan).toMatchObject({ boutiques: 1, envoyes: 1, retires: 1, echecs: 1 });
+      expect(envoisSimules).toEqual(['https://push.test/vivant']);
+
+      // L'abonnement que le navigateur a oublié est retiré ; celui qui a
+      // simplement échoué reste, parce qu'une panne passagère n'est pas un
+      // abonnement mort — le supprimer priverait le gérant de ses rappels.
+      const { rows } = await pool.query<{ endpoint: string }>(
+        'SELECT endpoint FROM push_subscriptions ORDER BY endpoint'
+      );
+      expect(rows.map((r) => r.endpoint)).toEqual([
+        'https://push.test/panne',
+        'https://push.test/vivant',
+      ]);
+    });
+
+    it('n’envoie rien quand aucune charge n’est échue', async () => {
+      await creer({ paidOn: '2026-11-11' }); // échue le 11/12
+      envoisSimules.length = 0;
+      expect(await push.envoyerRappelsDuJour('2026-11-11')).toMatchObject({ boutiques: 0 });
+      expect(envoisSimules).toEqual([]);
     });
 
     it('se tait proprement sans clés configurées', async () => {

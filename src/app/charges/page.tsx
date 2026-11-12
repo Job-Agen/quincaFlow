@@ -5,6 +5,7 @@ import { CalendarClock, Pencil, Plus } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
 import { Badge, Button, Card, Empty, Notice, Segmented, Skeleton } from '@/components/ui';
 import ChargeSheet from '@/components/charges/ChargeSheet';
+import RappelsToggle from '@/components/charges/RappelsToggle';
 import PaiementChargeSheet from '@/components/charges/PaiementChargeSheet';
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
@@ -67,6 +68,8 @@ export default function ChargesPage() {
       <AppBar back="/more" title="Charges récurrentes" />
 
       <main className="page page--fab">
+        <RappelsToggle />
+
         <Segmented options={VUES} value={vue} onChange={setVue} />
 
         {erreur ? <Notice tone="error">{erreur}</Notice> : null}

@@ -3347,9 +3347,8 @@ effacer la promesse n'efface pas le fait.
 **Ce que cette section ne fait pas**
 
 **Prévenir téléphone éteint.** Le rappel vit dans l'application : il se voit à
-l'ouverture. Une notification qui arrive sur le téléphone sans qu'on ouvre
-l'application demande autre chose — un service de notification, une clé, et un
-travail planifié côté serveur, qu'aucune de ces pièces ne porte aujourd'hui.
+l'ouverture. La notification qui arrive sans qu'on ouvre l'application est
+l'objet du §68.
 
 **Critères d'acceptation**
 
@@ -3414,3 +3413,94 @@ c'est le genre d'erreur qu'on ne remarque qu'au bilan.
 3. L'écran annonce l'échéance calculée avant d'enregistrer.
 4. Un nombre de mois absurde — zéro, décimal — est ramené à un mois entier.
 5. Créer une charge écrit la dépense déclarée, sauf refus explicite.
+
+
+## 68. Le rappel qui arrive sans qu'on ouvre l'application
+
+**Objectif**
+
+Le §66 prévenait **à l'ouverture**. Un gérant qui n'ouvre pas son application
+le jour de l'échéance n'était prévenu de rien — et c'est précisément ce
+jour-là qu'il faut l'être.
+
+**F98 — Quatre pièces, et chacune peut manquer sans tout casser**
+
+| Pièce | Rôle |
+|---|---|
+| Le service worker | reçoit la notification, l'affiche, ouvre l'écran au clic |
+| L'abonnement | un navigateur sur un appareil, enregistré côté serveur |
+| L'envoi | signé avec les clés VAPID, par le service du navigateur |
+| Le déclencheur quotidien | décide chaque matin quoi envoyer, à qui |
+
+Sans clés configurées, **tout se tait proprement et le dit** — comme l'envoi
+de courriel du §57. Le bouton annonce « pas encore configurés » au lieu
+d'échouer sur un refus illisible.
+
+**F99 — « Sur cet appareil », pas « pour moi »**
+
+C'est un **navigateur** qu'on abonne, pas un compte. Le gérant qui ouvre
+l'application sur son téléphone et sur l'ordinateur de la boutique doit
+l'activer deux fois — et le libellé le dit, sans quoi il croirait avoir activé
+ce qui ne l'est qu'à moitié.
+
+L'adresse donnée par le service de distribution est la clé unique : un
+réabonnement ne crée pas de doublon, et un gérant qui réautorise trois fois ne
+reçoit pas trois notifications identiques.
+
+**F100 — Ce qui se répare tout seul, et ce qui ne doit pas**
+
+Un abonnement que le navigateur a oublié répond **410** ou **404** : il est
+retiré. Sans cela, le serveur réessaierait chaque matin jusqu'à la fin des
+temps une adresse qui ne répondra plus jamais.
+
+Une panne passagère — réseau de comptoir, service injoignable — est comptée
+mais **l'abonnement reste**. Le supprimer priverait le gérant de ses rappels
+pour une coupure de trente secondes.
+
+**F101 — Le déclencheur est la seule route sans session**
+
+Elle touche **toutes les boutiques**. Elle est donc gardée par un secret, et
+**sans ce secret elle refuse tout le monde** plutôt que de s'ouvrir : une
+route qui réveille tous les téléphones de tous les gérants ne doit pas
+dépendre d'une variable qu'on a oublié de poser.
+
+**F102 — La phrase du rappel**
+
+Une seule charge : on la nomme — c'est ce qui fait agir. Plusieurs : on
+compte, car une notification tronquée au milieu d'une liste ne dit rien. Le
+montant total vient en second : il dit s'il faut passer à la banque avant
+d'ouvrir.
+
+Une étiquette stable fait que le rappel du jour **remplace** celui d'hier. Un
+gérant parti trois jours ne doit pas retrouver douze notifications identiques.
+
+**Deux défauts trouvés en essayant, pas en relisant**
+
+**`web-push` est un module CommonJS.** L'import dynamique ne posait rien sur
+`.default`, et l'envoi éclatait sur un `undefined` — chaque matin, dans un
+travail que personne ne regarde. Les deux formes sont désormais acceptées.
+
+**`navigator.serviceWorker.ready` ne se résout jamais** tant qu'aucun service
+worker n'est actif : au premier chargement le temps qu'il s'installe, et
+toujours en développement où il n'est pas enregistré. L'attente est bornée ;
+au-delà, l'écran propose d'activer plutôt que de rester figé sur un bouton
+mort — punir le gérant d'une lenteur qui n'est pas la sienne.
+
+**Ce que l'hébergeur et les navigateurs imposent**
+
+Le déclencheur ne tourne qu'**une fois par jour** : le rappel part à heure
+fixe le jour de l'échéance, pas à la minute près. Et sur **iPhone**, les
+notifications n'arrivent que si l'application a été ajoutée à l'écran
+d'accueil ; sur Android, dès l'autorisation donnée.
+
+**Critères d'acceptation**
+
+1. Sans clés, la fonctionnalité s'annonce indisponible au lieu d'échouer.
+2. Un navigateur s'abonne et se désabonne des deux côtés à la fois.
+3. Un réabonnement ne crée pas de doublon.
+4. Le déclencheur refuse quiconque n'a pas le secret, et refuse tout le monde
+   si le secret n'est pas posé.
+5. Il n'envoie rien quand aucune charge n'est échue.
+6. Un abonnement mort est retiré ; un abonnement en panne est conservé.
+7. Le rappel nomme la charge seule, compte au-delà.
+8. L'écran ne reste jamais figé sur un bouton inerte sans l'expliquer.

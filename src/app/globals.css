@@ -1212,6 +1212,60 @@ select.input {
   gap: 6px;
 }
 
+/* Le branchement des rappels (§68). Une ligne qui se touche, pas un
+   interrupteur : son état se lit dans sa phrase, et une phrase se lit de
+   plus loin qu'un petit curseur. */
+.rappels {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+
+.rappels:disabled {
+  opacity: 0.7;
+}
+
+.rappels__icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.rappels__icone--on {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.rappels__corps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rappels__titre {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rappels__detail {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 /* Une case à cocher et sa phrase, sur une ligne : le libellé d'un champ
    ordinaire la mettrait au-dessus, loin de la case qu'elle explique (§67). */
 .field--inline {

@@ -93,7 +93,14 @@ async function envoyer(
 
   // Chargé à la demande : la bibliothèque ne sert qu'ici, et une vente au
   // comptoir n'a pas à la payer en temps de démarrage.
-  const webpush = (await import('web-push')).default;
+  //
+  // `web-push` est un module CommonJS : selon la façon dont il est transpilé,
+  // ses fonctions sont sur l'espace de noms ou sous `default`. Prendre l'un
+  // sans l'autre donnait un `undefined` qui n'éclatait qu'à l'envoi — c'est-
+  // à-dire chaque matin, dans un travail que personne ne regarde.
+  const bibliotheque = await import('web-push');
+  const webpush =
+    (bibliotheque as unknown as { default?: typeof bibliotheque }).default ?? bibliotheque;
   webpush.setVapidDetails(cles.contact, cles.publique, cles.privee);
 
   const charge = JSON.stringify(avis);
