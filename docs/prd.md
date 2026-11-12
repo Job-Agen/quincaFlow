@@ -3592,6 +3592,15 @@ deux transporteurs sur trois mois a de quoi le faire.
 Le transport reste **facultatif** partout. Une livraison que le fournisseur
 amène lui-même n'a rien à déclarer, et ne doit rien avoir à ignorer.
 
+**F109 — Le poste « Transport » des dépenses change de sens**
+
+Le transport des achats étant désormais dans le coût des marchandises, le
+noter **aussi** en dépense le déduirait deux fois. Le poste du §40 s'appelle
+donc **« Transport (hors achats) »** : il ne recueille plus que l'autre
+transport — livraisons aux clients, carburant, déplacements. Et les écrans
+qui invitaient à saisir « transport, salaires, loyer, pertes » n'invitent
+plus qu'aux trois derniers.
+
 **Critères d'acceptation**
 
 1. Une réception sans transport se comporte exactement comme avant.
@@ -3602,3 +3611,4 @@ amène lui-même n'a rien à déclarer, et ne doit rien avoir à ignorer.
 6. La somme des parts rend exactement le montant payé, arrondis compris.
 7. Un bon non chiffré répartit sur les quantités plutôt que de tout perdre.
 8. Le total du transport et le nom du transporteur se lisent sur la réception.
+9. Le poste de dépense « Transport » dit qu'il est **hors achats**.

@@ -238,7 +238,7 @@ export default function ReportsPage() {
               {data.expenseCount === 0 ? (
                 <Notice tone="warn" icon={<AlertTriangle size={17} />}>
                   Aucune dépense n’est enregistrée sur cette période : le bénéfice net affiché est
-                  donc votre marge brute. Transport, salaires, loyer et pertes en seront déduits dès
+                  donc votre marge brute. Salaires, loyer, électricité et pertes en seront déduits dès
                   que vous les saisirez.{' '}
                   <Link href="/expenses" className="link no-print">
                     Saisir une dépense
@@ -268,7 +268,7 @@ export default function ReportsPage() {
                 <Empty
                   icon={<Receipt size={26} className="muted" />}
                   title="Aucune dépense"
-                  hint="Notez transport, salaires, loyer et pertes pour obtenir un bénéfice réel."
+                  hint="Notez salaires, loyer, électricité et pertes pour obtenir un bénéfice réel."
                 />
               ) : (
                 <>

@@ -150,7 +150,7 @@ export function totalsOf(
 /**
  * Marge brute = ventes − coût des marchandises vendues.
  *
- * Ce n'est pas le bénéfice net : transport, salaires, loyer et pertes ne sont
+ * Ce n'est pas le bénéfice net : salaires, loyer, électricité et pertes ne sont
  * pas déduits (§13). L'interface doit dire « marge brute estimée », jamais
  * « bénéfice ».
  */

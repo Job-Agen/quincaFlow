@@ -10,7 +10,7 @@ import type { ExpenseRow, Receipt, Session } from '@/types';
  * Dépenses de la boutique (§39).
  *
  * C'est la pièce sans laquelle « bénéfice net » n'est qu'un mot : la marge brute
- * ne déduit que les marchandises (§13), et transport, salaires, loyer et pertes
+ * ne déduit que les marchandises (§13), et salaires, loyer, électricité et pertes
  * ne se déduisent que s'ils sont notés quelque part.
  *
  * Aucun mouvement de stock n'est écrit ici, y compris pour une perte. La perte

@@ -26,7 +26,10 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   UTILITIES: 'Énergie et eau',
   SALARY: 'Salaires des commis',
   STOCK_PURCHASE: 'Achat de stock',
-  TRANSPORT: 'Transport',
+  // Le transport des achats est déjà dans le coût des marchandises (§69) :
+  // ce poste ne recueille que l'autre transport — livraisons aux clients,
+  // carburant, déplacements. Le nommer évite de le compter deux fois.
+  TRANSPORT: 'Transport (hors achats)',
   OTHER: 'Divers',
 };
 

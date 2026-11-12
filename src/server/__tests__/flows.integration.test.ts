@@ -2236,7 +2236,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     it('sort les dépenses en négatif, pour qu’une somme de colonne tombe juste', async () => {
       await seedPeriode();
       const texte = lignes(await exports_.EXPORTS.rapport(OWNER.businessId, {})).join('\n');
-      expect(texte).toContain('Dépense — Transport;-1200');
+      expect(texte).toContain('Dépense — Transport (hors achats);-1200');
       expect(texte).toContain('Coût des marchandises vendues;-3187,5');
     });
 
