@@ -118,7 +118,7 @@ export default function ExpensesPage() {
               <Empty
                 icon={<Receipt size={26} className="muted" />}
                 title="Aucune dépense"
-                hint="Loyer, énergie, salaires, transport : ce qui n’est pas noté ici ne sera pas déduit du bénéfice."
+                hint="Loyer, énergie, salaires, pertes : ce qui n’est pas noté ici ne sera pas déduit du bénéfice."
               />
             ) : (
               <>
