@@ -5,7 +5,7 @@ import { str, num, list, enumValue } from '../lib/validate';
 import { round2, round3 } from '../utils/money';
 import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
-import { findUnit, weightedAverageCost } from '../domain/units';
+import { coutDeRevient, findUnit, weightedAverageCost } from '../domain/units';
 import { orderBalance, receivedValue, tooMuch } from '../domain/supplierDebt';
 import { entete, refus } from '../domain/pieceJointe';
 import { MOBILE_MONEY_PROVIDERS, PAYMENT_METHODS, providerFor } from '../domain/sale';
@@ -26,6 +26,7 @@ import {
   PO_MANUAL_STATUSES,
   orderTotal,
   receptionStatus,
+  repartirTransport,
   verrouDeSuppression,
   remainingOf,
   verrouDeCommande,
@@ -133,9 +134,12 @@ export async function getPurchaseOrder(
     sql`SELECT ${sql.unsafe(ITEM_COLUMNS)} FROM purchase_order_items
          WHERE purchase_order_id = ${orderId} AND business_id = ${businessId}
          ORDER BY position`,
-    sql`SELECT id, reference, notes, received_at FROM purchase_receipts
-         WHERE purchase_order_id = ${orderId} AND business_id = ${businessId}
-         ORDER BY received_at DESC`,
+    sql`SELECT r.id, r.reference, r.notes, r.transporter, r.received_at,
+               COALESCE((SELECT SUM(i.transport_cost) FROM purchase_receipt_items i
+                          WHERE i.purchase_receipt_id = r.id), 0)::float8 AS transport_cost
+          FROM purchase_receipts r
+         WHERE r.purchase_order_id = ${orderId} AND r.business_id = ${businessId}
+         ORDER BY r.received_at DESC`,
     // Le fichier ne voyage pas avec la fiche (§40, §59) : trois factures
     // scannées feraient dix mégaoctets de réponse à chaque ouverture de la
     // commande. La colonne `url` ne sort donc que lorsqu'elle porte un lien ;
@@ -498,12 +502,17 @@ export async function updatePurchaseOrderStatus(
    */
   if (status === 'RECEIVED') {
     const lignes = order.items
-      .map((item) => ({ itemId: item.id, quantity: remainingOf(item) }))
+      .map((item) => ({ itemId: item.id, quantity: remainingOf(item), unitCost: item.unit_cost }))
       .filter((ligne) => ligne.quantity > 0);
     if (lignes.length === 0) return order;
+    // Le camion se paie d'un bloc : la somme saisie se répartit entre les
+    // marchandises qui entrent (§69), faute de quoi elle resterait hors du
+    // coût de revient et la marge serait surestimée d'autant.
+    const parts = repartirTransport(lignes, body.transport);
     return receivePurchaseOrder(session, orderId, {
-      lines: lignes,
+      lines: lignes.map((ligne) => ({ ...ligne, transport: parts.get(ligne.itemId) ?? 0 })),
       notes: 'Commande marquée livrée',
+      transporter: body.transporter,
     });
   }
 
@@ -624,11 +633,18 @@ export async function receivePurchaseOrder(
   // au lieu d'expliquer ce qui cloche.
   const itemsById = new Map(order.items.map((item) => [item.id, item]));
   const quantities = new Map<string, number>();
+  // Ce que le transporteur a coûté, ligne par ligne (§69). Cumulé comme les
+  // quantités : deux entrées visant la même ligne additionnent leurs camions.
+  const transports = new Map<string, number>();
   (list(body.lines, 'lignes reçues') as Record<string, unknown>[]).forEach((line, index) => {
     const item = itemsById.get(str(line.itemId, `ligne ${index + 1}`));
     if (!item) throw badRequest('Ligne de commande introuvable.');
     const quantity = round3(num(line.quantity, `quantité reçue (ligne ${index + 1})`, { min: 0 }));
     quantities.set(item.id, round3((quantities.get(item.id) || 0) + quantity));
+    const transport = round2(
+      num(line.transport, `transport (ligne ${index + 1})`, { min: 0, required: false })
+    );
+    transports.set(item.id, round2((transports.get(item.id) || 0) + transport));
   });
 
   const lines = [...quantities].map(([itemId, quantity]) => {
@@ -665,11 +681,13 @@ export async function receivePurchaseOrder(
         RETURNING value
       )
       INSERT INTO purchase_receipts (
-        id, business_id, purchase_order_id, reference, notes, user_id
+        id, business_id, purchase_order_id, reference, notes, transporter, user_id
       ) VALUES (
         ${receiptId}, ${session.businessId}, ${orderId},
         ${format.prefix}::text || lpad((SELECT value FROM numero)::text, ${format.pad}::int, '0'),
-        ${str(body.notes, 'notes', { required: false, max: 500 })}, ${session.userId}
+        ${str(body.notes, 'notes', { required: false, max: 500 })},
+        ${str(body.transporter, 'transporteur', { required: false, max: 160 })},
+        ${session.userId}
       )
     `,
   ];
@@ -681,16 +699,19 @@ export async function receivePurchaseOrder(
 
   received.forEach(({ item, quantity }) => {
     const baseQuantity = round3(quantity * item.unit_factor);
-    const unitBaseCost = round2(item.unit_cost / (item.unit_factor || 1));
+    // Le prix du fournisseur n'est pas le coût : le camion en fait partie
+    // (§69). C'est sur le rendu en boutique que la marge doit se calculer.
+    const transport = transports.get(item.id) || 0;
+    const unitBaseCost = coutDeRevient(item.unit_cost, quantity, item.unit_factor, transport);
 
     queries.push(
       sql`
         INSERT INTO purchase_receipt_items (
           id, business_id, purchase_receipt_id, purchase_order_item_id,
-          product_id, quantity, unit_cost
+          product_id, quantity, unit_cost, transport_cost
         ) VALUES (
           ${newId('rci')}, ${session.businessId}, ${receiptId}, ${item.id},
-          ${item.product_id}, ${quantity}, ${item.unit_cost}
+          ${item.product_id}, ${quantity}, ${item.unit_cost}, ${transport}
         )
       `,
       sql`

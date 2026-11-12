@@ -384,3 +384,56 @@ export function purchaseOrderMessage(
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/**
+ * Répartition du transport entre les marchandises d'une livraison (§69).
+ *
+ * Le gérant paie le camion d'un bloc : « 15 000 au transporteur », pas
+ * « 9 000 pour le ciment et 6 000 pour les fers ». Pour que chaque
+ * marchandise porte sa part de ce qu'elle a coûté *rendue en boutique*, la
+ * somme est répartie au prorata de la valeur des lignes : ce qui pèse lourd
+ * dans la facture pèse lourd dans le camion.
+ *
+ * À défaut de valeur — des marchandises offertes, un bon non chiffré —, on
+ * répartit sur les quantités, puis à parts égales. Mieux vaut une clé
+ * approximative qu'un transport qui disparaît.
+ *
+ * Les arrondis sont rattrapés sur la plus grosse ligne : la somme des parts
+ * rend exactement ce qui a été payé, sans quoi quelques francs
+ * s'évaporeraient à chaque livraison.
+ */
+export function repartirTransport(
+  lignes: { itemId: string; quantity: unknown; unitCost?: unknown }[],
+  total: unknown
+): Map<string, Money> {
+  const parts = new Map<string, Money>();
+  lignes.forEach((ligne) => parts.set(ligne.itemId, 0));
+
+  const somme = round2(toNumber(total));
+  if (somme <= 0 || lignes.length === 0) return parts;
+
+  const valeur = (ligne: (typeof lignes)[number]) =>
+    Math.max(0, toNumber(ligne.quantity)) * Math.max(0, toNumber(ligne.unitCost));
+  const quantite = (ligne: (typeof lignes)[number]) => Math.max(0, toNumber(ligne.quantity));
+
+  let poids = lignes.map(valeur);
+  if (poids.reduce((a, b) => a + b, 0) <= 0) poids = lignes.map(quantite);
+  if (poids.reduce((a, b) => a + b, 0) <= 0) poids = lignes.map(() => 1);
+  const totalPoids = poids.reduce((a, b) => a + b, 0);
+
+  let distribue = 0;
+  let plusLourde = 0;
+  lignes.forEach((ligne, index) => {
+    const part = round2((somme * (poids[index] ?? 0)) / totalPoids);
+    parts.set(ligne.itemId, part);
+    distribue = round2(distribue + part);
+    if ((poids[index] ?? 0) > (poids[plusLourde] ?? 0)) plusLourde = index;
+  });
+
+  const reste = round2(somme - distribue);
+  if (reste !== 0) {
+    const cible = lignes[plusLourde];
+    if (cible) parts.set(cible.itemId, round2((parts.get(cible.itemId) ?? 0) + reste));
+  }
+  return parts;
+}

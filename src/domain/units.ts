@@ -109,6 +109,33 @@ export function costPerBaseUnit(
 }
 
 /**
+ * Ce qu'une marchandise coûte **rendue en boutique** (§69).
+ *
+ * Le prix du fournisseur n'est pas le coût : il faut encore payer le
+ * transporteur. Un sac de ciment à 3 900 pris au dépôt et 200 de camion coûte
+ * 4 100 sur l'étagère, et c'est sur 4 100 que la marge doit se calculer — sans
+ * quoi le gérant croit gagner ce qu'il a déjà dépensé.
+ *
+ * Le résultat est ramené à l'unité de base, comme le reste des coûts : un
+ * carton de 40 pièces livré avec 800 de transport donne 20 de transport par
+ * pièce, pas 800.
+ */
+export function coutDeRevient(
+  unitCost: unknown,
+  quantity: unknown,
+  factor: unknown,
+  transport: unknown = 0
+): Money {
+  const quantite = Math.max(0, toNumber(quantity));
+  const facteur = toNumber(factor, 1) || 1;
+  const base = quantite * facteur;
+  // Sans quantité reçue, rien à répartir : on rend le coût unitaire ramené à
+  // l'unité de base, pour que l'appelant n'ait pas à distinguer ce cas.
+  if (base <= 0) return round2(toNumber(unitCost) / facteur);
+  return round2((toNumber(unitCost) * quantite + Math.max(0, toNumber(transport))) / base);
+}
+
+/**
  * Coût moyen pondéré après réapprovisionnement.
  *
  * Réassortir 400 pièces à 320 quand on en détient 100 à 300 ne donne pas 320

@@ -422,6 +422,10 @@ export interface PurchaseReceiptRow {
   id: string;
   reference: string;
   notes: string | null;
+  /** Qui a livré, s'il y a eu un camion (§69). */
+  transporter?: string | null;
+  /** Ce que le transport a coûté sur cette livraison, toutes lignes confondues. */
+  transport_cost?: number;
   received_at: string;
 }
 

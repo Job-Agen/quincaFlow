@@ -437,6 +437,107 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     ).rejects.toThrow(/plus de .* qu'il n'en reste/i);
   });
 
+  it('fait entrer le transport dans le coût de revient, et donc dans la marge (§69)', async () => {
+    // Un sac de ciment payé 3 900 au dépôt, plus 20 000 de camion pour cent
+    // sacs, coûte 4 100 sur l'étagère. Revendu 4 300, il rapporte 200 et non
+    // 400 : c'est toute la raison d'être du §69.
+    const ciment = await products.createProduct(OWNER, {
+      name: 'Ciment 50 kg',
+      baseUnit: 'sac',
+      purchasePrice: 0,
+      sellingPrice: 4300,
+      stockQuantity: 0,
+      units: [],
+    });
+    await pool.query(
+      "INSERT INTO suppliers (id, business_id, name) VALUES ('sup_t', $1, 'Dépôt Central')",
+      [OWNER.businessId]
+    );
+    const order = await purchases.createPurchaseOrder(OWNER, {
+      supplierId: 'sup_t',
+      items: [{ productId: ciment.id, quantity: 100, unitCost: 3900 }],
+    });
+
+    const recu = await purchases.receivePurchaseOrder(OWNER, order.id, {
+      lines: [{ itemId: order.items[0]!.id, quantity: 100, transport: 20000 }],
+      transporter: 'Transports Koffi',
+    });
+    expect(recu.status).toBe('RECEIVED');
+
+    const { rows } = await pool.query(
+      'SELECT purchase_price::float8 AS cost FROM products WHERE id = $1',
+      [ciment.id]
+    );
+    expect(rows[0]!.cost).toBe(4100);
+
+    // Le transport est retenu sur la réception, et une seule fois : le
+    // compter aussi en dépense le déduirait deux fois du bénéfice.
+    expect(recu.receipts[0]!.transport_cost).toBe(20000);
+    expect(recu.receipts[0]!.transporter).toBe('Transports Koffi');
+    const depenses = await pool.query(
+      'SELECT count(*)::int AS n FROM expenses WHERE business_id = $1',
+      [OWNER.businessId]
+    );
+    expect(depenses.rows[0]!.n).toBe(0);
+
+    // La marge figée à la vente part du coût rendu, pas du prix du dépôt.
+    await sales.createSale(OWNER, {
+      lines: [{ productId: ciment.id, quantity: 1 }],
+      amountPaid: 4300,
+    });
+    const vendu = await pool.query('SELECT unit_cost::float8 AS cost FROM sale_items');
+    expect(vendu.rows[0]!.cost).toBe(4100);
+  });
+
+  it('répartit le transport saisi d’un bloc entre les marchandises livrées (§69)', async () => {
+    // Le gérant ne ventile pas son camion ligne par ligne : il paie 8 000 et
+    // marque la commande livrée. Les 8 000 se répartissent au prorata de la
+    // valeur — 30 000 contre 10 000, donc 6 000 contre 2 000.
+    const cher = await products.createProduct(OWNER, {
+      name: 'Tôle',
+      baseUnit: 'pièce',
+      purchasePrice: 0,
+      sellingPrice: 5000,
+      stockQuantity: 0,
+      units: [],
+    });
+    const leger = await products.createProduct(OWNER, {
+      name: 'Pointe 10',
+      baseUnit: 'kg',
+      purchasePrice: 0,
+      sellingPrice: 1500,
+      stockQuantity: 0,
+      units: [],
+    });
+    await pool.query(
+      "INSERT INTO suppliers (id, business_id, name) VALUES ('sup_u', $1, 'Dépôt Central')",
+      [OWNER.businessId]
+    );
+    const order = await purchases.createPurchaseOrder(OWNER, {
+      supplierId: 'sup_u',
+      items: [
+        { productId: cher.id, quantity: 10, unitCost: 3000 },
+        { productId: leger.id, quantity: 10, unitCost: 1000 },
+      ],
+    });
+
+    const livree = await purchases.updatePurchaseOrderStatus(OWNER, order.id, {
+      status: 'RECEIVED',
+      transport: 8000,
+      transporter: 'Transports Koffi',
+    });
+    expect(livree.status).toBe('RECEIVED');
+    expect(livree.receipts[0]!.transport_cost).toBe(8000);
+
+    const { rows } = await pool.query(
+      'SELECT id, purchase_price::float8 AS cost FROM products WHERE id = ANY($1)',
+      [[cher.id, leger.id]]
+    );
+    const cout = (id: string) => rows.find((row) => row.id === id)!.cost;
+    expect(cout(cher.id)).toBe(3600); // (10×3 000 + 6 000) / 10
+    expect(cout(leger.id)).toBe(1200); // (10×1 000 + 2 000) / 10
+  });
+
   it('cumule les lignes visant la même ligne de commande avant de les vérifier', async () => {
     const vitre = await products.createProduct(OWNER, {
       name: 'Vitre 60 cm',

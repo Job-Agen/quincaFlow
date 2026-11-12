@@ -3504,3 +3504,101 @@ d'accueil ; sur Android, dès l'autorisation donnée.
 6. Un abonnement mort est retiré ; un abonnement en panne est conservé.
 7. Le rappel nomme la charge seule, compte au-delà.
 8. L'écran ne reste jamais figé sur un bouton inerte sans l'expliquer.
+
+---
+
+## 69. Ce que la marchandise coûte vraiment : le transport
+
+**Objectif**
+
+Le prix du fournisseur n'est pas le coût. Entre le dépôt et l'étagère il y a
+un camion, et il se paie. Tant que ce camion restait hors des comptes, la
+marge affichée était celle d'une marchandise qui serait venue toute seule :
+un sac de ciment acheté 3 900 et revendu 4 300 semblait rapporter 400, alors
+qu'avec 200 de transport il n'en rapporte que 200 — **la moitié**.
+
+Le gérant doit donc pouvoir enregistrer ce qu'il a payé au transporteur pour
+chaque marchandise, et ce montant doit entrer dans le calcul du bénéfice.
+
+**F103 — Les deux dates existaient déjà**
+
+La demande évoquait trois choses ; deux étaient déjà en place et affichées :
+
+| Ce qui est demandé | Où c'est enregistré | Où ça se lit |
+|---|---|---|
+| La date où le fournisseur a validé le paiement | `supplier_payments.created_at` | carte **Règlements** de la commande |
+| La date où les marchandises ont été livrées | `purchase_receipts.received_at` | carte **Réceptions** |
+| Ce qu'a coûté le transport | **nouveau** (§69) | carte **Réceptions** |
+
+Rien n'a donc été ajouté pour les dates : les constater valait mieux que les
+réinventer à côté, ce qui aurait donné deux vérités pour un même fait.
+
+**F104 — Le transport est un coût, pas une dépense**
+
+C'est la décision structurante, et elle se joue à un endroit : le transport
+est **incorporé au coût de revient** de la marchandise, et **n'est pas**
+écrit comme dépense d'exploitation.
+
+L'écrire aux deux endroits le déduirait **deux fois** du bénéfice — une fois
+en rognant la marge de vente, une fois en charge. Le gérant se croirait plus
+pauvre qu'il n'est, exactement au moment où il essaie de savoir s'il gagne sa
+vie.
+
+Le chemin est donc celui qui existait déjà pour le prix d'achat :
+
+```
+transport → coût de revient → coût moyen pondéré → products.purchase_price
+          → sale_items.unit_cost (figé à la vente) → marge → bénéfice (§39)
+```
+
+**F105 — Le coût rendu en boutique**
+
+`coutDeRevient(prix, quantité, facteur, transport)` ramène le tout à l'unité
+de base, comme le reste des coûts : un carton de 40 pièces livré avec 800 de
+transport donne **20 de transport par pièce**, pas 800. Sans quantité reçue,
+il rend le prix ramené à l'unité de base — l'appelant n'a pas de cas
+particulier à traiter.
+
+**F106 — Un camion se paie d'un bloc, une marchandise se vend à l'unité**
+
+Le gérant ne ventile pas son transport ligne par ligne : il paie 15 000 au
+transporteur. Les deux écrans de réception traitent donc le montant
+différemment, chacun selon ce qu'il sait :
+
+| Écran | Saisie | Traitement |
+|---|---|---|
+| **Marquer la commande livrée** (§63) | un montant, un transporteur | réparti au **prorata de la valeur** des lignes |
+| **Réceptionner** (détail, §22) | un montant **par marchandise** | pris tel quel |
+
+Le prorata de la valeur est la clé la plus juste à portée : ce qui pèse lourd
+dans la facture pèse lourd dans le camion. À défaut de valeur — un bon non
+chiffré, des marchandises offertes —, la répartition se fait sur les
+quantités, puis à parts égales. Mieux vaut une clé approximative qu'un
+transport qui disparaît.
+
+**F107 — Pas un franc ne s'évapore**
+
+Les arrondis sont rattrapés sur la **plus grosse ligne** : la somme des parts
+rend exactement ce qui a été payé. Posé sur une ligne minuscule, le franc
+d'écart en déformerait le coût unitaire de plusieurs pour cent ; posé sur la
+plus grosse, il s'y perd.
+
+**F108 — Ce que la réception garde**
+
+Le transporteur est noté sur la réception, le montant sur chaque ligne reçue.
+La carte **Réceptions** affiche le total et le nom : un gérant qui compare
+deux transporteurs sur trois mois a de quoi le faire.
+
+Le transport reste **facultatif** partout. Une livraison que le fournisseur
+amène lui-même n'a rien à déclarer, et ne doit rien avoir à ignorer.
+
+**Critères d'acceptation**
+
+1. Une réception sans transport se comporte exactement comme avant.
+2. 100 sacs à 3 900 avec 20 000 de transport donnent un coût d'achat de 4 100.
+3. Ce coût est celui qui se fige dans la vente, donc dans la marge.
+4. Le transport n'apparaît **pas** en dépense : il n'est déduit qu'une fois.
+5. Un montant saisi d'un bloc se répartit au prorata de la valeur des lignes.
+6. La somme des parts rend exactement le montant payé, arrondis compris.
+7. Un bon non chiffré répartit sur les quantités plutôt que de tout perdre.
+8. Le total du transport et le nom du transporteur se lisent sur la réception.

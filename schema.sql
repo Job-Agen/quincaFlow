@@ -339,6 +339,10 @@ CREATE TABLE IF NOT EXISTS purchase_receipts (
   purchase_order_id text NOT NULL REFERENCES purchase_orders (id) ON DELETE CASCADE,
   reference         text NOT NULL,
   notes             text,
+  -- Qui a livré, quand il y a eu un camion (§69). Le montant, lui, vit sur
+  -- chaque ligne : le transporteur facture rarement d'un seul bloc, et c'est
+  -- par article que le coût de revient se calcule.
+  transporter       text,
   user_id           text REFERENCES users (id) ON DELETE SET NULL,
   received_at       timestamptz NOT NULL DEFAULT now(),
   UNIQUE (business_id, reference)
@@ -376,7 +380,12 @@ CREATE TABLE IF NOT EXISTS purchase_receipt_items (
   purchase_order_item_id text NOT NULL REFERENCES purchase_order_items (id) ON DELETE CASCADE,
   product_id             text REFERENCES products (id) ON DELETE SET NULL,
   quantity               numeric(14, 3) NOT NULL,
-  unit_cost              numeric(14, 2) NOT NULL DEFAULT 0
+  unit_cost              numeric(14, 2) NOT NULL DEFAULT 0,
+  -- Ce que le transporteur a coûté pour cette marchandise (§69). Il entre
+  -- dans le coût de revient, donc dans la marge de chaque vente à venir — et
+  -- nulle part ailleurs : compté aussi en dépense, il serait déduit deux fois
+  -- du bénéfice.
+  transport_cost         numeric(14, 2) NOT NULL DEFAULT 0 CHECK (transport_cost >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS receipt_items_receipt_idx ON purchase_receipt_items (purchase_receipt_id);

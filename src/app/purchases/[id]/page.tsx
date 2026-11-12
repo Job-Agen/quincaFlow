@@ -74,6 +74,10 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
   const [receiving, setReceiving] = useState(false);
   const [livraison, setLivraison] = useState(false);
   const [reception, setReception] = useState(false);
+  // Le transport de la livraison rapide : saisi d'un bloc, réparti par le
+  // serveur (§69). En texte, pour qu'un champ vidé reste vide.
+  const [transport, setTransport] = useState('');
+  const [transporteur, setTransporteur] = useState('');
   const [paying, setPaying] = useState(false);
   const [suppression, setSuppression] = useState(false);
 
@@ -169,8 +173,18 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
     setReception(true);
     setIssue(null);
     try {
-      setData(await api.patch<PurchaseOrder>(`/api/purchase-orders/${id}`, { status: 'RECEIVED' }));
+      setData(
+        await api.patch<PurchaseOrder>(`/api/purchase-orders/${id}`, {
+          status: 'RECEIVED',
+          // Le transport est saisi d'un bloc ici : le serveur le répartit
+          // entre les marchandises qui entrent (§69).
+          transport: Number(transport) || 0,
+          transporter: transporteur,
+        })
+      );
       setLivraison(false);
+      setTransport('');
+      setTransporteur('');
     } catch (error_) {
       setIssue(errorMessage(error_));
     }
@@ -419,6 +433,12 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                       <div className="list__body">
                         <div className="list__title">{receipt.reference}</div>
                         <div className="list__sub">{dateTime(receipt.received_at)}</div>
+                        {receipt.transport_cost ? (
+                          <div className="list__sub">
+                            Transport : {money(receipt.transport_cost, currency)}
+                            {receipt.transporter ? ` — ${receipt.transporter}` : ''}
+                          </div>
+                        ) : null}
                       </div>
                       {receipt.notes ? <span className="small muted">{receipt.notes}</span> : null}
                     </div>
@@ -537,7 +557,7 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
               >
                 <p className="small">
                   Tout ce qui reste à livrer sera reçu, le stock augmentera d’autant et le coût
-                  d’achat sera recalculé en moyenne pondérée.
+                  d’achat sera recalculé en moyenne pondérée, transport compris.
                 </p>
                 <ul className="purchase-items">
                   {data.items
@@ -551,6 +571,26 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
                       </li>
                     ))}
                 </ul>
+                {/* Ce qu'a coûté le camion entre dans le prix de revient
+                  (§69) : sans lui, la marge affichée serait celle d'une
+                  marchandise qu'on n'aurait pas eu à faire venir. */}
+                <TextField
+                  label="Transport (optionnel)"
+                  hint="Ce que vous avez payé au transporteur pour cette livraison, réparti entre les marchandises."
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={transport}
+                  onChange={(event) => setTransport(event.target.value)}
+                />
+                <TextField
+                  label="Transporteur (optionnel)"
+                  placeholder="Nom du transporteur"
+                  value={transporteur}
+                  onChange={(event) => setTransporteur(event.target.value)}
+                />
                 <Button variant="success" block disabled={reception} onClick={recevoirTout}>
                   <PackageCheck size={18} />
                   {reception ? 'Réception…' : 'Confirmer la réception'}
@@ -634,13 +674,19 @@ function ReceiveSheet({
   order: PurchaseOrder;
   onClose: () => void;
   onConfirm: (body: {
-    lines: { itemId: string; quantity: number }[];
+    lines: { itemId: string; quantity: number; transport: number }[];
     notes: string;
+    transporter: string;
   }) => Promise<void>;
 }) {
   // Quantités saisies, par identifiant de ligne. Une ligne absente signifie
   // « le reste à livrer », valeur pré-remplie tant que le gérant n'y touche pas.
   const [lines, setLines] = useState<Record<string, number>>({});
+  // Ce que le camion a coûté, marchandise par marchandise (§69). Ici le
+  // gérant répartit lui-même : c'est l'écran de la réception détaillée, celui
+  // où l'on reprend chaque ligne.
+  const [transports, setTransports] = useState<Record<string, string>>({});
+  const [transporteur, setTransporteur] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -653,23 +699,41 @@ function ReceiveSheet({
       {error ? <Notice tone="error">{error}</Notice> : null}
       <p className="small muted">
         Indiquez ce qui a réellement été livré. Le stock augmentera de ces quantités et le coût
-        d&apos;achat sera recalculé en moyenne pondérée.
+        d&apos;achat sera recalculé en moyenne pondérée, transport compris.
       </p>
 
       {pending.map((item) => (
-        <TextField
-          key={item.id}
-          label={`${item.product_name} (${item.unit_label})`}
-          hint={`Reste à livrer : ${quantity(remainingOf(item))}`}
-          type="number"
-          inputMode="decimal"
-          min="0"
-          max={remainingOf(item)}
-          step="any"
-          value={valueOf(item)}
-          onChange={(event) => setLines({ ...lines, [item.id]: Number(event.target.value) || 0 })}
-        />
+        <div key={item.id} className="reception-ligne">
+          <TextField
+            label={`${item.product_name} (${item.unit_label})`}
+            hint={`Reste à livrer : ${quantity(remainingOf(item))}`}
+            type="number"
+            inputMode="decimal"
+            min="0"
+            max={remainingOf(item)}
+            step="any"
+            value={valueOf(item)}
+            onChange={(event) => setLines({ ...lines, [item.id]: Number(event.target.value) || 0 })}
+          />
+          <TextField
+            label="Transport (optionnel)"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="any"
+            placeholder="0"
+            value={transports[item.id] ?? ''}
+            onChange={(event) => setTransports({ ...transports, [item.id]: event.target.value })}
+          />
+        </div>
       ))}
+
+      <TextField
+        label="Transporteur (optionnel)"
+        placeholder="Nom du transporteur"
+        value={transporteur}
+        onChange={(event) => setTransporteur(event.target.value)}
+      />
 
       <TextField
         label="Note (optionnelle)"
@@ -688,7 +752,12 @@ function ReceiveSheet({
           try {
             await onConfirm({
               notes,
-              lines: pending.map((item) => ({ itemId: item.id, quantity: valueOf(item) })),
+              transporter: transporteur,
+              lines: pending.map((item) => ({
+                itemId: item.id,
+                quantity: valueOf(item),
+                transport: Number(transports[item.id]) || 0,
+              })),
             });
           } catch (issue) {
             setError(errorMessage(issue));

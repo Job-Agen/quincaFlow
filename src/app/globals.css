@@ -979,6 +979,16 @@ select.input {
   gap: 14px;
 }
 
+/* Une marchandise réceptionnée : sa quantité et son transport vont ensemble,
+   et se détachent de la marchandise suivante (§69). */
+.reception-ligne {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
 /* ────────────────────────── Étapes d'un workflow ───────────────────── */
 
 .steps {
