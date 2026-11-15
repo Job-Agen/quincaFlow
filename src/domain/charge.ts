@@ -80,6 +80,31 @@ export function joursAvant(echeance: string, aujourdhui: string): number {
   return Math.round((lire(echeance).getTime() - lire(aujourdhui).getTime()) / un);
 }
 
+/**
+ * L'échéance précédente : `prochaineEcheance` à l'envers.
+ *
+ * Elle ne sert qu'à retrouver le début d'une période quand la date du dernier
+ * paiement manque — une charge importée, une ligne réparée à la main. Le
+ * serveur pose toujours `last_paid_on`, et c'est cette date-là qui fait foi :
+ * celle-ci n'est qu'un filet.
+ */
+export function echeancePrecedente(echeance: string, mois: number): string {
+  const base = lire(echeance);
+  const jourVoulu = base.getDate();
+  const cible = new Date(
+    base.getFullYear(),
+    base.getMonth() - Math.max(MOIS_MIN, Math.round(mois)),
+    1,
+    12,
+    0,
+    0,
+    0
+  );
+  const dernierJour = new Date(cible.getFullYear(), cible.getMonth() + 1, 0, 12).getDate();
+  cible.setDate(Math.min(jourVoulu, dernierJour));
+  return enJour(cible);
+}
+
 export type EtatCharge = 'en-retard' | 'bientot' | 'plus-tard';
 
 /** Fenêtre d'avertissement : une semaine suffit pour réunir la somme. */
@@ -106,6 +131,64 @@ export function phraseEcheance(echeance: string, aujourdhui: string): string {
   if (jours === 1) return 'À payer demain';
   if (jours <= JOURS_AVERTISSEMENT) return `Dans ${jours} jours`;
   return `Dans ${jours} jours`;
+}
+
+/**
+ * Le décompte d'une charge (§70).
+ *
+ * Le gérant ne veut pas lire une date, il veut voir fondre un délai : 30, 29,
+ * 28… Ce que ce module rend, c'est de quoi dessiner ce chrono — combien de
+ * jours restent, sur combien, et quelle part du répit est déjà consommée.
+ *
+ * `part` est la part **écoulée**, de 0 à 1 : l'anneau de l'écran montre ce
+ * qu'il en reste, donc `1 − part`, et se vide à mesure que l'échéance
+ * approche. En retard, il ne reste rien : la part est pleine, et le nombre
+ * compte alors les jours de retard.
+ */
+/**
+ * Le mot qui doit apparaître à côté du chrono, s'il y en a un (§70).
+ *
+ * Le nombre de l'anneau dit déjà combien de jours : répéter « Dans 6 jours »
+ * à côté d'un « 6 j » ne dit rien de plus, et prend la place du nom de la
+ * charge. Seuls deux cas méritent des mots, parce que le nombre seul s'y
+ * lirait de travers : le retard — où le chrono compte à l'envers — et le jour
+ * même, où il ne reste plus rien à attendre.
+ */
+export function alerteEcheance(echeance: string, aujourdhui: string): string | null {
+  const jours = joursAvant(echeance, aujourdhui);
+  if (jours < 0) return 'En retard';
+  if (jours === 0) return 'Aujourd’hui';
+  return null;
+}
+
+export interface Decompte {
+  /** Jours restants ; négatif quand l'échéance est passée. */
+  jours: number;
+  /** Durée de la période, en jours — 28, 30 ou 31 selon les mois. */
+  total: number;
+  /** Jours déjà écoulés depuis le dernier paiement. */
+  ecoules: number;
+  /** Part écoulée, de 0 à 1. */
+  part: number;
+  etat: EtatCharge;
+}
+
+export function decompte(
+  charge: {
+    next_due_on: string;
+    last_paid_on?: string | null;
+    interval_months: number;
+  },
+  aujourdhui: string
+): Decompte {
+  const debut =
+    charge.last_paid_on || echeancePrecedente(charge.next_due_on, charge.interval_months);
+  // Une période d'au moins un jour : payer et redevoir le même jour donnerait
+  // sinon une division par zéro, et un anneau indessinable.
+  const total = Math.max(1, joursAvant(charge.next_due_on, debut));
+  const jours = joursAvant(charge.next_due_on, aujourdhui);
+  const ecoules = Math.min(total, Math.max(0, total - jours));
+  return { jours, total, ecoules, part: ecoules / total, etat: etatCharge(charge.next_due_on, aujourdhui) };
 }
 
 export interface ChargeRow {

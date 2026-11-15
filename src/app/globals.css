@@ -979,6 +979,77 @@ select.input {
   gap: 14px;
 }
 
+/* Le chrono d'une charge récurrente (§70).
+   L'anneau se vide à mesure que l'échéance approche ; en retard il se remplit,
+   pour que « plus rien » et « trop tard » ne se ressemblent pas. */
+.rebours {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+
+.rebours svg {
+  display: block;
+  width: 48px;
+  height: 48px;
+}
+
+.rebours__piste {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 4;
+}
+
+.rebours__arc {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke: var(--blue);
+  /* Le passage d'un jour à l'autre se voit : sans transition, le chrono
+     sauterait sans qu'on sache qu'il a bougé. */
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.rebours__nombre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+}
+
+.rebours__unite {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted);
+  align-self: center;
+  margin-top: 3px;
+}
+
+.rebours[data-etat='bientot'] .rebours__arc {
+  stroke: var(--amber);
+}
+
+.rebours[data-etat='en-retard'] .rebours__arc {
+  stroke: var(--red);
+}
+
+.rebours[data-etat='en-retard'] .rebours__nombre {
+  color: var(--red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rebours__arc {
+    transition: none;
+  }
+}
+
 /* Une marchandise réceptionnée : sa quantité et son transport vont ensemble,
    et se détachent de la marchandise suivante (§69). */
 .reception-ligne {

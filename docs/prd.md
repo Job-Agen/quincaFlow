@@ -3612,3 +3612,88 @@ plus qu'aux trois derniers.
 7. Un bon non chiffré répartit sur les quantités plutôt que de tout perdre.
 8. Le total du transport et le nom du transporteur se lisent sur la réception.
 9. Le poste de dépense « Transport » dit qu'il est **hors achats**.
+
+---
+
+## 70. Le chrono qui fond sous les yeux
+
+**Objectif**
+
+Le §66 disait l'échéance, le §67 la calculait, le §68 la rappelait le jour
+venu. Il manquait ce qui se passe **entre les deux** : le gérant qui ouvre
+son application le 12 veut voir qu'il lui reste vingt-trois jours, et le
+voir baisser.
+
+« Ça va partir de 30, 29, 28, jusqu'à arriver à 0 le jour où je dois payer.
+Et quand je paye, je relance. » C'est un chrono, pas un calendrier.
+
+**F110 — Un anneau qui se vide, un nombre qui baisse**
+
+Chaque charge en cours ouvre sa ligne par un anneau. Le nombre au centre
+donne les jours ; l'arc montre la part du répit qui reste, et fond avec lui.
+
+| Moment | Anneau | Nombre |
+|---|---|---|
+| Le jour du paiement | plein, bleu | la durée de la période |
+| À l'approche (≤ 7 jours) | mince, ambre | ce qui reste |
+| Le jour de l'échéance | vide | 0 |
+| Passé l'échéance | **plein, rouge** | les jours de retard |
+
+Le plein rouge n'est pas une coquetterie. Un anneau vide dit « il ne reste
+rien » ; un retard n'est pas cela, c'est un débordement. Les deux états se
+suivent à un jour d'intervalle et ne doivent pas se ressembler.
+
+**F111 — La période est celle qu'on a vécue, pas une moyenne**
+
+Le chrono part du **dernier paiement** et vise l'échéance : du 5 février au
+5 mars il y a 28 jours, du 5 juillet au 5 août il y en a 31. Un « mois » de
+30 jours partout afficherait 30 le jour même du paiement d'une charge qui en
+compte 31, et le gérant verrait son chrono rester bloqué un jour entier.
+
+C'est `last_paid_on` qui fait foi, jamais une période reconstituée. Changer
+une charge de « chaque mois » à « tous les 2 mois » ne déplace pas
+l'échéance en cours : recalculer le départ depuis l'échéance donnerait un
+répit de soixante jours qui n'a jamais existé.
+
+**F112 — « En temps réel » veut dire sans rechargement**
+
+Une application de comptoir reste ouverte des heures sur le même écran. Le
+jour est donc relu **à chaque minuit**, et le nombre change tout seul.
+
+Deux précautions, l'une et l'autre nées d'un défaut réel :
+
+- le minuteur vise minuit **plus deux secondes** — viser minuit pile relit
+  parfois l'horloge une milliseconde trop tôt, et le chrono reste sur la
+  veille jusqu'au lendemain ;
+- un onglet endormi ne reçoit pas son minuteur à l'heure. Le téléphone posé
+  sur le comptoir toute la nuit rouvrirait sur la veille : au retour, on
+  relit l'horloge plutôt que de faire confiance au minuteur.
+
+**F113 — Le nombre a repris la place des mots**
+
+L'écran disait « Dans 6 jours » dans une pastille. À côté d'un anneau qui
+affiche « 6 j », la pastille ne disait plus rien de neuf — et elle prenait
+la place du nom de la charge, qui passait à la ligne.
+
+Il ne reste donc de pastille que là où le nombre seul se lirait de travers :
+**« En retard »**, parce que le chrono y compte à l'envers, et
+**« Aujourd'hui »**, parce qu'un 0 ne dit pas qu'il faut agir. Partout
+ailleurs, l'anneau suffit.
+
+**F114 — Payer relance le chrono**
+
+Rien à ajouter : le paiement écrit la dépense et reporte l'échéance depuis
+le jour du paiement (§66). L'anneau repart plein de lui-même — une patente
+annuelle réglée avec 35 jours de retard repasse de « 35 j » rouge à
+« 365 j » bleu.
+
+**Critères d'acceptation**
+
+1. Le nombre baisse d'une unité par jour écoulé.
+2. Il vaut 0 le jour de l'échéance, et l'anneau est vide.
+3. Passé l'échéance, l'anneau est plein et rouge, et le nombre compte le retard.
+4. L'anneau ne sort jamais de ses bornes, même sur un retard de plusieurs mois.
+5. La durée de départ est celle de la période réelle : 28, 30 ou 31 jours.
+6. Le chrono compte depuis le dernier paiement, jamais depuis une période reconstituée.
+7. À minuit, le nombre change sans que personne ne recharge l'écran.
+8. Un paiement remet l'anneau à plein.

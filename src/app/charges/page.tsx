@@ -7,10 +7,12 @@ import { Badge, Button, Card, Empty, Notice, Segmented, Skeleton } from '@/compo
 import ChargeSheet from '@/components/charges/ChargeSheet';
 import RappelsToggle from '@/components/charges/RappelsToggle';
 import PaiementChargeSheet from '@/components/charges/PaiementChargeSheet';
+import CompteARebours from '@/components/charges/CompteARebours';
 import { api } from '@/client/api';
 import { useResource } from '@/client/useResource';
+import { useJour } from '@/client/jour';
 import { useSession } from '@/client/session';
-import { etatCharge, phraseEcheance, phrasePeriode, type ChargeRow } from '@/domain/charge';
+import { alerteEcheance, phrasePeriode, type ChargeRow } from '@/domain/charge';
 import { money, shortDate } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 
@@ -27,14 +29,6 @@ const VUES = [
   { value: 'rangees', label: 'Rangées' },
 ];
 
-/** Aujourd'hui en `YYYY-MM-DD`, comme la base la range. */
-const aujourdhui = () => {
-  const jour = new Date();
-  return `${jour.getFullYear()}-${String(jour.getMonth() + 1).padStart(2, '0')}-${String(
-    jour.getDate()
-  ).padStart(2, '0')}`;
-};
-
 export default function ChargesPage() {
   const { currency } = useSession();
   const [vue, setVue] = useState('actives');
@@ -46,7 +40,9 @@ export default function ChargesPage() {
     inactives: vue === 'rangees' ? '1' : '',
   });
 
-  const jour = aujourdhui();
+  // Relu à chaque minuit : le décompte baisse sous les yeux du gérant, sans
+  // qu'il ait à recharger (§70).
+  const jour = useJour();
   const listees = useMemo(
     () => (data || []).filter((charge) => (vue === 'rangees' ? !charge.active : charge.active)),
     [data, vue]
@@ -91,7 +87,7 @@ export default function ChargesPage() {
             ) : (
               <div className="list">
                 {listees.map((charge) => {
-                  const etat = etatCharge(charge.next_due_on, jour);
+                  const alerte = charge.active ? alerteEcheance(charge.next_due_on, jour) : null;
                   return (
                     <div key={charge.id} className="list__row list__row--geste">
                       <button
@@ -99,6 +95,12 @@ export default function ChargesPage() {
                         className="list__link"
                         onClick={() => setPaiement(charge)}
                       >
+                        {/* Le chrono ouvre la ligne : c'est lui qu'on vient
+                          regarder, et il se lit avant le nom (§70). Une
+                          charge rangée n'en a pas — plus rien ne court. */}
+                        {charge.active ? (
+                          <CompteARebours charge={charge} jour={jour} />
+                        ) : null}
                         <div className="list__body">
                           <div className="list__title">{charge.label}</div>
                           {/* La périodicité seule : le nom que le gérant écrit
@@ -111,17 +113,16 @@ export default function ChargesPage() {
                         </div>
                         <div className="list__end">
                           <strong className="num">{money(charge.amount, currency)}</strong>
-                          {/* L'échéance se dit en jours, pas en date : « 11/12 »
-                            oblige le gérant à compter, et le retard se perd. */}
-                          <Badge
-                            tone={
-                              etat === 'en-retard' ? 'red' : etat === 'bientot' ? 'amber' : 'grey'
-                            }
-                          >
-                            {charge.active
-                              ? phraseEcheance(charge.next_due_on, jour)
-                              : shortDate(charge.next_due_on)}
-                          </Badge>
+                          {/* Une pastille seulement quand le nombre ne suffit
+                            pas : le retard et le jour même. Partout ailleurs
+                            elle ne ferait que répéter le chrono, en prenant
+                            la place du nom de la charge. */}
+                          {alerte ? (
+                            <Badge tone={alerte === 'En retard' ? 'red' : 'amber'}>{alerte}</Badge>
+                          ) : null}
+                          {!charge.active ? (
+                            <Badge tone="grey">{shortDate(charge.next_due_on)}</Badge>
+                          ) : null}
                         </div>
                       </button>
                       {/* Un seul signe en bout de ligne : deux se disputaient
