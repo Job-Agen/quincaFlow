@@ -1285,6 +1285,9 @@ select.input {
   border-radius: var(--r-lg);
   border: 1px solid var(--line);
   padding: 22px 18px;
+  /* Le repère du cachet, qui se pose en travers du corps du document (§73). */
+  position: relative;
+  overflow: hidden;
 }
 
 /*
@@ -1297,30 +1300,47 @@ select.input {
  * les navigateurs suppriment l'aplat à l'impression.
  */
 .invoice--cancelled {
-  position: relative;
-  overflow: hidden;
   border-color: var(--red);
 }
 
-.invoice--cancelled::after {
-  content: 'ANNULÉE';
+/* Le cachet de la facture (§73).
+   Un seul dessin pour les quatre états : seule la teinte change, et le mot.
+   Il traverse le corps du document, donc il survit à la capture d'écran comme
+   à l'impression — d'où `print-color-adjust`, sans quoi les navigateurs
+   suppriment l'aplat à l'impression. */
+.doc__tampon {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) rotate(-24deg);
-  /* Incliné, « ANNULÉE » déborde vite : la taille est calée sur la largeur de
-     la carte, pas sur celle de l'écran, pour que le mot reste entier. */
-  font-size: clamp(26px, 9.5vw, 54px);
+  transform: translate(-50%, -50%) rotate(-14deg);
+  /* Incliné, « PARTIELLE » déborde vite : la taille est calée sur la largeur
+     de la carte, pas sur celle de l'écran, pour que le mot reste entier. */
+  font-size: clamp(24px, 8.5vw, 50px);
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: rgba(200, 32, 26, 0.16);
-  border: 6px solid rgba(200, 32, 26, 0.16);
-  border-radius: 12px;
+  border-width: 5px;
+  border-style: solid;
+  border-radius: 10px;
   padding: 4px 18px;
   pointer-events: none;
   white-space: nowrap;
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
+}
+
+.doc__tampon[data-teinte='vert'] {
+  color: rgba(23, 128, 77, 0.17);
+  border-color: rgba(23, 128, 77, 0.17);
+}
+
+.doc__tampon[data-teinte='ambre'] {
+  color: rgba(138, 90, 16, 0.17);
+  border-color: rgba(138, 90, 16, 0.17);
+}
+
+.doc__tampon[data-teinte='rouge'] {
+  color: rgba(200, 32, 26, 0.16);
+  border-color: rgba(200, 32, 26, 0.16);
 }
 
 /* Rappel lisible en toutes circonstances, filigrane ignoré ou non. */

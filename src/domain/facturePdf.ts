@@ -1,6 +1,6 @@
 import { saleBalance } from './credit';
 import { montantEnLettres } from './lettres';
-import { PAYMENT_STATUS_LABELS, paymentLabel } from './sale';
+import { PAYMENT_STATUS_LABELS, paymentLabel, tamponDe } from './sale';
 import { amount, dateTime, money, quantity } from '../utils/format';
 import type { BusinessRow, Sale } from '@/types';
 
@@ -69,7 +69,24 @@ export interface BlocImage {
   source: string;
 }
 
-export type Bloc = BlocTexte | BlocFilet | BlocCadre | BlocImage;
+/**
+ * Le tampon : un mot encadré, posé en travers de la pièce (§73).
+ *
+ * `x` et `y` visent son **centre**, parce qu'un tampon incliné n'a pas de
+ * coin qu'on puisse viser utilement. L'angle et la largeur du cadre sont
+ * laissés au tracé, qui seul connaît la largeur du mot dans sa police.
+ */
+export interface BlocTampon {
+  type: 'tampon';
+  x: number;
+  y: number;
+  texte: string;
+  teinte: 'vert' | 'ambre' | 'rouge';
+  /** Inclinaison en degrés, dans le sens du cachet qu'on pose à la main. */
+  angle: number;
+}
+
+export type Bloc = BlocTexte | BlocFilet | BlocCadre | BlocImage | BlocTampon;
 
 export interface PlanPage {
   blocs: Bloc[];
@@ -230,8 +247,11 @@ export function planFacture(
 
   sale.items.forEach((item) => {
     // Le décompte final réclame sa place : on change de page avant d'écrire une
-    // ligne qui déborderait, jamais après.
-    if (y < BAS + 120) {
+    // ligne qui déborderait, jamais après. Depuis le §73 cette place comprend
+    // le cachet, qui vient sous la dernière ligne : réservée à 120, elle le
+    // faisait remonter dans le tableau d'une facture longue, par-dessus les
+    // prix que le client vient vérifier.
+    if (y < BAS + 176) {
       pages.push({ blocs });
       blocs = [];
       y = PAGE.hauteur - MARGE;
@@ -296,6 +316,10 @@ export function planFacture(
     })
   );
 
+  // La hauteur du cachet est retenue ici, sous la dernière ligne du corps ;
+  // le cachet lui-même est posé tout à la fin, pour passer par-dessus (§73).
+  const yTampon = Math.max(y - 42, BAS + 74);
+
   // ── Le pied, posé en bas de page et non à la suite du texte.
   blocs.push({ type: 'filet', x1: MARGE, x2: COL.total, y: BAS + 26, epaisseur: 0.4 });
   const pied = [business?.name, business?.tax_id ? `IFU / NIF : ${business.tax_id}` : null]
@@ -314,6 +338,25 @@ export function planFacture(
     blocs.push(texte(PAGE.largeur / 2, yPied, ligne, 7.5, { gris: true, aligne: 'centre' }));
     yPied -= 10;
   }
+
+  // ── Le cachet, en dernier.
+  //
+  // Un cachet se pose sur le papier écrit, pas dessous : posé avant, les
+  // lignes le recouvriraient et il ne se verrait plus. À gauche, sous le
+  // texte, dans le blanc qui reste — un cachet doit se voir, pas cacher un
+  // prix que le client vient vérifier. Et sous la dernière ligne plutôt qu'à
+  // une hauteur fixe : une facture annulée, qui n'a ni somme en lettres ni
+  // reste dû, se termine bien plus haut, et le cachet retombait en plein
+  // tableau.
+  const marque = tamponDe(sale.status, sale.payment_status);
+  blocs.push({
+    type: 'tampon',
+    x: MARGE + 118,
+    y: yTampon,
+    texte: marque.texte,
+    teinte: marque.teinte,
+    angle: -14,
+  });
 
   pages.push({ blocs });
 

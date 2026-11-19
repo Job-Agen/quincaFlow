@@ -92,6 +92,29 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
 };
 
 /**
+ * Le tampon de la facture (§73).
+ *
+ * Une facture se lit d'un coup d'œil, à bout de bras, par-dessus un comptoir.
+ * Le mot encadré en travers dit ce qu'il en est avant même qu'on cherche la
+ * ligne du total — c'est le geste du cachet humide, et il n'a pas d'équivalent
+ * en petites lettres.
+ *
+ * L'annulation l'emporte sur le paiement : une facture annulée et payée reste
+ * annulée, et le client qui lirait « PAYÉE » croirait tenir un justificatif.
+ */
+export interface Tampon {
+  texte: string;
+  teinte: 'vert' | 'ambre' | 'rouge';
+}
+
+export function tamponDe(statut: SaleStatus, paiement: PaymentStatus): Tampon {
+  if (statut === 'CANCELLED') return { texte: 'ANNULÉE', teinte: 'rouge' };
+  if (paiement === 'PAID') return { texte: 'PAYÉE', teinte: 'vert' };
+  if (paiement === 'PARTIAL') return { texte: 'PARTIELLE', teinte: 'ambre' };
+  return { texte: 'IMPAYÉE', teinte: 'ambre' };
+}
+
+/**
  * Développe une ligne de panier en ligne de vente chiffrée.
  *
  * `entry.unitPrice` permet au vendeur de négocier ; en son absence on retombe

@@ -65,12 +65,13 @@ function vente(over: Partial<Sale> = {}): Sale {
   };
 }
 
-const afficher = (sale: Sale) => {
-  const { container } = render(
-    <InvoiceDocument sale={sale} business={BOUTIQUE} currency="FCFA" />
-  );
-  return (container.textContent || '').replace(/\s+/g, ' ');
-};
+const monter = (sale: Sale) =>
+  render(<InvoiceDocument sale={sale} business={BOUTIQUE} currency="FCFA" />).container;
+
+const afficher = (sale: Sale) => (monter(sale).textContent || '').replace(/\s+/g, ' ');
+
+/** Le cachet posé en travers de la pièce (§73). */
+const tampon = (sale: Sale) => monter(sale).querySelector('.doc__tampon');
 
 describe('ce que la facture engage', () => {
   it('dit qui vend, avec son numéro fiscal', () => {
@@ -162,5 +163,45 @@ describe('le pied de page', () => {
   it('déclare la facture acquittée une fois soldée', () => {
     const vu = afficher(vente({ amount_paid: 88000, payment_status: 'PAID' }));
     expect(vu).toContain('Facture acquittée');
+  });
+});
+
+/**
+ * Le cachet (§73).
+ *
+ * Une facture se lit à bout de bras, par-dessus un comptoir. Le mot encadré
+ * en travers doit dire ce qu'il en est avant qu'on cherche la ligne du total
+ * — et surtout, il ne doit jamais dire l'inverse de ce que la facture porte.
+ */
+describe('le cachet de la facture (§73)', () => {
+  it('marque « PAYÉE » une facture soldée', () => {
+    const marque = tampon(vente({ amount_paid: 88000, payment_status: 'PAID' }));
+    expect(marque?.textContent).toBe('PAYÉE');
+    expect(marque?.getAttribute('data-teinte')).toBe('vert');
+  });
+
+  it('distingue l’acompte de l’impayé', () => {
+    expect(tampon(vente({ amount_paid: 50000, payment_status: 'PARTIAL' }))?.textContent).toBe(
+      'PARTIELLE'
+    );
+    expect(tampon(vente({ amount_paid: 0, payment_status: 'UNPAID' }))?.textContent).toBe(
+      'IMPAYÉE'
+    );
+  });
+
+  it('marque « ANNULÉE » même une vente qui avait été payée', () => {
+    // Le piège : une vente encaissée puis annulée reste annulée. Un cachet
+    // « PAYÉE » dessus, et le client croit tenir un justificatif.
+    const marque = tampon(
+      vente({ status: 'CANCELLED', amount_paid: 88000, payment_status: 'PAID' })
+    );
+    expect(marque?.textContent).toBe('ANNULÉE');
+    expect(marque?.getAttribute('data-teinte')).toBe('rouge');
+  });
+
+  it('se tait pour les lecteurs d’écran, que le badge renseigne déjà', () => {
+    // Le statut est écrit en toutes lettres à côté du total : le cachet le
+    // répéterait à l'oreille sans rien ajouter.
+    expect(tampon(vente())?.getAttribute('aria-hidden')).toBe('true');
   });
 });

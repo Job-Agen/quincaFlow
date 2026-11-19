@@ -205,9 +205,16 @@ describe('le bon de commande en PDF (§60)', () => {
         expect(bloc.x2).toBeLessThanOrEqual(PAGE.largeur);
         continue;
       }
+      // Le tampon est centré sur son point et porte un cadre : sa largeur
+      // est celle du mot, plus la marge que le tracé lui ajoute (§73).
       const largeur =
-        bloc.type === 'texte' ? largeurApprochee(bloc.texte, bloc.taille) : bloc.largeur;
-      const aligne = bloc.type === 'texte' ? bloc.aligne : 'gauche';
+        bloc.type === 'texte'
+          ? largeurApprochee(bloc.texte, bloc.taille)
+          : bloc.type === 'tampon'
+            ? largeurApprochee(bloc.texte, 26) + 32
+            : bloc.largeur;
+      const aligne =
+        bloc.type === 'texte' ? bloc.aligne : bloc.type === 'tampon' ? 'centre' : 'gauche';
       const gauche =
         aligne === 'droite' ? bloc.x - largeur : aligne === 'centre' ? bloc.x - largeur / 2 : bloc.x;
       expect(gauche).toBeGreaterThanOrEqual(0);

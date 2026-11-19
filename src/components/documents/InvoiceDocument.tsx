@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui';
 import Letterhead from '@/components/documents/Letterhead';
-import { PAYMENT_STATUS_LABELS, paymentLabel } from '@/domain/sale';
+import { PAYMENT_STATUS_LABELS, paymentLabel, tamponDe } from '@/domain/sale';
 import { saleBalance } from '@/domain/credit';
 import { montantEnLettres } from '@/domain/lettres';
 import { amount, dateTime, money, quantity } from '@/utils/format';
@@ -28,12 +28,20 @@ export default function InvoiceDocument({
   currency: string;
 }) {
   const cancelled = sale.status === 'CANCELLED';
+  // Le cachet (§73) : le mot qu'on lit à bout de bras, avant de chercher la
+  // ligne du total.
+  const marque = tamponDe(sale.status, sale.payment_status);
   // Ce que le client doit encore : affiché seulement s'il reste quelque chose,
   // un « Reste dû : 0 » sur une facture soldée semant le doute pour rien.
   const reste = saleBalance(sale.total, sale.amount_paid);
 
   return (
     <article className={`invoice doc${cancelled ? ' invoice--cancelled' : ''}`}>
+      {/* Le badge du total dit déjà le statut en toutes lettres : le cachet
+        est là pour l'œil, et se tait pour les lecteurs d'écran. */}
+      <span className="doc__tampon" data-teinte={marque.teinte} aria-hidden="true">
+        {marque.texte}
+      </span>
       {/* Sur une feuille, l'identité tient la gauche et la pièce la
         droite : c'est la forme d'une facture, et le centrage de
         l'écran de téléphone la ferait lire comme un ticket (§56). */}

@@ -117,9 +117,16 @@ describe('les bords de la feuille', () => {
       expect(bloc.y).toBeLessThanOrEqual(PAGE.hauteur);
       if (bloc.type === 'filet') continue;
 
+      // Le tampon est centré sur son point et porte un cadre : sa largeur
+      // est celle du mot, plus la marge que le tracé lui ajoute (§73).
       const largeur =
-        bloc.type === 'texte' ? largeurApprochee(bloc.texte, bloc.taille) : bloc.largeur;
-      const aligne = bloc.type === 'texte' ? bloc.aligne : 'gauche';
+        bloc.type === 'texte'
+          ? largeurApprochee(bloc.texte, bloc.taille)
+          : bloc.type === 'tampon'
+            ? largeurApprochee(bloc.texte, 26) + 32
+            : bloc.largeur;
+      const aligne =
+        bloc.type === 'texte' ? bloc.aligne : bloc.type === 'tampon' ? 'centre' : 'gauche';
       const gauche =
         aligne === 'droite' ? bloc.x - largeur : aligne === 'centre' ? bloc.x - largeur / 2 : bloc.x;
 
@@ -195,5 +202,72 @@ describe('le repli du texte', () => {
 
   it('rend une seule ligne quand tout tient', () => {
     expect(replie('Total', 20)).toEqual(['Total']);
+  });
+});
+
+/**
+ * Le cachet de la pièce PDF (§73).
+ *
+ * C'est la facture qui part sur WhatsApp : c'est elle que le client garde, et
+ * c'est sur elle que le mot doit se voir. Ces tests gardent les deux choses
+ * qu'un cachet peut rater — dire le mauvais mot, ou couvrir un chiffre.
+ */
+describe('le cachet (§73)', () => {
+  const cachetDe = (sale: Sale) =>
+    planFacture(sale, BOUTIQUE, 'FCFA')
+      .pages.flatMap((page) => page.blocs)
+      .find((bloc) => bloc.type === 'tampon');
+
+  it('dit le mot qui correspond à l’état de la vente', () => {
+    expect(cachetDe(vente({ amount_paid: 88000, payment_status: 'PAID' }))).toMatchObject({
+      texte: 'PAYÉE',
+      teinte: 'vert',
+    });
+    expect(cachetDe(vente({ amount_paid: 50000, payment_status: 'PARTIAL' }))).toMatchObject({
+      texte: 'PARTIELLE',
+    });
+    expect(cachetDe(vente({ amount_paid: 0, payment_status: 'UNPAID' }))).toMatchObject({
+      texte: 'IMPAYÉE',
+    });
+    expect(
+      cachetDe(vente({ status: 'CANCELLED', amount_paid: 88000, payment_status: 'PAID' }))
+    ).toMatchObject({ texte: 'ANNULÉE', teinte: 'rouge' });
+  });
+
+  it('se pose par-dessus le reste, jamais dessous', () => {
+    // Un cachet se pose sur le papier écrit. S'il était posé avant les
+    // lignes, elles le recouvriraient et il ne se verrait plus.
+    const blocs = planFacture(vente(), BOUTIQUE, 'FCFA').pages.at(-1)!.blocs;
+    const cachet = blocs.findIndex((bloc) => bloc.type === 'tampon');
+    expect(cachet).toBeGreaterThan(0);
+    expect(cachet).toBeGreaterThan(blocs.map((bloc) => bloc.type).lastIndexOf('texte'));
+  });
+
+  it('reste sous la dernière ligne, que la facture soit longue ou courte', () => {
+    // Une vente annulée n'a ni somme en lettres ni reste dû : elle se termine
+    // bien plus haut. Un cachet à hauteur fixe retomberait alors en plein
+    // tableau, sur les prix que le client vient vérifier.
+    const bas = (sale: Sale) => {
+      const page = planFacture(sale, BOUTIQUE, 'FCFA').pages.at(-1)!;
+      const cachet = page.blocs.find((bloc) => bloc.type === 'tampon')!;
+      const textes = page.blocs.filter((bloc) => bloc.type === 'texte');
+      // Le pied est posé en bas de page, hors du fil du texte : on compare au
+      // dernier texte du corps, pas à lui.
+      const corps = textes.filter((bloc) => bloc.y > 100);
+      return { cachet, plusBas: Math.min(...corps.map((bloc) => bloc.y)) };
+    };
+
+    // La facture longue est le cas qui tranche : son corps descend jusqu'au
+    // pied, et la place réservée au décompte final doit comprendre le cachet,
+    // sans quoi il remonte dans le tableau.
+    const longue = vente({
+      items: Array.from({ length: 20 }, (_, index) =>
+        article({ id: `sit_${index}`, product_name: `Article ${index}` })
+      ),
+    });
+    for (const sale of [vente(), vente({ status: 'CANCELLED', payment_status: 'PAID' }), longue]) {
+      const { cachet, plusBas } = bas(sale);
+      expect(cachet.y).toBeLessThan(plusBas);
+    }
   });
 });

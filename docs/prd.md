@@ -3860,3 +3860,76 @@ promesse qu'on ne tient pas.
 5. Une marchandise cochée sans quantité est nommée, et rien n'est envoyé.
 6. Une marchandise entièrement reçue n'est plus proposée.
 7. Après une réception partielle, la commande passe en « partiellement livrée ».
+
+---
+
+## 73. Le cachet de la facture
+
+**Objectif**
+
+Une facture se lit à bout de bras, par-dessus un comptoir, souvent à l'envers.
+Le statut y était écrit — une pastille à côté du règlement, une mention au
+pied — mais il fallait le chercher.
+
+Le gérant veut le geste du cachet humide : **le mot en travers de la pièce**,
+qui dit ce qu'il en est avant qu'on ait trouvé la ligne du total.
+
+**F126 — Quatre mots, un seul dessin**
+
+| État de la vente | Cachet | Teinte |
+|---|---|---|
+| Soldée | **PAYÉE** | vert |
+| Acompte versé | **PARTIELLE** | ambre |
+| Rien encaissé | **IMPAYÉE** | ambre |
+| Annulée | **ANNULÉE** | rouge |
+
+Les mots sont ceux des pastilles du §24, en capitales : un vocabulaire pour
+toute l'application, et rien à réapprendre.
+
+**F127 — L'annulation l'emporte sur le paiement**
+
+Une vente encaissée puis annulée reste annulée. L'ordre des règles n'est pas
+un détail de rédaction : un cachet « PAYÉE » sur une facture annulée, et le
+client croit tenir un justificatif.
+
+**F128 — Déduit, jamais déclaré**
+
+Le statut n'est pas une étiquette qu'on pose : il se lit sur l'argent reçu.
+Payer, c'est enregistrer un versement ; annuler, c'est annuler la vente
+(§25). Un statut qu'on poserait à la main pourrait dire « payée » d'une
+facture dont la caisse n'a jamais vu l'argent — et c'est précisément ce
+qu'une facture ne doit pas pouvoir faire.
+
+**F129 — Sur la pièce, pas seulement à l'écran**
+
+Le cachet est sur les deux faces du document : celle qu'on montre au client
+sur le téléphone, et le PDF qui part sur WhatsApp ou par courriel (§57). Le
+second est celui que le client garde.
+
+Dans le PDF, il est posé **en dernier** : un cachet se pose sur le papier
+écrit, pas dessous. Posé avant les lignes, elles le recouvriraient.
+
+**F130 — Il se voit sans rien cacher**
+
+Deux règles de place, nées d'essais ratés :
+
+- **Sous la dernière ligne, pas à une hauteur fixe.** Une facture annulée n'a
+  ni somme en lettres ni reste dû : elle se termine bien plus haut, et un
+  cachet calé en bas du total retombait en plein tableau, sur les prix que le
+  client vient vérifier.
+- **La place du décompte final comprend le cachet.** Réservée à 120 points,
+  elle laissait le cachet d'une facture de vingt lignes remonter dans le
+  tableau. Elle en réserve 176, quitte à passer à la page suivante.
+
+À l'écran, le cachet est pâle et traverse le corps du document : il survit à
+la capture d'écran comme à l'impression. Et il se tait pour les lecteurs
+d'écran, que la pastille du total renseigne déjà.
+
+**Critères d'acceptation**
+
+1. Une facture soldée porte « PAYÉE » en vert, à l'écran comme dans le PDF.
+2. Un acompte porte « PARTIELLE », une facture non réglée « IMPAYÉE ».
+3. Une vente annulée porte « ANNULÉE », même si elle avait été encaissée.
+4. Le cachet ne recouvre aucune ligne de prix, facture courte ou longue.
+5. Dans le PDF, le cachet est tracé après tout le reste.
+6. Le statut reste déduit des montants : aucun écran ne permet de le poser.
