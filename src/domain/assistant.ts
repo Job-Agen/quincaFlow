@@ -1,3 +1,5 @@
+import { money, quantity, withUnit } from '../utils/format';
+
 /**
  * L'assistant de la boutique (§71).
  *
@@ -259,35 +261,143 @@ export function outilsPour(proprietaire: boolean): Outil[] {
 export const MAX_TOURS = 6;
 
 /**
- * Ce que l'assistant sait de son métier.
+ * La réponse, écrite par l'application (§71).
  *
- * Deux choses comptent ici, et elles sont écrites pour être lues par le
- * modèle, pas par un développeur : qu'il parle la langue du comptoir, et
- * qu'il ne prétende jamais avoir fait ce qu'il n'a que proposé.
+ * C'est le remplacement d'un modèle de langage par des phrases que nous
+ * tenons. Elles sont moins souples — et elles ne mentent jamais, ne coûtent
+ * rien, et répondent sans réseau sortant. Pour « combien j'ai vendu », c'est
+ * un meilleur marché.
  */
-export function invite(contexte: {
-  boutique: string;
-  gerant: string;
-  proprietaire: boolean;
-  devise: string;
-  jour: string;
-}): string {
-  return [
-    `Tu es l'assistant de la quincaillerie « ${contexte.boutique} », dans l'application MaQuincaillerie.`,
-    `Tu parles à ${contexte.gerant}, ${contexte.proprietaire ? 'le propriétaire' : 'un vendeur'} de la boutique. Nous sommes le ${contexte.jour}. La monnaie est le ${contexte.devise}.`,
-    '',
-    'Comment tu réponds :',
-    '— En français simple, celui d’un commerçant togolais. Pas de jargon comptable.',
-    '— Court. Deux ou trois phrases, ou une petite liste. Jamais de tableau.',
-    '— Les montants en toutes lettres de chiffres, avec la monnaie : « 80 000 FCFA ».',
-    '',
-    'Ce que tu ne fais jamais :',
-    '— Inventer un chiffre. Si tu ne l’as pas lu par un outil, tu dis que tu ne sais pas.',
-    '— Dire qu’une vente, une dépense ou un réassort est enregistré. Toi, tu le **proposes** ;',
-    '  c’est le gérant qui valide d’un appui, et l’application le lui annonce elle-même.',
-    '— Supposer un identifiant. Cherche d’abord, écris ensuite.',
-    '',
-    'Quand une demande est ambiguë — un produit qui ressemble à trois autres, un montant',
-    'qui manque —, pose une question courte au lieu de deviner.',
-  ].join('\n');
+export function formuler(outil: string, donnees: unknown, devise: string): string {
+  const d = donnees as Record<string, unknown>;
+
+  switch (outil) {
+    case 'resume_boutique': {
+      const lignes = [
+        `Aujourd’hui : ${entier(d.nombre_de_ventes)} vente${Number(d.nombre_de_ventes) > 1 ? 's' : ''} pour ${money(d.ventes_du_jour, devise)}.`,
+      ];
+      if (d.marge_du_jour !== undefined) lignes.push(`Marge du jour : ${money(d.marge_du_jour, devise)}.`);
+      if (Number(d.produits_en_alerte) > 0) {
+        lignes.push(`${entier(d.produits_en_alerte)} produit(s) à racheter.`);
+      }
+      if (Number(d.dettes_clients) > 0) {
+        // Un reste à encaisser n'a pas toujours un client en face : une vente
+        // au comptoir laissée incomplète n'est rattachée à personne. Annoncer
+        // « 0 client vous doit 2 900 » ne voudrait rien dire.
+        lignes.push(
+          Number(d.nombre_de_debiteurs) > 0
+            ? `${entier(d.nombre_de_debiteurs)} client(s) vous doivent ${money(d.dettes_clients, devise)}.`
+            : `Il reste ${money(d.dettes_clients, devise)} à encaisser sur des ventes.`
+        );
+      }
+      if (Number(d.dettes_fournisseurs) > 0) {
+        lignes.push(`Vous devez ${money(d.dettes_fournisseurs, devise)} à vos fournisseurs.`);
+      }
+      if (Number(d.charges_echues_ou_proches) > 0) {
+        lignes.push(`${entier(d.charges_echues_ou_proches)} charge(s) à payer bientôt.`);
+      }
+      return lignes.join('\n');
+    }
+
+    case 'chercher_produit': {
+      const trouves = (donnees as Record<string, unknown>[]) || [];
+      if (trouves.length === 0) return 'Je ne trouve aucun produit qui porte ce nom.';
+      return trouves
+        .slice(0, 8)
+        .map(
+          (produit) =>
+            `• ${produit.nom} : ${withUnit(Number(produit.stock), String(produit.unite))} en stock, ` +
+            `à ${money(produit.prix_vente, devise)}`
+        )
+        .join('\n');
+    }
+
+    case 'stock_bas': {
+      const bas = (donnees as Record<string, unknown>[]) || [];
+      if (bas.length === 0) return 'Rien à racheter : aucun produit n’est sous son seuil.';
+      return [
+        'À racheter :',
+        ...bas
+          .slice(0, 10)
+          .map(
+            (produit) =>
+              `• ${produit.nom} : ${withUnit(Number(produit.stock), String(produit.unite))} ` +
+              `(seuil ${quantity(produit.seuil)})`
+          ),
+      ].join('\n');
+    }
+
+    case 'ventes_recentes': {
+      const ventes = (donnees as Record<string, unknown>[]) || [];
+      if (ventes.length === 0) return 'Aucune vente enregistrée pour l’instant.';
+      return ventes
+        .slice(0, 10)
+        .map((vente) => {
+          const reste = Number(vente.total) - Number(vente.paye);
+          return (
+            `• ${vente.reference} : ${money(vente.total, devise)}` +
+            (vente.client ? ` — ${vente.client}` : '') +
+            (reste > 0 ? ` — reste ${money(reste, devise)}` : '')
+          );
+        })
+        .join('\n');
+    }
+
+    case 'rapport_financier': {
+      const quand =
+        d.periode === 'mois_dernier'
+          ? 'Le mois dernier'
+          : d.periode === '30j'
+            ? 'Sur 30 jours'
+            : d.periode === 'tout'
+              ? 'Depuis le début'
+              : 'Ce mois-ci';
+      return [
+        `${quand} : ${money(d.chiffre_affaires, devise)} de ventes.`,
+        `Coût des marchandises : ${money(d.cout_des_marchandises, devise)}.`,
+        `Marge brute : ${money(d.marge_brute, devise)}.`,
+        Number(d.depenses_saisies) > 0
+          ? `Charges déduites : ${money(d.charges_deduites, devise)}.`
+          : 'Aucune dépense saisie : le bénéfice ci-dessous est votre marge brute.',
+        `Bénéfice net : ${money(d.benefice_net, devise)}.`,
+      ].join('\n');
+    }
+
+    case 'clients_endettes': {
+      const clients = (d.clients as Record<string, unknown>[]) || [];
+      if (clients.length === 0) return 'Personne ne vous doit rien. Toutes les ventes sont soldées.';
+      return [
+        `${entier(d.nombre_de_debiteurs)} client(s) vous doivent ${money(d.total_du, devise)} :`,
+        ...clients
+          .slice(0, 8)
+          .map(
+            (client) =>
+              `• ${client.nom} : ${money(client.doit, devise)}` +
+              (Number(client.depuis_jours) > 0 ? ` (depuis ${entier(client.depuis_jours)} jours)` : '')
+          ),
+      ].join('\n');
+    }
+
+    case 'charges_a_venir': {
+      const charges = (donnees as Record<string, unknown>[]) || [];
+      if (charges.length === 0) return 'Aucune charge enregistrée.';
+      return charges
+        .slice(0, 10)
+        .map((charge) => {
+          const jours = Number(charge.jours_restants);
+          const quand =
+            jours < 0 ? `en retard de ${-jours} jours` : jours === 0 ? 'à payer aujourd’hui' : `dans ${jours} jours`;
+          return `• ${charge.libelle} : ${money(charge.montant, devise)}, ${quand}`;
+        })
+        .join('\n');
+    }
+
+    default:
+      return '';
+  }
+}
+
+/** Un entier lisible, sans décimale parasite. */
+function entier(valeur: unknown): string {
+  return quantity(Math.round(Number(valeur) || 0));
 }

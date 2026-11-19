@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_TOURS, OUTILS, invite, outil, outilsPour } from '../assistant';
+import { money } from '@/utils/format';
+import { OUTILS, formuler, outil, outilsPour } from '../assistant';
 
 /**
  * Le catalogue de l'assistant (§71).
@@ -87,43 +88,60 @@ describe('catalogue de l’assistant (§71)', () => {
     expect(outil('enregistrer_vente')?.ecrit).toBe(true);
   });
 
-  it('borne la conversation', () => {
-    // Sans borne, un modèle qui boucle sur un outil en échec dépenserait
-    // l'argent du gérant jusqu'à la panne.
-    expect(MAX_TOURS).toBeGreaterThan(1);
-    expect(MAX_TOURS).toBeLessThanOrEqual(10);
-  });
 });
 
-describe('ce que l’assistant sait de la boutique (§71)', () => {
-  const contexte = {
-    boutique: 'Quincaillerie du Golfe',
-    gerant: 'Koffi',
-    proprietaire: true,
-    devise: 'FCFA',
-    jour: 'jeudi 19 novembre 2026',
-  };
-
-  it('lui dit où il est, à qui il parle, quel jour et en quelle monnaie', () => {
-    // Ces quatre faits ne sont dans aucun outil : sans eux l'assistant
-    // répondrait « aujourd'hui » sans savoir quel jour, et en euros.
-    const texte = invite(contexte);
-    expect(texte).toContain('Quincaillerie du Golfe');
-    expect(texte).toContain('Koffi');
-    expect(texte).toContain('FCFA');
-    expect(texte).toContain('jeudi 19 novembre 2026');
+describe('les réponses de l’assistant (§71)', () => {
+  it('répond en phrases, pas en données brutes', () => {
+    const texte = formuler(
+      'resume_boutique',
+      {
+        nombre_de_ventes: 3,
+        ventes_du_jour: 12900,
+        marge_du_jour: 1200,
+        produits_en_alerte: 2,
+        dettes_clients: 45000,
+        nombre_de_debiteurs: 5,
+        dettes_fournisseurs: 0,
+        charges_echues_ou_proches: 0,
+      },
+      'FCFA'
+    );
+    expect(texte).toContain('3 vente');
+    expect(texte).toContain(money(12900, 'FCFA'));
+    expect(texte).toContain(money(45000, 'FCFA'));
+    // Ce qui vaut zéro ne se dit pas : « vous devez 0 FCFA » est du bruit.
+    expect(texte).not.toContain('fournisseurs');
   });
 
-  it('dit au vendeur qu’il est vendeur', () => {
-    expect(invite(contexte)).toContain('propriétaire');
-    expect(invite({ ...contexte, proprietaire: false })).toContain('vendeur');
+  it('dit quand il n’y a rien à dire, au lieu de rendre une liste vide', () => {
+    expect(formuler('stock_bas', [], 'FCFA')).toMatch(/rien à racheter/i);
+    expect(formuler('clients_endettes', { clients: [] }, 'FCFA')).toMatch(/personne/i);
+    expect(formuler('chercher_produit', [], 'FCFA')).toMatch(/aucun produit/i);
   });
 
-  it('lui interdit d’annoncer ce qu’il n’a fait que proposer', () => {
-    // C'est la promesse faite au gérant : rien ne s'écrit sans son appui. Un
-    // assistant qui dirait « c'est enregistré » la romprait en mots même si
-    // le serveur, lui, n'a rien écrit.
-    expect(invite(contexte)).toMatch(/propose/i);
-    expect(invite(contexte)).toMatch(/valide/i);
+  it('nomme le stock avec son unité', () => {
+    const texte = formuler(
+      'chercher_produit',
+      [{ nom: 'Ciment 50 kg', unite: 'sac', stock: 47, prix_vente: 4300 }],
+      'FCFA'
+    );
+    expect(texte).toContain('Ciment 50 kg');
+    expect(texte).toContain('47 sacs');
+    expect(texte).toContain(money(4300, 'FCFA'));
+  });
+
+  it('dit le retard d’une charge dans le bon sens', () => {
+    const texte = formuler(
+      'charges_a_venir',
+      [
+        { libelle: 'Loyer', montant: 80000, jours_restants: 12 },
+        { libelle: 'Salaire Kodjo', montant: 45000, jours_restants: -3 },
+        { libelle: 'CEET', montant: 18000, jours_restants: 0 },
+      ],
+      'FCFA'
+    );
+    expect(texte).toContain('dans 12 jours');
+    expect(texte).toContain('en retard de 3 jours');
+    expect(texte).toContain('aujourd’hui');
   });
 });

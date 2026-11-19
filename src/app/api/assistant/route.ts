@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { handle, json, readBody, badRequest } from '../../../lib/http';
 import { requireAuth } from '../../../lib/auth';
-import { assistantConfigure, repondre, type Tour } from '../../../server/assistant';
+import { repondre, type Tour } from '../../../server/assistant';
 
 /**
  * L'assistant de la boutique (§71).
@@ -10,18 +10,10 @@ import { assistantConfigure, repondre, type Tour } from '../../../server/assista
  * que l'assistant sait faire, pas la route. Un vendeur peut lui demander une
  * vente, pas les bénéfices.
  *
- * Le fil de la conversation est tenu par l'écran et renvoyé à chaque tour. Il
- * ne donne aucun pouvoir : rien ne s'écrit par ce chemin, et ce que le modèle
- * croit n'autorise rien — seule la route de confirmation écrit, à travers les
- * mêmes fonctions et les mêmes refus que les écrans ordinaires.
+ * Rien ne s'écrit par ce chemin : il comprend la question et, au besoin,
+ * décrit le geste à venir. Seule la route de confirmation écrit, à travers
+ * les mêmes fonctions et les mêmes refus que les écrans ordinaires.
  */
-export async function GET() {
-  return handle(async () => {
-    await requireAuth();
-    return json({ disponible: assistantConfigure() });
-  });
-}
-
 const MAX_TOURS_GARDES = 40;
 
 export async function POST(request: NextRequest) {

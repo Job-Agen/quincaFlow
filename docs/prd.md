@@ -3754,13 +3754,30 @@ Deux détails du même ordre : la marge du jour et le prix d'achat sont retirés
 de ce que l'assistant lit pour un vendeur. Un chiffre qu'il ne doit pas voir
 ne doit pas non plus transiter par une phrase.
 
-**F119 — Ce qui borne la dépense**
+**F119 — Il comprend ici, et ne coûte rien**
 
-Chaque message est payé par le gérant. Trois bornes, donc : six allers-retours
-au maximum par question, un plafond de jetons bas (les réponses de comptoir
-sont courtes), et un fil tronqué aux quarante derniers tours. Les outils ne
-rendent que l'essentiel — un produit, c'est un nom, un stock et deux prix, pas
-trente colonnes.
+Première version livrée avec un modèle de langage : il fallait une clé d'API
+et chaque question se payait. Le gérant l'a refusé en une phrase — « je n'ai
+pas l'intention de dépenser 5 F pour une API » —, et il avait raison : une
+quincaillerie n'a pas à s'abonner pour savoir ce qu'il lui reste de ciment.
+
+La compréhension se fait donc **sur le serveur de la boutique**, en clair : la
+phrase est mise à plat (minuscules, sans accents, ponctuation ôtée), ses
+nombres sont lus, et des règles nommées disent ce qu'elle demande. Zéro appel
+sortant, zéro clé, zéro franc par question — et la réponse arrive sans
+attendre le réseau, ce qui vaut mieux au comptoir.
+
+Trois pièges, trouvés en écrivant les tests et non en relisant :
+
+| La phrase | Le piège | La règle |
+|---|---|---|
+| « combien j'ai **vendu** aujourd'hui » | lue comme un ordre de vendre | un mot interrogatif fait toujours pencher vers la lecture |
+| « il a payé **10 000** » | lu comme 10 puis 0 | l'espace des milliers est recousu avant de lire |
+| « 2 sacs de **ciment 42,5** payé 5 000 » | le 42,5 du nom pris pour le paiement | c'est le mot « payé » qui désigne le montant, pas la place du nombre |
+
+Et surtout : **il dit quand il n'a pas compris**, au lieu de deviner. Une
+devinette sur une vente coûte plus cher qu'un « je n'ai pas compris », suivi
+des phrases qu'il sait lire.
 
 **F120 — Ce qu'il ne fait pas**
 
@@ -3770,11 +3787,11 @@ comptoir ; effacer une boutique n'en est pas un.
 
 **Critères d'acceptation**
 
-1. Sans clé d'API, l'écran annonce l'assistant comme indisponible au lieu d'échouer.
+1. L'assistant répond sans aucun appel sortant, sans clé et sans frais.
 2. Aucun outil n'écrit sans un appui du gérant.
 3. Le résumé montré avant l'appui vient de la base, pas des arguments du modèle.
 4. Un vendeur ne voit ni la marge, ni le prix d'achat, ni les outils du propriétaire.
 5. Un geste de propriétaire demandé par un vendeur est refusé côté serveur.
 6. Un identifiant d'une autre boutique est refusé, à la description comme à l'exécution.
 7. Un outil de lecture passé par la porte des écritures est refusé à la porte.
-8. La conversation est bornée en tours et en jetons.
+8. Une phrase mal comprise ne déclenche rien : l'assistant le dit et donne des exemples.

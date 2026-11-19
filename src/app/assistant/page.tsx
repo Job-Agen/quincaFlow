@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Send, Sparkles, X } from 'lucide-react';
 import AppBar from '@/components/layout/AppBar';
-import { Button, Notice, Skeleton } from '@/components/ui';
+import { Button, Notice } from '@/components/ui';
 import { api } from '@/client/api';
 import { useSession } from '@/client/session';
 import type { Proposition } from '@/domain/assistant';
@@ -42,15 +42,7 @@ export default function AssistantPage() {
   const [proposition, setProposition] = useState<Proposition | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
-  const [disponible, setDisponible] = useState<boolean | null>(null);
   const bas = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    api
-      .get<{ disponible: boolean }>('/api/assistant')
-      .then((etat) => setDisponible(etat.disponible))
-      .catch(() => setDisponible(false));
-  }, []);
 
   // Le dernier message doit être visible : sans cela, la réponse arrive sous
   // le clavier et le gérant croit qu'il ne s'est rien passé.
@@ -72,7 +64,11 @@ export default function AssistantPage() {
         '/api/assistant',
         // Les gestes déjà faits ne repartent pas au modèle : ils n'ont de sens
         // que pour le gérant, et ils coûteraient des jetons à chaque question.
-        { tours: fil.filter((bulle) => !bulle.fait).map(({ role, texte: t }) => ({ role, texte: t })) }
+        {
+          tours: fil
+            .filter((bulle) => !bulle.fait)
+            .map(({ role, texte: t }) => ({ role, texte: t })),
+        }
       );
       if (reponse.texte) setBulles([...fil, { role: 'assistant', texte: reponse.texte }]);
       setProposition(reponse.proposition);
@@ -104,16 +100,7 @@ export default function AssistantPage() {
       <AppBar back="/more" title="Assistant" />
 
       <main className="page chat">
-        {disponible === null ? <Skeleton count={1} height={60} /> : null}
-
-        {disponible === false ? (
-          <Notice tone="warn">
-            L’assistant n’est pas encore configuré sur le serveur. Il faut y poser la clé du
-            service d’intelligence artificielle.
-          </Notice>
-        ) : null}
-
-        {disponible && bulles.length === 0 ? (
+        {bulles.length === 0 ? (
           <div className="chat__accueil">
             <Sparkles size={30} className="muted" />
             <h2>Bonjour {(user?.name || '').split(' ')[0]}</h2>
@@ -170,32 +157,30 @@ export default function AssistantPage() {
         <div ref={bas} />
       </main>
 
-      {disponible ? (
-        <form
-          className="chat__barre"
-          onSubmit={(evenement) => {
-            evenement.preventDefault();
-            demander(question);
-          }}
+      <form
+        className="chat__barre"
+        onSubmit={(evenement) => {
+          evenement.preventDefault();
+          demander(question);
+        }}
+      >
+        <input
+          className="input"
+          placeholder="Votre question…"
+          value={question}
+          onChange={(evenement) => setQuestion(evenement.target.value)}
+          disabled={occupe}
+          aria-label="Votre question"
+        />
+        <button
+          type="submit"
+          className="chat__envoyer"
+          disabled={occupe || !question.trim()}
+          aria-label="Envoyer"
         >
-          <input
-            className="input"
-            placeholder="Votre question…"
-            value={question}
-            onChange={(evenement) => setQuestion(evenement.target.value)}
-            disabled={occupe}
-            aria-label="Votre question"
-          />
-          <button
-            type="submit"
-            className="chat__envoyer"
-            disabled={occupe || !question.trim()}
-            aria-label="Envoyer"
-          >
-            <Send size={19} />
-          </button>
-        </form>
-      ) : null}
+          <Send size={19} />
+        </button>
+      </form>
     </>
   );
 }

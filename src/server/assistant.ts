@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { badRequest, forbidden } from '../lib/http';
 import { num, str } from '../lib/validate';
-import { MAX_TOURS, invite, outil, outilsPour, type Proposition } from '../domain/assistant';
+import { formuler, outil, type Proposition } from '../domain/assistant';
+import { AIDE, comprendre } from '../domain/comprendre';
 import { decompte, phraseEcheance } from '../domain/charge';
 import { EXPENSE_CATEGORY_LABELS } from '../domain/report';
 import { amount, money, withUnit } from '../utils/format';
@@ -20,6 +20,12 @@ import type { Session } from '@/types';
 /**
  * L'assistant de la boutique (§71).
  *
+ * Il comprend la phrase **ici**, sur le serveur de la boutique, sans rien
+ * envoyer dehors : pas de clé d'API, pas d'abonnement, pas un franc par
+ * question. Un modèle de langage comprendrait davantage ; il se paierait à
+ * chaque « il me reste combien de ciment », et ce n'est pas un marché qu'une
+ * quincaillerie a à faire.
+ *
  * Tout ce que l'assistant fait passe par les **fonctions de service déjà
  * écrites**, jamais par du SQL à lui. Ce n'est pas de la paresse : ces
  * fonctions portent déjà l'isolation entre boutiques (§29), les contrôles de
@@ -28,39 +34,10 @@ import type { Session } from '@/types';
  * autre quincaillerie.
  *
  * Deuxième règle, celle que le gérant a demandée : **rien ne s'écrit sans un
- * appui**. Les outils d'écriture ne s'exécutent jamais dans la boucle du
- * modèle ; ils en sortent sous forme de proposition, que l'écran montre et
- * que le gérant valide. Un mot mal compris ne coûte alors rien.
+ * appui**. Les outils d'écriture ne s'exécutent jamais tout seuls ; ils
+ * deviennent une proposition, que l'écran montre et que le gérant valide. Un
+ * mot mal compris ne coûte alors rien.
  */
-
-/**
- * Le modèle. Changeable par variable d'environnement, parce que le coût de
- * chaque message est payé par le gérant et que c'est à lui d'arbitrer entre
- * finesse et dépense.
- */
-const MODELE = process.env.ASSISTANT_MODEL || 'claude-opus-5-5';
-
-/**
- * Les réponses sont courtes par construction — deux ou trois phrases au
- * comptoir. Un plafond bas borne la dépense sans jamais tronquer, puisque
- * l'invite demande la brièveté.
- */
-const MAX_JETONS = 2048;
-
-/** L'assistant n'existe que si la clé est posée : sinon l'écran le dit. */
-export function assistantConfigure(): boolean {
-  return Boolean((process.env.ANTHROPIC_API_KEY || '').trim());
-}
-
-/** Aujourd'hui, en toutes lettres, pour que le modèle sache quel jour on est. */
-function jourDit(): string {
-  return new Date().toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
 
 /** Aujourd'hui en `YYYY-MM-DD`, comme la base range les dates. */
 function jour(): string {
@@ -387,126 +364,159 @@ export interface Reponse {
 }
 
 /**
+ * Retrouve le produit dont parle la phrase.
+ *
+ * Trois issues, et c'est leur distinction qui fait la qualité de l'assistant :
+ * on a trouvé, on n'a rien trouvé, ou il y en a plusieurs. Le troisième cas
+ * est le piège : choisir au hasard entre « Ciment 32,5 » et « Ciment 42,5 »
+ * vendrait un jour le mauvais sac.
+ */
+async function resoudreProduit(
+  session: Session,
+  terme: unknown
+): Promise<{ produit: Awaited<ReturnType<typeof getProduct>> } | { question: string }> {
+  const cherche = String(terme || '').trim();
+  if (!cherche) return { question: 'De quel produit parlez-vous ?' };
+
+  const trouves = await listProducts(session.businessId, { search: cherche, limit: 8 });
+  if (trouves.length === 0) {
+    return { question: `Je ne trouve aucun produit qui ressemble à « ${cherche} ».` };
+  }
+  const exact = trouves.find((candidat) => candidat.name.toLowerCase() === cherche.toLowerCase());
+  const choisi = exact ?? (trouves.length === 1 ? trouves[0] : null);
+  if (!choisi) {
+    return {
+      question: [
+        'Lequel ?',
+        ...trouves.slice(0, 6).map((candidat) => `• ${candidat.name}`),
+        'Reprenez avec son nom complet.',
+      ].join('\n'),
+    };
+  }
+  return { produit: await getProduct(session.businessId, choisi.id) };
+}
+
+/**
  * Une question du gérant, une réponse.
  *
- * La boucle s'arrête à la première écriture demandée : on n'exécute pas, on
- * décrit et on rend la main. Le modèle ne saura donc jamais si le geste a eu
- * lieu — et c'est pour cela que l'invite lui interdit de l'annoncer.
+ * Les lectures s'exécutent tout de suite ; les écritures sortent en
+ * proposition. Entre les deux, rien : l'assistant n'a aucun pouvoir propre,
+ * il n'a que ceux de la session qui lui parle.
  */
 export async function repondre(session: Session, tours: Tour[]): Promise<Reponse> {
-  if (!assistantConfigure()) {
-    throw badRequest('L’assistant n’est pas encore configuré sur le serveur.');
+  const derniere = [...tours].reverse().find((tour) => tour.role === 'user' && tour.texte.trim());
+  if (!derniere) throw badRequest('Dites quelque chose à l’assistant.');
+
+  const { business } = await profile(session);
+  const devise = business.currency || 'FCFA';
+  const proprietaire = session.role === 'OWNER';
+
+  const intention = comprendre(derniere.texte);
+  if (!intention) return { texte: AIDE, proposition: null };
+
+  const defini = outil(intention.outil);
+  if (!defini) return { texte: AIDE, proposition: null };
+  if (defini.proprietaire && !proprietaire) {
+    return {
+      texte: 'Cette question est réservée au propriétaire de la boutique.',
+      proposition: null,
+    };
   }
 
-  const { business: boutique } = await profile(session);
-  const proprietaire = session.role === 'OWNER';
-  const devise = boutique.currency || 'FCFA';
-  const client = new Anthropic();
+  // ───────────────────────── Les questions ─────────────────────────
+  if (!defini.ecrit) {
+    const donnees = await lire(session, defini.nom, intention.args);
+    return { texte: formuler(defini.nom, donnees, devise), proposition: null };
+  }
 
-  const outils = outilsPour(proprietaire).map((defini) => ({
-    name: defini.nom,
-    description: defini.description,
-    input_schema: defini.schema,
-    strict: true,
-  })) as Anthropic.Beta.BetaToolUnion[];
+  // ───────────────────────── Les gestes ─────────────────────────
+  const args: Record<string, unknown> = {};
 
-  const messages: Anthropic.Beta.BetaMessageParam[] = tours
-    .filter((tour) => tour.texte.trim())
-    .map((tour) => ({ role: tour.role, content: tour.texte.trim() }));
-  if (messages.length === 0) throw badRequest('Dites quelque chose à l’assistant.');
-
-  const systeme = invite({
-    boutique: boutique.name,
-    gerant: session.name || 'le gérant',
-    proprietaire,
-    devise,
-    jour: jourDit(),
-  });
-
-  let dernierTexte = '';
-
-  for (let tour = 0; tour < MAX_TOURS; tour += 1) {
-    const reponse = await client.beta.messages.create({
-      model: MODELE,
-      max_tokens: MAX_JETONS,
-      // Une conversation de comptoir ne demande pas de longues délibérations,
-      // et chaque jeton de réflexion est payé par le gérant.
-      output_config: { effort: 'low' },
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      system: systeme,
-      tools: outils,
-      messages,
-    });
-
-    // Un refus arrive avec un 200 : lire `content` sans vérifier donnerait
-    // une réponse vide sans qu'on sache pourquoi.
-    if (reponse.stop_reason === 'refusal') {
+  if (defini.nom === 'enregistrer_vente') {
+    const resolu = await resoudreProduit(session, intention.args.terme);
+    if ('question' in resolu) return { texte: resolu.question, proposition: null };
+    const quantite = Number(intention.args.quantite);
+    if (!Number.isFinite(quantite) || quantite <= 0) {
+      return { texte: `Combien de ${resolu.produit.name} ?`, proposition: null };
+    }
+    const total = round2(quantite * resolu.produit.selling_price);
+    const declare = Number(intention.args.montantPaye);
+    args.lignes = [{ produitId: resolu.produit.id, quantite }];
+    // Rien de dit sur le paiement : on suppose payé comptant, le cas du
+    // comptoir. La supposition est écrite sur la carte, où le gérant la voit
+    // avant d'appuyer — c'est ce qui la rend sans danger.
+    args.montantPaye = Number.isFinite(declare) ? declare : total;
+  } else if (defini.nom === 'ajuster_stock') {
+    const resolu = await resoudreProduit(session, intention.args.terme);
+    if ('question' in resolu) return { texte: resolu.question, proposition: null };
+    const quantite = Number(intention.args.quantite);
+    if (!Number.isFinite(quantite) || quantite === 0) {
+      return { texte: `Combien de ${resolu.produit.name} ajouter ou retirer ?`, proposition: null };
+    }
+    args.produitId = resolu.produit.id;
+    args.quantite = quantite;
+    args.motif = String(intention.args.motif || 'correction');
+  } else if (defini.nom === 'enregistrer_depense') {
+    const montant = Number(intention.args.montant);
+    if (!Number.isFinite(montant) || montant <= 0) {
+      return { texte: 'Quel montant avez-vous dépensé ?', proposition: null };
+    }
+    const poste = String(intention.args.poste || 'OTHER');
+    args.poste = poste;
+    args.montant = montant;
+    args.libelle =
+      String(intention.args.libelle || '').trim() ||
+      EXPENSE_CATEGORY_LABELS[poste as keyof typeof EXPENSE_CATEGORY_LABELS] ||
+      'Dépense';
+  } else if (defini.nom === 'payer_charge') {
+    const cherche = String(intention.args.terme || '').trim();
+    const charges = await listCharges(session.businessId);
+    const trouvees = charges.filter((charge) =>
+      cherche ? charge.label.toLowerCase().includes(cherche.toLowerCase()) : false
+    );
+    if (trouvees.length !== 1 || !trouvees[0]) {
+      if (charges.length === 0) return { texte: 'Vous n’avez aucune charge enregistrée.', proposition: null };
       return {
-        texte: 'Je ne peux pas répondre à cette demande. Reformulez-la, ou passez par les écrans.',
+        texte: ['Laquelle ?', ...charges.slice(0, 8).map((charge) => `• ${charge.label}`)].join('\n'),
         proposition: null,
       };
     }
-
-    const texte = reponse.content
-      .filter((bloc): bloc is Anthropic.Beta.BetaTextBlock => bloc.type === 'text')
-      .map((bloc) => bloc.text)
-      .join('\n')
-      .trim();
-    if (texte) dernierTexte = texte;
-
-    const appels = reponse.content.filter(
-      (bloc): bloc is Anthropic.Beta.BetaToolUseBlock => bloc.type === 'tool_use'
-    );
-    if (appels.length === 0) return { texte: dernierTexte, proposition: null };
-
-    // Une écriture arrête tout : elle sort de la boucle sous forme de
-    // proposition, et les lectures du même tour n'ont plus lieu d'être —
-    // on ne continuera pas la conversation avec le modèle.
-    const ecriture = appels.find((appel) => outil(appel.name)?.ecrit);
-    if (ecriture) {
-      const args = (ecriture.input || {}) as Record<string, unknown>;
+    args.chargeId = trouvees[0].id;
+    const montant = Number(intention.args.montant);
+    args.montant = Number.isFinite(montant) && montant > 0 ? montant : trouvees[0].amount;
+  } else if (defini.nom === 'creer_produit') {
+    const nom = String(intention.args.terme || '').trim();
+    const manque: string[] = [];
+    if (!nom) manque.push('son nom');
+    const prixAchat = Number(intention.args.prixAchat);
+    const prixVente = Number(intention.args.prixVente);
+    if (!Number.isFinite(prixAchat)) manque.push('le prix d’achat');
+    if (!Number.isFinite(prixVente)) manque.push('le prix de vente');
+    if (manque.length > 0) {
       return {
-        texte: dernierTexte,
-        proposition: {
-          outil: ecriture.name,
-          args,
-          resume: await decrire(session, ecriture.name, args, devise),
-        },
+        texte: [
+          `Pour créer un produit il me manque ${manque.join(' et ')}.`,
+          'Dites par exemple : « nouveau produit ciment 50 kg, achat 3900, vente 4300, stock 40 ».',
+        ].join('\n'),
+        proposition: null,
       };
     }
-
-    messages.push({ role: 'assistant', content: reponse.content });
-    const resultats: Anthropic.Beta.BetaContentBlockParam[] = [];
-    for (const appel of appels) {
-      const defini = outil(appel.name);
-      try {
-        if (!defini) throw badRequest(`Outil inconnu : ${appel.name}.`);
-        if (defini.proprietaire && !proprietaire) throw forbidden('Réservé au propriétaire.');
-        const resultat = await lire(session, appel.name, (appel.input || {}) as Record<string, unknown>);
-        resultats.push({
-          type: 'tool_result',
-          tool_use_id: appel.id,
-          content: JSON.stringify(resultat ?? null),
-        });
-      } catch (souci) {
-        // L'erreur repart au modèle plutôt que vers le gérant : il saura
-        // souvent la contourner — chercher autrement, demander une précision.
-        resultats.push({
-          type: 'tool_result',
-          tool_use_id: appel.id,
-          is_error: true,
-          content: souci instanceof Error ? souci.message : 'Erreur.',
-        });
-      }
-    }
-    messages.push({ role: 'user', content: resultats });
+    args.nom = nom;
+    args.unite = String(intention.args.unite || 'pièce');
+    args.prixAchat = prixAchat;
+    args.prixVente = prixVente;
+    const stock = Number(intention.args.stock);
+    args.stock = Number.isFinite(stock) ? stock : 0;
+  } else {
+    return { texte: AIDE, proposition: null };
   }
 
   return {
-    texte:
-      dernierTexte ||
-      'Je n’arrive pas à répondre à cette question. Essayez de la poser autrement.',
-    proposition: null,
+    texte: '',
+    proposition: {
+      outil: defini.nom,
+      args,
+      resume: await decrire(session, defini.nom, args, devise),
+    },
   };
 }
