@@ -74,6 +74,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
   let contacts: typeof import('../contacts');
   let invoiceMail: typeof import('../invoiceMail');
   let history_: typeof import('../history');
+  let assistant: typeof import('../assistant');
 
   const OWNER: Session = {
     userId: 'usr_owner',
@@ -119,6 +120,7 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     contacts = await import('../contacts');
     invoiceMail = await import('../invoiceMail');
     history_ = await import('../history');
+    assistant = await import('../assistant');
   });
 
   afterAll(async () => {
@@ -578,6 +580,173 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     });
     expect(received.status).toBe('RECEIVED');
     expect(await stockOf(vitre.id)).toBe(50);
+  });
+
+  // ────────────────────── L'assistant de la boutique (§71) ─────────────
+
+  describe('assistant (§71)', () => {
+    const VENDEUR: Session = {
+      userId: 'usr_owner',
+      businessId: 'biz_a',
+      role: 'SELLER',
+      name: 'Commis',
+    };
+
+    it('lit les chiffres de la boutique sans montrer la marge au vendeur', async () => {
+      const vitre = await seedVitre(80);
+      await sales.createSale(OWNER, {
+        lines: [{ productId: vitre.id, quantity: 2 }],
+        amountPaid: 900,
+      });
+
+      const vuProprietaire = (await assistant.lire(OWNER, 'resume_boutique', {})) as Record<
+        string,
+        unknown
+      >;
+      expect(vuProprietaire.ventes_du_jour).toBe(900);
+      expect(vuProprietaire.nombre_de_ventes).toBe(1);
+      expect(vuProprietaire.marge_du_jour).toBeGreaterThan(0);
+
+      // Le vendeur voit ce qu'il a encaissé, pas ce que la boutique gagne :
+      // la marge dit le prix d'achat, qui ne le regarde pas (§5).
+      const vuVendeur = (await assistant.lire(VENDEUR, 'resume_boutique', {})) as Record<
+        string,
+        unknown
+      >;
+      expect(vuVendeur.ventes_du_jour).toBe(900);
+      expect(vuVendeur.marge_du_jour).toBeUndefined();
+    });
+
+    it('cherche un produit et cache son prix d’achat au vendeur', async () => {
+      const vitre = await seedVitre(80);
+      const trouves = (await assistant.lire(OWNER, 'chercher_produit', {
+        terme: 'vitre',
+      })) as Record<string, unknown>[];
+      expect(trouves).toHaveLength(1);
+      expect(trouves[0]!.id).toBe(vitre.id);
+      expect(trouves[0]!.stock).toBe(80);
+      expect(trouves[0]!.prix_achat).toBe(318.75);
+
+      const pourVendeur = (await assistant.lire(VENDEUR, 'chercher_produit', {
+        terme: 'vitre',
+      })) as Record<string, unknown>[];
+      expect(pourVendeur[0]!.prix_vente).toBe(450);
+      expect(pourVendeur[0]!.prix_achat).toBeUndefined();
+    });
+
+    it('décrit la vente d’après la base, pas d’après ce que le modèle raconte', async () => {
+      const vitre = await seedVitre(80);
+      const resume = await assistant.decrire(
+        OWNER,
+        'enregistrer_vente',
+        { lignes: [{ produitId: vitre.id, quantite: 2 }], montantPaye: 500 },
+        'FCFA'
+      );
+      // Le nom, le prix et le total sont relus : un modèle qui se tromperait
+      // de produit se trahirait ici, au lieu de maquiller sa phrase.
+      expect(resume).toContain('Vitre 60 cm');
+      expect(resume).toContain(money(900, 'FCFA'));
+      expect(resume).toContain(money(400, 'FCFA'));
+    });
+
+    it('enregistre la vente validée, et le stock baisse', async () => {
+      const vitre = await seedVitre(80);
+      const dit = await assistant.executer(OWNER, 'enregistrer_vente', {
+        lignes: [{ produitId: vitre.id, quantite: 3 }],
+        montantPaye: 1350,
+      });
+      expect(dit).toMatch(/enregistr/i);
+      expect(await stockOf(vitre.id)).toBe(77);
+    });
+
+    it('transforme un mouvement en stock compté', async () => {
+      // L'assistant parle d'ajouter dix pièces ; la fonction d'ajustement,
+      // elle, veut le stock final. La conversion se fait ici, et pas dans la
+      // tête du modèle, qui ignore le stock courant au moment où il propose.
+      const vitre = await seedVitre(80);
+      await assistant.executer(OWNER, 'ajuster_stock', {
+        produitId: vitre.id,
+        quantite: 10,
+        motif: 'réassort',
+      });
+      expect(await stockOf(vitre.id)).toBe(90);
+
+      await assistant.executer(OWNER, 'ajuster_stock', {
+        produitId: vitre.id,
+        quantite: -4,
+        motif: 'casse',
+      });
+      expect(await stockOf(vitre.id)).toBe(86);
+    });
+
+    it('refuse au vendeur les gestes du propriétaire', async () => {
+      const vitre = await seedVitre(80);
+      await expect(
+        assistant.executer(VENDEUR, 'ajuster_stock', {
+          produitId: vitre.id,
+          quantite: 10,
+          motif: 'réassort',
+        })
+      ).rejects.toThrow(/propriétaire/i);
+      // Le stock n'a pas bougé : le refus est bien antérieur à l'écriture.
+      expect(await stockOf(vitre.id)).toBe(80);
+    });
+
+    it('refuse un outil qui n’existe pas, et un outil de lecture déguisé en geste', async () => {
+      await expect(assistant.executer(OWNER, 'supprimer_la_boutique', {})).rejects.toThrow();
+      // « resume_boutique » lit : le passer par la porte des écritures est
+      // refusé à la porte, et pas seulement faute de savoir quoi en faire.
+      await expect(assistant.executer(OWNER, 'resume_boutique', {})).rejects.toThrow(
+        /ne s’écrit pas/
+      );
+    });
+
+    it('ne laisse pas l’assistant d’une boutique toucher le stock d’une autre', async () => {
+      // La règle du §29, vérifiée sur ce chemin-là aussi : l'identifiant vient
+      // du modèle, et un modèle peut tout dire. C'est la fonction de service
+      // qui refuse, parce que la boutique est dans la clé.
+      const vitre = await seedVitre(80);
+      await expect(
+        assistant.executer(RIVAL, 'ajuster_stock', {
+          produitId: vitre.id,
+          quantite: -80,
+          motif: 'vol',
+        })
+      ).rejects.toThrow();
+      await expect(
+        assistant.decrire(RIVAL, 'enregistrer_vente', {
+          lignes: [{ produitId: vitre.id, quantite: 1 }],
+          montantPaye: 0,
+        }, 'FCFA')
+      ).rejects.toThrow();
+      expect(await stockOf(vitre.id)).toBe(80);
+    });
+
+    it('crée un produit avec la référence de l’application, pas celle du modèle', async () => {
+      const dit = await assistant.executer(OWNER, 'creer_produit', {
+        nom: 'Ciment 50 kg',
+        unite: 'sac',
+        prixAchat: 3900,
+        prixVente: 4300,
+        stock: 40,
+      });
+      // §61 : c'est l'application qui numérote. Le modèle n'a rien à inventer.
+      expect(dit).toMatch(/ART-\d{4}/);
+    });
+
+    it('écrit la dépense validée', async () => {
+      await assistant.executer(OWNER, 'enregistrer_depense', {
+        poste: 'UTILITIES',
+        libelle: 'Facture CEET',
+        montant: 18000,
+      });
+      const { rows } = await pool.query(
+        'SELECT category, label, amount::float8 AS amount FROM expenses WHERE business_id = $1',
+        [OWNER.businessId]
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ category: 'UTILITIES', label: 'Facture CEET', amount: 18000 });
+    });
   });
 
   // ────────────────────── Exports et sauvegarde (§48) ──────────────────

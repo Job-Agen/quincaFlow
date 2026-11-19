@@ -10,6 +10,7 @@ import {
   LogOut,
   Settings,
   Smartphone,
+  Sparkles,
   Truck,
   UserCog,
   Users,
@@ -41,6 +42,9 @@ interface MoreLink {
  * ouverte au vendeur : elle ne montre aucun prix d'achat.
  */
 const LINKS: readonly MoreLink[] = [
+  // Celui qui répond quand on n'a pas le temps de chercher (§71). Ouvert au
+  // vendeur : c'est la session qui décide de ce qu'il peut lui demander.
+  { href: '/assistant', label: 'Assistant', icon: Sparkles },
   { href: '/reports', label: 'Rapports financiers', icon: LineChart, ownerOnly: true },
   { href: '/cash', label: 'Journal de caisse', icon: Wallet, ownerOnly: true },
   // Le loyer, les salaires, l'électricité : ce qui revient, et qu'on oublie

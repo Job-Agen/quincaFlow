@@ -979,6 +979,156 @@ select.input {
   gap: 14px;
 }
 
+/* ───────────────────────── L'assistant (§71) ───────────────────────── */
+
+.chat {
+  padding-bottom: 86px;
+  gap: 10px;
+}
+
+.chat__accueil {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 18px 6px 4px;
+}
+
+.chat__accueil h2 {
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.chat__exemples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat__exemple {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: var(--r-full);
+  padding: 8px 14px;
+  font-size: 13px;
+  text-align: left;
+}
+
+.chat__exemple:active {
+  background: var(--surface-2);
+}
+
+.chat__bulle {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  max-width: 86%;
+  padding: 10px 13px;
+  border-radius: var(--r-lg);
+  font-size: 14.5px;
+  line-height: 1.5;
+  /* Les réponses arrivent avec leurs retours à la ligne : les écraser
+     collerait une liste de produits en un seul paragraphe. */
+  white-space: pre-wrap;
+}
+
+.chat__bulle--user {
+  align-self: flex-end;
+  background: var(--blue);
+  color: #fff;
+  border-bottom-right-radius: var(--r-sm);
+}
+
+.chat__bulle--assistant {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: var(--r-sm);
+}
+
+/* Ce que l'application a fait après un appui — pas ce que le modèle raconte.
+   La distinction est tout l'intérêt du §71 : la coche ne ment pas. */
+.chat__bulle--fait {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green-dark);
+  font-weight: 600;
+}
+
+.chat__patience {
+  color: var(--muted);
+  letter-spacing: 3px;
+}
+
+.chat__proposition {
+  border: 1px solid var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--r-lg);
+  padding: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat__proposition-titre {
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--amber-ink);
+}
+
+.chat__resume {
+  margin: 0;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+
+.chat__gestes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat__barre {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.chat__barre .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat__envoyer {
+  flex-shrink: 0;
+  width: 46px;
+  border-radius: var(--r);
+  background: var(--blue);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat__envoyer:disabled {
+  background: var(--line-strong);
+}
+
 /* Le chrono d'une charge récurrente (§70).
    L'anneau se vide à mesure que l'échéance approche ; en retard il se remplit,
    pour que « plus rien » et « trop tard » ne se ressemblent pas. */

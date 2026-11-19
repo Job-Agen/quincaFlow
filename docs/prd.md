@@ -3697,3 +3697,84 @@ annuelle réglée avec 35 jours de retard repasse de « 35 j » rouge à
 6. Le chrono compte depuis le dernier paiement, jamais depuis une période reconstituée.
 7. À minuit, le nombre change sans que personne ne recharge l'écran.
 8. Un paiement remet l'anneau à plein.
+
+---
+
+## 71. L'assistant de la boutique
+
+**Objectif**
+
+Soixante-dix sections d'écrans, et un gérant qui, au comptoir, n'a le temps
+d'en traverser aucun. Il veut demander : « il me reste combien de ciment ? »,
+« qu'est-ce que je dois racheter ? », « vends-moi trois sacs, il a payé
+dix mille ».
+
+L'assistant répond, et quand il faut écrire, il **propose**.
+
+**F115 — Il passe par les portes, jamais par les murs**
+
+Tout ce que l'assistant fait passe par les **fonctions de service déjà
+écrites** — `createSale`, `adjustStock`, `payCharge` —, jamais par du SQL à
+lui. Ce n'est pas de la paresse : ces fonctions portent déjà l'isolation
+entre boutiques (§29), les contrôles de rôle (§5) et les règles métier. Un
+assistant qui parlerait directement à Postgres les réinventerait, et finirait
+un jour par vendre le stock d'une autre quincaillerie.
+
+Le test le dit en une ligne : l'assistant de la boutique B, à qui l'on souffle
+l'identifiant d'un produit de la boutique A, est refusé — non par une règle
+écrite pour lui, mais par celle qui protège déjà tous les écrans.
+
+**F116 — Il propose, le gérant valide**
+
+C'est la règle que le gérant a choisie, et elle est portée par le catalogue :
+chaque outil déclare s'il **écrit**. Un outil d'écriture ne s'exécute jamais
+dans la boucle du modèle. Il en sort sous forme de proposition, l'écran la
+montre, et rien ne bouge avant l'appui.
+
+| | Lecture | Écriture |
+|---|---|---|
+| Exemples | chiffres du jour, stock, dettes, rapport | vente, réassort, dépense, charge payée |
+| Quand | tout de suite, dans la boucle | après l'appui du gérant, et pas avant |
+| Si le modèle se trompe | une phrase fausse | **rien** — la carte le montre d'abord |
+
+**F117 — La carte est écrite depuis la base, pas depuis le modèle**
+
+Le résumé que le gérant lit relit les noms, les prix et les stocks **par
+identifiant**. Un modèle qui se tromperait de produit se trahit dans la
+phrase au lieu de la maquiller. C'est ce qui rend l'appui informé.
+
+**F118 — Un vendeur reste un vendeur**
+
+Les outils du propriétaire — bénéfices, charges, stock, produits, dépenses —
+ne sont pas montrés au vendeur, et surtout ils lui sont **refusés** s'il les
+demande quand même. L'écran qui cache un bouton n'est pas une serrure (§30) :
+le refus est côté serveur, sur le même chemin que les routes.
+
+Deux détails du même ordre : la marge du jour et le prix d'achat sont retirés
+de ce que l'assistant lit pour un vendeur. Un chiffre qu'il ne doit pas voir
+ne doit pas non plus transiter par une phrase.
+
+**F119 — Ce qui borne la dépense**
+
+Chaque message est payé par le gérant. Trois bornes, donc : six allers-retours
+au maximum par question, un plafond de jetons bas (les réponses de comptoir
+sont courtes), et un fil tronqué aux quarante derniers tours. Les outils ne
+rendent que l'essentiel — un produit, c'est un nom, un stock et deux prix, pas
+trente colonnes.
+
+**F120 — Ce qu'il ne fait pas**
+
+Il ne supprime rien, ne touche ni à l'équipe, ni aux paramètres, ni aux
+commandes fournisseurs. « Contrôle complet » veut dire les gestes du
+comptoir ; effacer une boutique n'en est pas un.
+
+**Critères d'acceptation**
+
+1. Sans clé d'API, l'écran annonce l'assistant comme indisponible au lieu d'échouer.
+2. Aucun outil n'écrit sans un appui du gérant.
+3. Le résumé montré avant l'appui vient de la base, pas des arguments du modèle.
+4. Un vendeur ne voit ni la marge, ni le prix d'achat, ni les outils du propriétaire.
+5. Un geste de propriétaire demandé par un vendeur est refusé côté serveur.
+6. Un identifiant d'une autre boutique est refusé, à la description comme à l'exécution.
+7. Un outil de lecture passé par la porte des écritures est refusé à la porte.
+8. La conversation est bornée en tours et en jetons.
