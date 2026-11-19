@@ -1,7 +1,7 @@
 import { badRequest, forbidden } from '../lib/http';
 import { num, str } from '../lib/validate';
 import { formuler, outil, type Proposition } from '../domain/assistant';
-import { AIDE, comprendre, terme } from '../domain/comprendre';
+import { AIDE, comprendre, completer, terme } from '../domain/comprendre';
 import { decompte, phraseEcheance } from '../domain/charge';
 import { EXPENSE_CATEGORY_LABELS } from '../domain/report';
 import { amount, money, withUnit } from '../utils/format';
@@ -364,6 +364,29 @@ export interface Reponse {
 }
 
 /**
+ * Le sujet en cours, retrouvé dans le fil (§71).
+ *
+ * Rien n'est gardé entre deux requêtes : le fil arrive entier à chaque
+ * question, et la mémoire se **relit** plutôt qu'elle ne se stocke. C'est ce
+ * qui la rend sans danger — elle ne contient que ce que le gérant a écrit, et
+ * elle ne donne aucun pouvoir qu'une phrase complète ne donnerait.
+ *
+ * On ne remonte que deux tours : au-delà, poursuivre une question oubliée
+ * depuis longtemps surprendrait plus qu'elle n'aiderait.
+ */
+function poursuite(tours: Tour[]): ReturnType<typeof comprendre> {
+  const dits = tours.filter((tour) => tour.role === 'user' && tour.texte.trim());
+  const derniere = dits[dits.length - 1];
+  if (!derniere) return null;
+
+  for (const tour of dits.slice(-3, -1).reverse()) {
+    const precedente = comprendre(tour.texte);
+    if (precedente) return completer(precedente, derniere.texte);
+  }
+  return null;
+}
+
+/**
  * Quand aucune tournure n'est reconnue, chercher quand même (§71).
  *
  * Une phrase qu'on n'a pas su lire nomme souvent un produit : « ciment ? »,
@@ -448,8 +471,10 @@ export async function repondre(session: Session, tours: Tour[]): Promise<Reponse
   const devise = business.currency || 'FCFA';
   const proprietaire = session.role === 'OWNER';
 
-  const intention = comprendre(derniere.texte);
-  if (!intention) return { texte: await dernierRecours(session, derniere.texte, devise), proposition: null };
+  const intention = comprendre(derniere.texte) ?? poursuite(tours);
+  if (!intention) {
+    return { texte: await dernierRecours(session, derniere.texte, devise), proposition: null };
+  }
 
   const defini = outil(intention.outil);
   if (!defini) return { texte: AIDE, proposition: null };
@@ -477,12 +502,19 @@ export async function repondre(session: Session, tours: Tour[]): Promise<Reponse
       return { texte: `Combien de ${resolu.produit.name} ?`, proposition: null };
     }
     const total = round2(quantite * resolu.produit.selling_price);
-    const declare = Number(intention.args.montantPaye);
     args.lignes = [{ produitId: resolu.produit.id, quantite }];
     // Rien de dit sur le paiement : on suppose payé comptant, le cas du
     // comptoir. La supposition est écrite sur la carte, où le gérant la voit
     // avant d'appuyer — c'est ce qui la rend sans danger.
-    args.montantPaye = Number.isFinite(declare) ? declare : total;
+    //
+    // L'absence se teste sur la valeur, pas sur `Number()` : `Number(null)`
+    // vaut zéro, un zéro parfaitement fini qui faisait enregistrer « payé 0 »
+    // toute vente dont la phrase ne parlait pas d'argent.
+    const declare =
+      intention.args.montantPaye === null || intention.args.montantPaye === undefined
+        ? null
+        : Number(intention.args.montantPaye);
+    args.montantPaye = declare !== null && Number.isFinite(declare) ? declare : total;
   } else if (defini.nom === 'ajuster_stock') {
     const resolu = await resoudreProduit(session, intention.args.terme);
     if ('question' in resolu) return { texte: resolu.question, proposition: null };

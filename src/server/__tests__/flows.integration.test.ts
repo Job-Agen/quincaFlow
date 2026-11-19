@@ -734,6 +734,123 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       expect(dit).toMatch(/ART-\d{4}/);
     });
 
+    it('poursuit la question d’avant sans qu’on la retape', async () => {
+      await products.createProduct(OWNER, {
+        name: 'Ciment 50 kg',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4300,
+        stockQuantity: 47,
+        units: [],
+      });
+      await products.createProduct(OWNER, {
+        name: 'Fer 8',
+        baseUnit: 'barre',
+        purchasePrice: 1000,
+        sellingPrice: 1400,
+        stockQuantity: 12,
+        units: [],
+      });
+
+      // Le fil arrive entier à chaque question : la mémoire se relit, elle ne
+      // se stocke nulle part.
+      const fil: { role: 'user' | 'assistant'; texte: string }[] = [
+        { role: 'user', texte: 'il me reste combien de ciment' },
+      ];
+      const premiere = await assistant.repondre(OWNER, fil);
+      expect(premiere.texte).toContain('47 sacs');
+
+      fil.push({ role: 'assistant', texte: premiere.texte });
+      fil.push({ role: 'user', texte: 'et de fer ?' });
+      const suite = await assistant.repondre(OWNER, fil);
+      expect(suite.texte).toContain('Fer 8');
+      expect(suite.texte).toContain('12 barres');
+    });
+
+    it('accepte la quantité donnée après avoir demandé « combien »', async () => {
+      const ciment = await products.createProduct(OWNER, {
+        name: 'Ciment 50 kg',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4300,
+        stockQuantity: 47,
+        units: [],
+      });
+
+      const fil: { role: 'user' | 'assistant'; texte: string }[] = [
+        { role: 'user', texte: 'vends du ciment' },
+      ];
+      const question = await assistant.repondre(OWNER, fil);
+      expect(question.texte).toMatch(/combien/i);
+      expect(question.proposition).toBeNull();
+
+      fil.push({ role: 'assistant', texte: question.texte });
+      fil.push({ role: 'user', texte: '3' });
+      const proposee = await assistant.repondre(OWNER, fil);
+      expect(proposee.proposition?.outil).toBe('enregistrer_vente');
+      expect(proposee.proposition?.resume).toContain('3 sacs de Ciment 50 kg');
+      // Rien n'a été dit de l'argent : c'est une vente au comptant, payée en
+      // entier. « Payé 0 » en ferait une ardoise que personne n'a ouverte.
+      expect(proposee.proposition?.resume).toContain(`Payé : ${money(12900, 'FCFA')}`);
+      expect(proposee.proposition?.resume).not.toContain('reste à devoir');
+      // Rien n'est écrit : la mémoire propose, elle n'exécute pas.
+      expect((await products.getProduct(OWNER.businessId, ciment.id)).stock_quantity).toBe(47);
+    });
+
+    it('ne rouvre pas une vente complète sur un mot qui suit', async () => {
+      // Le piège qui coûterait cher : après une vente complète, « fer ? » est
+      // une question sur le stock, jamais l'ordre d'en vendre deux.
+      await products.createProduct(OWNER, {
+        name: 'Ciment 50 kg',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4300,
+        stockQuantity: 47,
+        units: [],
+      });
+      await products.createProduct(OWNER, {
+        name: 'Fer 8',
+        baseUnit: 'barre',
+        purchasePrice: 1000,
+        sellingPrice: 1400,
+        stockQuantity: 12,
+        units: [],
+      });
+
+      const vu = await assistant.repondre(OWNER, [
+        { role: 'user', texte: 'vends 2 sacs de ciment, il a payé 8600' },
+        { role: 'assistant', texte: 'proposition' },
+        { role: 'user', texte: 'fer ?' },
+      ]);
+      expect(vu.proposition).toBeNull();
+      expect(vu.texte).toContain('Fer 8');
+    });
+
+    it('oublie un sujet laissé derrière plusieurs tours', async () => {
+      // Une vente restée en suspens, puis deux phrases sans rapport : un
+      // « 3 » tapé bien plus tard ne doit pas la ressusciter. La mémoire ne
+      // remonte que de deux tours, et c'est délibéré.
+      await products.createProduct(OWNER, {
+        name: 'Ciment 50 kg',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4300,
+        stockQuantity: 47,
+        units: [],
+      });
+
+      const vu = await assistant.repondre(OWNER, [
+        { role: 'user', texte: 'vends du ciment' },
+        { role: 'assistant', texte: 'Combien de Ciment 50 kg ?' },
+        { role: 'user', texte: 'bonjour' },
+        { role: 'assistant', texte: 'Je n’ai pas compris.' },
+        { role: 'user', texte: 'merci' },
+        { role: 'assistant', texte: 'Je n’ai pas compris.' },
+        { role: 'user', texte: '3' },
+      ]);
+      expect(vu.proposition).toBeNull();
+    });
+
     it('cherche au catalogue plutôt que d’abandonner sur une tournure inconnue', async () => {
       // « ciment ? » n'est aucune des tournures prévues. Répondre « je n'ai
       // pas compris » à quelqu'un qui a posé une vraie question est le pire

@@ -3808,6 +3808,40 @@ donne le stock. Un filet ne remplace pas une règle, mais il rattrape ce
 qu'elles n'ont pas prévu — et il ne peut rien casser, puisqu'il ne fait que
 lire.
 
+**F119 quater — Poursuivre la question d'avant**
+
+Au comptoir on ne répète pas la phrase entière, on complète :
+
+```
+> il me reste combien de ciment ?     > vends du ciment
+  • Ciment : 47 sacs…                   Combien de Ciment 50 kg ?
+> et de fer ?                         > 3
+  • Fer 8 : 12 barres…                  [À VALIDER] 3 sacs de Ciment…
+```
+
+Rien n'est gardé entre deux requêtes : le fil arrive entier à chaque
+question, et la mémoire se **relit** plutôt qu'elle ne se stocke. C'est ce
+qui la rend sans danger — elle ne contient que ce que le gérant a écrit, et
+elle ne donne aucun pouvoir qu'une phrase complète ne donnerait.
+
+Trois garde-fous, parce que se souvenir est aussi un risque :
+
+| La règle | Ce qu'elle empêche |
+|---|---|
+| Un geste **déjà complet** n'est pas un sujet qu'on poursuit | après « vends 2 sacs de ciment », « fer ? » est une question, pas l'ordre d'en vendre deux |
+| Un creux déjà rempli ne s'écrase pas | « vends 3 sacs » puis « ciment, payé 10 000 » ne vend pas dix mille sacs |
+| La mémoire ne remonte que de **deux tours** | une vente laissée en suspens ne ressuscite pas sur un « 3 » tapé bien plus tard |
+
+Et une phrase qui ne nomme rien et ne chiffre rien ne complète rien : sans
+cela, « bonjour » se serait glissé dans le geste en cours.
+
+**Un défaut trouvé en parlant à l'assistant, pas en le relisant**
+
+Une vente dont la phrase ne disait rien de l'argent s'enregistrait **payée
+zéro** — donc une ardoise que personne n'avait ouverte. `Number(null)` vaut
+zéro, un zéro parfaitement fini, et le repli « payé comptant » ne se
+déclenchait jamais. L'absence se teste désormais sur la valeur.
+
 **F120 — Ce qu'il ne fait pas**
 
 Il ne supprime rien, ne touche ni à l'équipe, ni aux paramètres, ni aux

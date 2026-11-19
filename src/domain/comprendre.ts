@@ -164,6 +164,19 @@ const VIDES = new Set([
   'camion',
   'livraison',
   'transporteur',
+  // Les mots de politesse ne nomment jamais une marchandise : sans eux,
+  // « bonjour » après une question sur le ciment se cherchait au catalogue.
+  'bonjour',
+  'bonsoir',
+  'salut',
+  'merci',
+  'oui',
+  'non',
+  'voila',
+  'daccord',
+  'accord',
+  'svp',
+  'stp',
   'francs',
   'fcfa',
   'cfa',
@@ -424,6 +437,74 @@ export function comprendre(phrase: string): Intention | null {
   }
 
   return null;
+}
+
+/**
+ * Les creux qu'une phrase suivante peut combler, outil par outil (§71).
+ *
+ * L'ordre compte : sur une vente, un premier nombre est une quantité, un
+ * second est ce qui a été payé.
+ */
+const CREUX: Record<string, string[]> = {
+  enregistrer_vente: ['quantite', 'montantPaye'],
+  ajuster_stock: ['quantite'],
+  enregistrer_depense: ['montant'],
+  payer_charge: ['montant'],
+};
+
+/** Ce qu'il faut absolument pour qu'un geste tienne debout. */
+const REQUIS: Record<string, string[]> = {
+  enregistrer_vente: ['terme', 'quantite'],
+  ajuster_stock: ['terme', 'quantite'],
+  enregistrer_depense: ['montant'],
+  payer_charge: ['terme'],
+};
+
+const vide = (valeur: unknown) =>
+  valeur === null || valeur === undefined || valeur === '' || Number.isNaN(valeur);
+
+/**
+ * Poursuivre la question d'avant (§71).
+ *
+ * « Il me reste combien de ciment ? » puis « et de fer ? ». « Lequel ? » puis
+ * « le CIMTOGO ». « Combien de ciment ? » puis « 3 ». Au comptoir on ne
+ * répète pas la phrase entière, on complète — et un assistant qui oblige à
+ * tout retaper fait perdre le temps qu'il prétend gagner.
+ *
+ * Deux garde-fous, parce que se souvenir est aussi un risque :
+ *
+ * — un geste **déjà complet** n'est pas un sujet qu'on poursuit. Après une
+ *   vente de 2 sacs de ciment, « fer ? » est une question sur le stock, pas
+ *   l'ordre d'en vendre deux ;
+ * — une phrase qui ne nomme rien et ne chiffre rien ne complète rien. Sans
+ *   cela, « bonjour » se glisserait dans le geste en cours.
+ */
+export function completer(precedente: Intention, phrase: string): Intention | null {
+  const chiffres = nombres(phrase);
+  const nomme = terme(phrase, /^$/).trim();
+  if (chiffres.length === 0 && nomme.length < 3) return null;
+
+  const requis = REQUIS[precedente.outil];
+  if (requis) {
+    // Un geste : on ne le poursuit que s'il lui manquait quelque chose.
+    const incomplet = requis.some((champ) => vide(precedente.args[champ]));
+    if (!incomplet) return null;
+  } else if (!CREUX[precedente.outil] && precedente.args.terme === undefined) {
+    // Une question sans terme — le résumé, les dettes — ne se poursuit pas :
+    // il n'y a rien à y remplacer.
+    return null;
+  }
+
+  const args = { ...precedente.args };
+  if (nomme.length >= 3) args.terme = nomme;
+
+  let reste = [...chiffres];
+  for (const champ of CREUX[precedente.outil] || []) {
+    if (reste.length === 0) break;
+    if (vide(args[champ])) args[champ] = reste.shift();
+  }
+
+  return { outil: precedente.outil, args };
 }
 
 /** Ce que l'assistant répond quand il n'a pas compris. */
