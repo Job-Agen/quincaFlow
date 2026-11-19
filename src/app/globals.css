@@ -1201,13 +1201,36 @@ select.input {
 }
 
 /* Une marchandise réceptionnée : sa quantité et son transport vont ensemble,
-   et se détachent de la marchandise suivante (§69). */
+   et se détachent de la marchandise suivante (§69). Validée une par une
+   (§72) : tant qu'elle ne l'est pas, elle reste en retrait. */
 .reception-ligne {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
+}
+
+.reception-ligne[data-validee='false'] {
+  opacity: 0.62;
+}
+
+.reception-ligne__coche {
+  align-items: center;
+}
+
+.reception-ligne__coche span {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Le compte des marchandises validées, et le geste qui les coche toutes. */
+.reception-tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 2px;
 }
 
 /* ────────────────────────── Étapes d'un workflow ───────────────────── */

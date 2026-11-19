@@ -3795,3 +3795,68 @@ comptoir ; effacer une boutique n'en est pas un.
 6. Un identifiant d'une autre boutique est refusé, à la description comme à l'exécution.
 7. Un outil de lecture passé par la porte des écritures est refusé à la porte.
 8. Une phrase mal comprise ne déclenche rien : l'assistant le dit et donne des exemples.
+
+---
+
+## 72. Valider la livraison marchandise par marchandise
+
+**Objectif**
+
+Un fournisseur livre rarement tout d'un coup. Sur une commande de dix
+articles, il en arrive six, et les quatre autres suivent la semaine
+prochaine. L'écran de réception présentait pourtant les dix lignes déjà
+remplies du reste à livrer : il fallait remettre quatre lignes à zéro **à la
+main** pour dire ce qui n'était pas venu.
+
+C'est l'inverse de ce qu'on veut. Le gérant doit valider ce qui est **arrivé**,
+une marchandise après l'autre, pas corriger ce qui ne l'est pas.
+
+**F121 — Rien n'entre sans une coche**
+
+Chaque marchandise porte sa case. Au départ, aucune n'est cochée, et le
+bouton le dit plutôt que de rester muet : « Cochez ce qui est arrivé ». Ce
+qui n'est pas coché n'est pas envoyé du tout — pas même à zéro : une ligne à
+zéro ferait un reçu qui prétend avoir constaté l'absence.
+
+Le défaut à vide est la décision du §72. Une case pré-cochée ferait entrer en
+stock, d'un appui distrait, des sacs encore au dépôt ; le stock mentirait et
+la commande se croirait soldée.
+
+**F122 — La quantité ne s'ouvre qu'après**
+
+Tant qu'une marchandise n'est pas validée, ses champs n'existent pas à
+l'écran. Une quantité saisie sous une case décochée ne partirait pas, et le
+gérant croirait l'avoir reçue. Une fois cochée, la quantité s'ouvre
+pré-remplie du reste à livrer — le cas courant, « tout est arrivé » — et se
+corrige à la baisse.
+
+**F123 — Le compte est dit, à chaque instant**
+
+« 2 sur 3 validées » en tête, « Enregistrer 2 marchandises » sur le bouton.
+Sur une commande longue, c'est la seule façon de savoir où l'on en est sans
+remonter la liste. Un geste « Tout cocher » reste là pour la livraison
+complète qui passe quand même par cet écran.
+
+**F124 — L'erreur nomme la marchandise**
+
+Une marchandise cochée dont la quantité est restée à zéro est une
+contradiction. Le serveur répondrait « indiquez au moins une quantité reçue »,
+ce qui ne dit pas **laquelle** : sur dix lignes, le gérant chercherait.
+L'écran la nomme : « Quelle quantité de Fer 8 a été livrée ? »
+
+**F125 — Ce qui est soldé ne se repropose pas**
+
+Seules les lignes qui ont encore du reste à livrer apparaissent. Reproposer
+une marchandise déjà entièrement reçue inviterait à la recevoir deux fois ;
+le serveur refuserait (§22), mais proposer un geste qui sera refusé est une
+promesse qu'on ne tient pas.
+
+**Critères d'acceptation**
+
+1. À l'ouverture, aucune marchandise n'est validée et le bouton est inactif.
+2. Cocher une marchandise ouvre sa quantité, pré-remplie du reste à livrer.
+3. Les marchandises non cochées ne sont pas envoyées, pas même à zéro.
+4. Le compte des marchandises validées est affiché et porté par le bouton.
+5. Une marchandise cochée sans quantité est nommée, et rien n'est envoyé.
+6. Une marchandise entièrement reçue n'est plus proposée.
+7. Après une réception partielle, la commande passe en « partiellement livrée ».

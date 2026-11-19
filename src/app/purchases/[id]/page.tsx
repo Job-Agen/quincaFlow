@@ -47,6 +47,7 @@ import { paymentLabel } from '@/domain/sale';
 import SupplierPaymentSheet from '@/components/purchases/SupplierPaymentSheet';
 import SuppressionCommandeSheet from '@/components/purchases/SuppressionCommandeSheet';
 import PieceJointeSheet from '@/components/purchases/PieceJointeSheet';
+import ReceiveSheet from '@/components/purchases/ReceiveSheet';
 import { TYPES_ACCEPTES, poidsLisible } from '@/domain/pieceJointe';
 import { amount, dateTime, shortDate, money, quantity, withUnit } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
@@ -654,119 +655,5 @@ export default function PurchaseOrderPage({ params }: { params: Promise<{ id: st
         ) : null}
       </main>
     </>
-  );
-}
-
-/**
- * Réception (§22).
- *
- * Chaque ligne est pré-remplie avec le reste à livrer, et se corrige à la
- * baisse : le cas courant est « tout est arrivé », le cas fréquent est « il
- * manque vingt sacs ». Le stock augmente d'autant, pas d'une unité de plus.
- */
-function ReceiveSheet({
-  open,
-  order,
-  onClose,
-  onConfirm,
-}: {
-  open: boolean;
-  order: PurchaseOrder;
-  onClose: () => void;
-  onConfirm: (body: {
-    lines: { itemId: string; quantity: number; transport: number }[];
-    notes: string;
-    transporter: string;
-  }) => Promise<void>;
-}) {
-  // Quantités saisies, par identifiant de ligne. Une ligne absente signifie
-  // « le reste à livrer », valeur pré-remplie tant que le gérant n'y touche pas.
-  const [lines, setLines] = useState<Record<string, number>>({});
-  // Ce que le camion a coûté, marchandise par marchandise (§69). Ici le
-  // gérant répartit lui-même : c'est l'écran de la réception détaillée, celui
-  // où l'on reprend chaque ligne.
-  const [transports, setTransports] = useState<Record<string, string>>({});
-  const [transporteur, setTransporteur] = useState('');
-  const [notes, setNotes] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const pending = order.items.filter((item) => remainingOf(item) > 0);
-  const valueOf = (item: PurchaseOrderItemRow) => lines[item.id] ?? remainingOf(item);
-
-  return (
-    <Sheet open={open} title="Réceptionner" onClose={onClose}>
-      {error ? <Notice tone="error">{error}</Notice> : null}
-      <p className="small muted">
-        Indiquez ce qui a réellement été livré. Le stock augmentera de ces quantités et le coût
-        d&apos;achat sera recalculé en moyenne pondérée, transport compris.
-      </p>
-
-      {pending.map((item) => (
-        <div key={item.id} className="reception-ligne">
-          <TextField
-            label={`${item.product_name} (${item.unit_label})`}
-            hint={`Reste à livrer : ${quantity(remainingOf(item))}`}
-            type="number"
-            inputMode="decimal"
-            min="0"
-            max={remainingOf(item)}
-            step="any"
-            value={valueOf(item)}
-            onChange={(event) => setLines({ ...lines, [item.id]: Number(event.target.value) || 0 })}
-          />
-          <TextField
-            label="Transport (optionnel)"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="any"
-            placeholder="0"
-            value={transports[item.id] ?? ''}
-            onChange={(event) => setTransports({ ...transports, [item.id]: event.target.value })}
-          />
-        </div>
-      ))}
-
-      <TextField
-        label="Transporteur (optionnel)"
-        placeholder="Nom du transporteur"
-        value={transporteur}
-        onChange={(event) => setTransporteur(event.target.value)}
-      />
-
-      <TextField
-        label="Note (optionnelle)"
-        placeholder="Livraison partielle, 20 sacs à suivre"
-        value={notes}
-        onChange={(event) => setNotes(event.target.value)}
-      />
-
-      <Button
-        variant="success"
-        block
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
-          try {
-            await onConfirm({
-              notes,
-              transporter: transporteur,
-              lines: pending.map((item) => ({
-                itemId: item.id,
-                quantity: valueOf(item),
-                transport: Number(transports[item.id]) || 0,
-              })),
-            });
-          } catch (issue) {
-            setError(errorMessage(issue));
-          }
-          setBusy(false);
-        }}
-      >
-        {busy ? 'Enregistrement…' : 'Enregistrer la réception'}
-      </Button>
-    </Sheet>
   );
 }
