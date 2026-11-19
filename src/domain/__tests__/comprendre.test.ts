@@ -112,6 +112,15 @@ describe('ce que la phrase demande (§71)', () => {
     expect(vente?.args.montantPaye).toBeNull();
   });
 
+  it('ne prend pas le fournisseur pour une marchandise', () => {
+    // « le fournisseur a livré 15 sacs de ciment » cherchait « fournisseur
+    // ciment » au catalogue, et ne trouvait rien.
+    const livraison = dit('le fournisseur a livré 15 sacs de ciment');
+    expect(livraison?.outil).toBe('ajuster_stock');
+    expect(livraison?.args.terme).toBe('ciment');
+    expect(livraison?.args.quantite).toBe(15);
+  });
+
   it('distingue ce qui entre en stock de ce qui en sort', () => {
     const entree = dit('j’ai reçu 20 sacs de ciment');
     expect(entree?.outil).toBe('ajuster_stock');

@@ -1,7 +1,7 @@
 import { badRequest, forbidden } from '../lib/http';
 import { num, str } from '../lib/validate';
 import { formuler, outil, type Proposition } from '../domain/assistant';
-import { AIDE, comprendre } from '../domain/comprendre';
+import { AIDE, comprendre, terme } from '../domain/comprendre';
 import { decompte, phraseEcheance } from '../domain/charge';
 import { EXPENSE_CATEGORY_LABELS } from '../domain/report';
 import { amount, money, withUnit } from '../utils/format';
@@ -364,6 +364,43 @@ export interface Reponse {
 }
 
 /**
+ * Quand aucune tournure n'est reconnue, chercher quand même (§71).
+ *
+ * Une phrase qu'on n'a pas su lire nomme souvent un produit : « ciment ? »,
+ * « et les tôles ». Plutôt que de répondre « je n'ai pas compris » à quelqu'un
+ * qui a posé une vraie question, on cherche ses mots au catalogue. Un filet
+ * ne remplace pas une règle, mais il rattrape ce que les règles n'ont pas
+ * prévu — et il ne peut rien casser, puisqu'il ne fait que lire.
+ */
+async function dernierRecours(
+  session: Session,
+  phrase: string,
+  devise: string
+): Promise<string> {
+  // `terme` retire les mots de liaison, les nombres et les unités ; ce qui
+  // reste est ce que le gérant a nommé.
+  const mots = terme(phrase, /^$/).trim();
+  if (mots.length >= 3) {
+    for (const essai of [mots, ...mots.split(' ').filter((mot) => mot.length >= 4)]) {
+      const trouves = await listProducts(session.businessId, { search: essai, limit: 8 });
+      if (trouves.length > 0) {
+        return formuler(
+          'chercher_produit',
+          trouves.map((produit) => ({
+            nom: produit.name,
+            unite: produit.base_unit,
+            stock: produit.stock_quantity,
+            prix_vente: produit.selling_price,
+          })),
+          devise
+        );
+      }
+    }
+  }
+  return AIDE;
+}
+
+/**
  * Retrouve le produit dont parle la phrase.
  *
  * Trois issues, et c'est leur distinction qui fait la qualité de l'assistant :
@@ -412,7 +449,7 @@ export async function repondre(session: Session, tours: Tour[]): Promise<Reponse
   const proprietaire = session.role === 'OWNER';
 
   const intention = comprendre(derniere.texte);
-  if (!intention) return { texte: AIDE, proposition: null };
+  if (!intention) return { texte: await dernierRecours(session, derniere.texte, devise), proposition: null };
 
   const defini = outil(intention.outil);
   if (!defini) return { texte: AIDE, proposition: null };

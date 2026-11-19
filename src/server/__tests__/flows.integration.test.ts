@@ -734,6 +734,31 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
       expect(dit).toMatch(/ART-\d{4}/);
     });
 
+    it('cherche au catalogue plutôt que d’abandonner sur une tournure inconnue', async () => {
+      // « ciment ? » n'est aucune des tournures prévues. Répondre « je n'ai
+      // pas compris » à quelqu'un qui a posé une vraie question est le pire
+      // des deux maux : on cherche ses mots au catalogue avant de renoncer.
+      await products.createProduct(OWNER, {
+        name: 'Ciment 50 kg',
+        baseUnit: 'sac',
+        purchasePrice: 3900,
+        sellingPrice: 4300,
+        stockQuantity: 47,
+        units: [],
+      });
+
+      const vu = await assistant.repondre(OWNER, [{ role: 'user', texte: 'ciment ?' }]);
+      expect(vu.texte).toContain('Ciment 50 kg');
+      expect(vu.texte).toContain('47 sacs');
+      expect(vu.proposition).toBeNull();
+    });
+
+    it('dit ce qu’il sait faire quand les mots ne mènent à rien', async () => {
+      const vu = await assistant.repondre(OWNER, [{ role: 'user', texte: 'xyzzy qwerty' }]);
+      expect(vu.texte).toMatch(/pas compris/i);
+      expect(vu.texte).toContain('combien j’ai vendu');
+    });
+
     it('écrit la dépense validée', async () => {
       await assistant.executer(OWNER, 'enregistrer_depense', {
         poste: 'UTILITIES',

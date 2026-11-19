@@ -153,6 +153,17 @@ const VIDES = new Set([
   'paie',
   'regle',
   'client',
+  'clients',
+  // Les gens et les lieux ne sont pas des marchandises : « le fournisseur a
+  // livré 15 sacs » cherchait « fournisseur sacs » au catalogue.
+  'fournisseur',
+  'fournisseurs',
+  'boutique',
+  'magasin',
+  'depot',
+  'camion',
+  'livraison',
+  'transporteur',
   'francs',
   'fcfa',
   'cfa',
@@ -191,10 +202,21 @@ export function terme(phrase: string, verbes: RegExp): string {
     .trim();
 }
 
-const VERBES_VENTE = /\b(vend|vends|vendu|vendre|vente|sors|sort|donne)\w*\b/g;
+/*
+ * Les mots se reconnaissent à leur **racine**, pas à leur forme entière.
+ *
+ * « racheté », « racheter », « rachat » : un gérant écrit celle qui lui vient,
+ * et une règle calée sur « racheter » les manque toutes les deux autres. C'est
+ * la faute qui a fait répondre « je n'ai pas compris » à « quels sont les
+ * produits à racheté ».
+ */
+const VERBES_VENTE = /\b(vend\w*|sors|sort\w*|donne\w*|cede\w*)\b/g;
 const VERBES_STOCK =
-  /\b(ajoute|ajouter|rajoute|rajouter|retire|retirer|enleve|enlever|recu|recois|reception|reapprovisionne|casse|casser|perdu|perte|inventaire|corrige|corriger)\w*\b/g;
-const VERBES_CHARGE = /\b(paye|payer|paie|payee|regle|regler|regler|j'ai paye|jai paye)\w*\b/g;
+  /\b(ajout\w*|rajout\w*|retir\w*|enlev\w*|recu\w*|recois|recept\w*|reappro\w*|approvision\w*|cass\w*|perd\w*|pert\w*|inventaire|corrig\w*|arriv\w*|livr\w*)\b/g;
+const VERBES_CHARGE = /\b(pay\w*|regl\w*|vers\w*)\b/g;
+
+/** Ce qui désigne une charge qui revient : loyer, salaire, échéance (§66). */
+const CHARGE = /\b(echeanc\w*|charge\w*|loyer\w*|salaire\w*|prochain paiement)\b/;
 
 /** Les postes de dépense, reconnus par les mots du métier. */
 const POSTES: [RegExp, string][] = [
@@ -298,9 +320,9 @@ export function comprendre(phrase: string): Intention | null {
 
   if (!interroge && VERBES_STOCK.test(plat)) {
     VERBES_STOCK.lastIndex = 0;
-    const retire = /\b(retire|retirer|enleve|enlever|casse|perdu|perte)\w*\b/.test(plat);
+    const retire = /\b(retir\w*|enlev\w*|cass\w*|perd\w*|pert\w*)\b/.test(plat);
     const quantite = chiffres[0] ?? null;
-    const motif = /\b(casse|perdu|perte)\w*\b/.test(plat)
+    const motif = /\b(cass\w*|perd\w*|pert\w*)\b/.test(plat)
       ? 'casse'
       : /\binventaire\b/.test(plat)
         ? 'inventaire'
@@ -318,7 +340,7 @@ export function comprendre(phrase: string): Intention | null {
 
   // Payer une charge : seulement si la phrase nomme un paiement **et** une
   // charge connue du métier. « payé 10 000 » tout court est une dépense.
-  if (!interroge && VERBES_CHARGE.test(plat) && /\b(loyer|salaire|charge|echeance)\w*\b/.test(plat)) {
+  if (!interroge && VERBES_CHARGE.test(plat) && CHARGE.test(plat)) {
     VERBES_CHARGE.lastIndex = 0;
     return {
       outil: 'payer_charge',
@@ -327,13 +349,20 @@ export function comprendre(phrase: string): Intention | null {
   }
   VERBES_CHARGE.lastIndex = 0;
 
-  if (!interroge && /\b(depense|depenser|facture|j'ai paye|jai paye|paye|regle)\w*\b/.test(plat)) {
+  // « Acheter » est à double sens : « j'ai acheté des clous 2 000 » est une
+  // dépense, « liste des produits à acheter » est une question. Le montant
+  // tranche — on ne dépense pas sans somme.
+  const depense =
+    /\b(depens\w*|factur\w*|pay\w*|regl\w*)\b/.test(plat) ||
+    (/\b(achet\w*|achat\w*)\b/.test(plat) && chiffres.length > 0);
+
+  if (!interroge && depense) {
     const poste = POSTES.find(([motif]) => motif.test(plat));
     return {
       outil: 'enregistrer_depense',
       args: {
         poste: poste ? poste[1] : 'OTHER',
-        libelle: terme(phrase, /\b(depense|depenser|j'ai paye|jai paye|paye|payer|regle)\w*\b/g),
+        libelle: terme(phrase, /\b(depens\w*|pay\w*|regl\w*|achet\w*|achat\w*)\b/g),
         montant: chiffres[0] ?? null,
       },
     };
@@ -345,19 +374,22 @@ export function comprendre(phrase: string): Intention | null {
 
   // ───────────────────────── Les questions ─────────────────────────
 
-  if (/\b(racheter|rachat|rupture|manque|manquent|alerte|bas|epuise|commander)\w*\b/.test(plat)) {
+  if (/\b(rachet\w*|rachat\w*|achet\w*|ruptur\w*|manqu\w*|alert\w*|epuis\w*|command\w*|stock bas)\b/.test(plat)) {
     return { outil: 'stock_bas', args: {} };
   }
 
-  if (/\b(doit|doivent|dette|dettes|ardoise|credit|creance|impaye)\w*\b/.test(plat)) {
-    return { outil: 'clients_endettes', args: {} };
-  }
-
-  if (/\b(echeance|echeances|charge|charges|prochain paiement)\w*\b/.test(plat)) {
+  // Les charges avant les dettes : « quand je dois payer le loyer » parle
+  // d'une échéance, pas d'un client qui me doit de l'argent. Le mot « dois »
+  // les rapprocherait sans ce départage.
+  if (CHARGE.test(plat)) {
     return { outil: 'charges_a_venir', args: {} };
   }
 
-  if (/\b(benefice|benefices|marge|rentable|rapport|gagne|gagner|resultat)\w*\b/.test(plat)) {
+  if (/\b(doi\w*|dett\w*|endett\w*|ardois\w*|credit\w*|creanc\w*|impay\w*|redevab\w*)\b/.test(plat)) {
+    return { outil: 'clients_endettes', args: {} };
+  }
+
+  if (/\b(benefic\w*|marg\w*|rentab\w*|rapport\w*|gagn\w*|resultat\w*|profit\w*)\b/.test(plat)) {
     const periode = /\bmois dernier\b/.test(plat)
       ? 'mois_dernier'
       : /\b(30|trente) jours?\b/.test(plat)
@@ -377,7 +409,10 @@ export function comprendre(phrase: string): Intention | null {
       plat,
       /\b(reste|restent|stock|combien|dispo|disponible|y a t il|il y a|vendu|vendue|vendus|vente|ventes|aujourd'hui|aujourdhui|ce jour|journee|chiffre|caisse|total|resume|bilan|gagne|argent|encaisse)\w*\b/g
     );
-    if (nomme) return { outil: 'chercher_produit', args: { terme: nomme } };
+    // Un nom de produit fait au moins trois lettres : « combien il y a en
+    // caisse aujourd'hui » ne laisse qu'un « y » une fois le vocabulaire du
+    // bilan retiré, et le chercher au catalogue ne donnerait rien.
+    if (nomme.length >= 3) return { outil: 'chercher_produit', args: { terme: nomme } };
   }
 
   if (

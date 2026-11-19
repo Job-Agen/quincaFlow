@@ -3779,6 +3779,35 @@ Et surtout : **il dit quand il n'a pas compris**, au lieu de deviner. Une
 devinette sur une vente coûte plus cher qu'un « je n'ai pas compris », suivi
 des phrases qu'il sait lire.
 
+**F119 bis — Les racines, pas les mots entiers**
+
+Première version livrée : « Quels sont les produits à **racheté** ?? » recevait
+« je n'ai pas compris », alors que l'écran proposait « qu'est-ce que je dois
+**racheter** » deux lignes plus bas. Les règles étaient calées sur des mots
+entiers ; un gérant écrit la forme qui lui vient — racheté, racheter, rachat,
+je vend sans s.
+
+Elles portent maintenant sur les **racines** : `rachet`, `vend`, `pay`,
+`manqu`, `benefic`. Un corpus de quarante-cinq phrases, telles qu'elles sont
+tapées au pouce, tient lieu de cahier des charges : toute tournure qui tombe à
+côté y est ajoutée, puis la règle est élargie.
+
+Trois départages, qu'aucune racine ne pouvait faire seule :
+
+| La phrase | Le piège | Ce qui tranche |
+|---|---|---|
+| « quand je dois payer le **loyer** » | « dois » la range avec les dettes clients | les charges sont examinées avant les dettes |
+| « liste des produits à **acheter** » | lue comme une dépense | on ne dépense pas sans somme : pas de montant, c'est une question |
+| « le **fournisseur** a livré 15 sacs » | « fournisseur » cherché au catalogue | les gens et les lieux ne sont pas des marchandises |
+
+**F119 ter — Chercher avant de renoncer**
+
+Quand aucune tournure n'est reconnue, l'assistant cherche les mots de la
+phrase **au catalogue** avant de répondre qu'il n'a pas compris : « ciment ? »
+donne le stock. Un filet ne remplace pas une règle, mais il rattrape ce
+qu'elles n'ont pas prévu — et il ne peut rien casser, puisqu'il ne fait que
+lire.
+
 **F120 — Ce qu'il ne fait pas**
 
 Il ne supprime rien, ne touche ni à l'équipe, ni aux paramètres, ni aux
