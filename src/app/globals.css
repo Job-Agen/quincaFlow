@@ -979,6 +979,33 @@ select.input {
   gap: 14px;
 }
 
+/* L'écart de prix depuis la dernière commande (§74).
+   La flèche se lit sans ouvrir le détail : c'est au moment de taper le
+   chiffre que le gérant peut encore discuter, pas après. */
+.ecart {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ecart[data-sens='hausse'],
+.ecart__phrase[data-sens='hausse'] {
+  color: var(--red);
+}
+
+.ecart[data-sens='baisse'],
+.ecart__phrase[data-sens='baisse'] {
+  color: var(--green-dark);
+}
+
+.ecart__phrase {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
 /* ───────────────────────── L'assistant (§71) ───────────────────────── */
 
 .chat {

@@ -3996,3 +3996,67 @@ d'écran, que la pastille du total renseigne déjà.
 4. Le cachet ne recouvre aucune ligne de prix, facture courte ou longue.
 5. Dans le PDF, le cachet est tracé après tout le reste.
 6. Le statut reste déduit des montants : aucun écran ne permet de le poser.
+
+---
+
+## 74. Le prix d'avant
+
+**Objectif**
+
+Un fournisseur annonce rarement qu'il augmente. Le gérant s'en aperçoit au
+moment de payer — ou jamais. Entre deux commandes du même sac de ciment, rien
+ne lui rappelait ce qu'il payait la dernière fois.
+
+Au moment où il tape le chiffre, l'application le lui dit. C'est là qu'il peut
+encore discuter.
+
+**F131 — Ce qu'on payait, et chez qui**
+
+Sous chaque ligne de la commande :
+
+> **Le prix a augmenté de 200 FCFA par unité (+5,1 %).**
+> Dernière commande à 3 900 FCFA / sac le 12/10/2026 chez Dépôt Central.
+
+Les francs **et** le pour cent : le taux seul ne parle pas à qui compte en
+francs, les francs seuls ne disent pas si c'est beaucoup. Et le rappel du prix
+d'avant, avec sa date et son fournisseur — « c'était moins cher avant » ne se
+discute pas sans preuve.
+
+Une flèche rouge ou verte paraît **sans ouvrir le détail**, à côté du coût :
+c'est elle qu'on voit en remplissant la commande.
+
+**F132 — À conditionnement égal, sinon rien**
+
+C'est toute la difficulté, et c'est là qu'on se fait avoir : le fournisseur
+passe du sac au carton de 40 en même temps qu'il change son prix. Un carton
+payé 12 750 et un sac payé 318,75 sont **le même prix** ; les comparer tels
+quels annoncerait une flambée de quarante fois.
+
+Les deux prix sont donc ramenés à l'unité de base avant d'être comparés, et le
+conditionnement voyage avec le prix de référence.
+
+**F133 — Une commande annulée n'est pas une référence**
+
+Un prix qu'on a refusé n'est pas un prix qu'on a payé. Les commandes annulées
+sont écartées, sans quoi la comparaison se ferait contre un chiffre qui n'a
+jamais eu lieu.
+
+**F134 — Se taire plutôt que de crier faux**
+
+Pas de commande précédente, ou un prix nul d'un côté : rien ne s'affiche.
+« −100 % » ne veut rien dire, et une alerte qui ne veut rien dire apprend au
+gérant à ne plus les lire.
+
+Le prix **inchangé** se dit quand même, en gris : « Même prix que la dernière
+fois ». Il prouve au fournisseur qu'on suit, et c'est souvent ce qui empêche
+la hausse suivante.
+
+**Critères d'acceptation**
+
+1. Un coût supérieur au dernier commandé affiche une hausse, en francs et en pour cent.
+2. Un coût inférieur affiche une baisse.
+3. Un coût identique le dit, sans flèche.
+4. La comparaison se fait à l'unité de base : changer de conditionnement ne crée pas de fausse alerte.
+5. Les commandes annulées ne servent jamais de référence.
+6. Sans référence utilisable, rien ne s'affiche.
+7. Les prix d'une autre boutique ne sont jamais visibles.

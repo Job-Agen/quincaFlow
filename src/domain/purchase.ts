@@ -1,4 +1,4 @@
-import { amount, money, shortDate, withUnit } from '../utils/format';
+import { amount, money, percent, shortDate, withUnit } from '../utils/format';
 import { round2, round3, toNumber } from '../utils/money';
 import type {
   Money,
@@ -436,4 +436,102 @@ export function repartirTransport(
     if (cible) parts.set(cible.itemId, round2((parts.get(cible.itemId) ?? 0) + reste));
   }
   return parts;
+}
+
+/**
+ * Le prix d'une marchandise, la dernière fois qu'on l'a commandée (§74).
+ *
+ * Le conditionnement vient avec : un carton de 40 payé 12 750 et un sac payé
+ * 318,75 sont le même prix, et les comparer tels quels ferait croire à une
+ * flambée de quarante fois.
+ */
+export interface DernierPrix {
+  productId: string;
+  unitCost: Money;
+  unitFactor: Quantity;
+  unitLabel: string;
+  orderedAt: string;
+  supplierName: string | null;
+}
+
+export type SensDuPrix = 'hausse' | 'baisse' | 'stable';
+
+export interface EcartDePrix {
+  sens: SensDuPrix;
+  /** L'écart, ramené à l'unité de base. */
+  ecart: Money;
+  /**
+   * En pour cent du prix d'avant. Toujours chiffrable : un ancien prix nul
+   * fait rendre `null` à la comparaison entière, faute de base de calcul.
+   */
+  pourcentage: number;
+  /** Les deux prix comparés, par unité de base. */
+  avant: Money;
+  apres: Money;
+}
+
+/**
+ * Le prix a-t-il monté ou baissé depuis la dernière commande ? (§74)
+ *
+ * Un fournisseur annonce rarement qu'il augmente : le gérant s'en aperçoit au
+ * moment de payer, ou jamais. Cette comparaison la lui met sous les yeux à
+ * l'instant où il tape le chiffre, quand il peut encore discuter.
+ *
+ * Les deux prix sont **ramenés à l'unité de base** avant d'être comparés.
+ * C'est tout l'intérêt : le fournisseur qui passe du sac au carton change de
+ * conditionnement en même temps que de prix, et c'est là qu'on se fait avoir.
+ *
+ * Rend `null` quand il n'y a rien à comparer — pas de commande précédente, ou
+ * un prix nul d'un côté. Mieux vaut ne rien dire qu'annoncer « −100 % ».
+ */
+export function ecartDePrix(
+  nouveau: { unitCost: unknown; unitFactor: unknown },
+  ancien: { unitCost: unknown; unitFactor: unknown } | null | undefined
+): EcartDePrix | null {
+  if (!ancien) return null;
+  const apres = parBase(nouveau);
+  const avant = parBase(ancien);
+  if (apres <= 0 || avant <= 0) return null;
+
+  const ecart = round2(apres - avant);
+  return {
+    sens: ecart > 0 ? 'hausse' : ecart < 0 ? 'baisse' : 'stable',
+    ecart,
+    pourcentage: Math.round((ecart / avant) * 1000) / 10,
+    avant,
+    apres,
+  };
+}
+
+/** Un prix de conditionnement, ramené à l'unité de base. */
+function parBase(ligne: { unitCost: unknown; unitFactor: unknown }): Money {
+  const facteur = toNumber(ligne.unitFactor, 1) || 1;
+  return round2(toNumber(ligne.unitCost) / facteur);
+}
+
+/**
+ * Ce que l'écran dit de l'écart.
+ *
+ * Le pourcentage seul ne parle pas à qui compte en francs ; les francs seuls
+ * ne disent pas si c'est beaucoup. Les deux, et le rappel de ce qu'on payait
+ * — avec la date et le fournisseur, parce que « c'était moins cher avant » ne
+ * se discute pas sans preuve.
+ */
+export function phraseEcartDePrix(
+  ecart: EcartDePrix,
+  ancien: DernierPrix,
+  currency: string
+): string {
+  const quand = `le ${shortDate(ancien.orderedAt)}`;
+  const chez = ancien.supplierName ? ` chez ${ancien.supplierName}` : '';
+  const rappel = `Dernière commande à ${money(ancien.unitCost, currency)} / ${ancien.unitLabel} ${quand}${chez}.`;
+
+  if (ecart.sens === 'stable') return `Même prix que la dernière fois. ${rappel}`;
+
+  const mot = ecart.sens === 'hausse' ? 'augmenté' : 'baissé';
+  const combien = money(Math.abs(ecart.ecart), currency);
+  // Le taux s'écrit comme partout ailleurs dans l'application : virgule
+  // décimale et espace avant le signe. « +5.1 % » se lit anglais.
+  const part = `${ecart.pourcentage > 0 ? '+' : ''}${percent(ecart.pourcentage)}`;
+  return `Le prix a ${mot} de ${combien} par unité (${part}). ${rappel}`;
 }

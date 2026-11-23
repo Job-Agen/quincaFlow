@@ -582,6 +582,72 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expect(await stockOf(vitre.id)).toBe(50);
   });
 
+  // ────────────────────── Le prix d'avant (§74) ────────────────────────
+
+  describe('dernier prix commandé (§74)', () => {
+    async function seedFournisseur(id: string, nom: string) {
+      await pool.query('INSERT INTO suppliers (id, business_id, name) VALUES ($1, $2, $3)', [
+        id,
+        OWNER.businessId,
+        nom,
+      ]);
+    }
+
+    it('rend le prix de la commande la plus récente, et son conditionnement', async () => {
+      const vitre = await seedVitre(0);
+      await seedFournisseur('sup_a', 'Dépôt Central');
+
+      await purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_a',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10, unitCost: 300 }],
+      });
+      await purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_a',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10, unitCost: 340 }],
+      });
+
+      const prix = await purchases.derniersPrix(OWNER.businessId);
+      const ligne = prix.find((entree) => entree.productId === vitre.id);
+      expect(ligne).toMatchObject({ unitCost: 340, supplierName: 'Dépôt Central' });
+      // Le facteur part avec le prix : sans lui, un carton et une pièce se
+      // compareraient tels quels.
+      expect(ligne?.unitFactor).toBe(1);
+      expect(ligne?.unitLabel).toBe('pièce');
+    });
+
+    it('ignore les commandes annulées', async () => {
+      // Un prix qu'on a refusé n'est pas un prix qu'on a payé : le garder
+      // comme référence ferait comparer à un chiffre qui n'a jamais eu lieu.
+      const vitre = await seedVitre(0);
+      await seedFournisseur('sup_a', 'Dépôt Central');
+
+      await purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_a',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10, unitCost: 300 }],
+      });
+      const refusee = await purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_a',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10, unitCost: 900 }],
+      });
+      await purchases.updatePurchaseOrderStatus(OWNER, refusee.id, { status: 'CANCELLED' });
+
+      const prix = await purchases.derniersPrix(OWNER.businessId);
+      expect(prix.find((entree) => entree.productId === vitre.id)?.unitCost).toBe(300);
+    });
+
+    it('ne laisse pas voir les prix d’une autre boutique', async () => {
+      const vitre = await seedVitre(0);
+      await seedFournisseur('sup_a', 'Dépôt Central');
+      await purchases.createPurchaseOrder(OWNER, {
+        supplierId: 'sup_a',
+        items: [{ productId: vitre.id, unitId: vitre.units[0]!.id, quantity: 10, unitCost: 300 }],
+      });
+
+      // Ce que paie le voisin ne regarde personne (§29).
+      expect(await purchases.derniersPrix(RIVAL.businessId)).toHaveLength(0);
+    });
+  });
+
   // ────────────────────── L'assistant de la boutique (§71) ─────────────
 
   describe('assistant (§71)', () => {

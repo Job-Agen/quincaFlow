@@ -30,6 +30,7 @@ import {
   verrouDeSuppression,
   remainingOf,
   verrouDeCommande,
+  type DernierPrix,
 } from '../domain/purchase';
 
 /**
@@ -226,6 +227,39 @@ async function resoudreFournisseur(session: Session, body: Record<string, unknow
   }
   if (!supplierName) throw badRequest('Indiquez le fournisseur.');
   return { supplierId, supplierName };
+}
+
+/**
+ * Le dernier prix commandé pour chaque marchandise (§74).
+ *
+ * Une ligne par produit, la plus récente. Les commandes **annulées** sont
+ * écartées : un prix qu'on a refusé n'est pas un prix qu'on a payé, et le
+ * garder comme référence ferait comparer à un chiffre qui n'a jamais eu lieu.
+ *
+ * Le conditionnement part avec le prix. Sans lui, un carton de 40 et un sac
+ * se compareraient tels quels, et la comparaison annoncerait une flambée de
+ * quarante fois là où rien n'a bougé.
+ */
+export async function derniersPrix(businessId: string): Promise<DernierPrix[]> {
+  return rows<DernierPrix>(
+    await getSql()`
+      SELECT DISTINCT ON (i.product_id)
+             i.product_id                 AS "productId",
+             i.unit_cost::float8          AS "unitCost",
+             i.unit_factor::float8        AS "unitFactor",
+             i.unit_label                 AS "unitLabel",
+             o.created_at                 AS "orderedAt",
+             s.name                       AS "supplierName"
+        FROM purchase_order_items i
+        JOIN purchase_orders o
+          ON o.id = i.purchase_order_id AND o.business_id = i.business_id
+        LEFT JOIN suppliers s ON s.id = o.supplier_id AND s.business_id = o.business_id
+       WHERE i.business_id = ${businessId}
+         AND i.product_id IS NOT NULL
+         AND o.status <> 'CANCELLED'
+       ORDER BY i.product_id, o.created_at DESC
+    `
+  );
 }
 
 export async function createPurchaseOrder(session: Session, body: Record<string, unknown>) {

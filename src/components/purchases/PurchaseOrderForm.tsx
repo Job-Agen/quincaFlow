@@ -20,7 +20,14 @@ import { api } from '@/client/api';
 import { envoyerBonDeCommande } from '@/client/partage';
 import { useResource } from '@/client/useResource';
 import { useSession } from '@/client/session';
-import { orderTotal, purchaseOrderMessage, unitCostFor } from '@/domain/purchase';
+import {
+  ecartDePrix,
+  orderTotal,
+  phraseEcartDePrix,
+  purchaseOrderMessage,
+  unitCostFor,
+  type DernierPrix,
+} from '@/domain/purchase';
 import { money, withUnit } from '@/utils/format';
 import { errorMessage } from '@/utils/errors';
 import type { ContactRow, Product, PurchaseOrder } from '@/types';
@@ -59,6 +66,8 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
   const router = useRouter();
   const { business, currency, user } = useSession();
   const products = useResource<Product[]>('/api/products');
+  // Ce qu'on payait la dernière fois, marchandise par marchandise (§74).
+  const prix = useResource<DernierPrix[]>('/api/purchase-orders/prices');
   const suppliers = useResource<ContactRow[]>('/api/suppliers');
 
   const [supplierId, setSupplierId] = useState(initial?.supplier_id || '');
@@ -108,6 +117,11 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
         return retrouve ? { ...item, unitId: retrouve.id } : item;
       }),
     [items, catalog]
+  );
+
+  const derniers = useMemo(
+    () => new Map((prix.data || []).map((ligne) => [ligne.productId, ligne])),
+    [prix.data]
   );
 
   const total = useMemo(
@@ -270,6 +284,16 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
             <ul className="purchase-items">
               {lignes.map((item) => {
                 const product = catalog.get(item.productId);
+                const ancien = derniers.get(item.productId) ?? null;
+                // Le facteur du conditionnement choisi : c'est lui qui ramène
+                // les deux prix à la même unité (§74).
+                const facteur =
+                  catalog.get(item.productId)?.units.find((unit) => unit.id === item.unitId)
+                    ?.factor ?? 1;
+                const ecart = ecartDePrix(
+                  { unitCost: item.unitCost, unitFactor: facteur },
+                  ancien
+                );
                 const units = product?.units ?? [];
                 return (
                   <li key={item.key} className="purchase-item">
@@ -300,6 +324,15 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
                         {money(item.unitCost || 0, currency)} /{' '}
                         {units.find((unit) => unit.id === item.unitId)?.label || product?.base_unit}{' '}
                         · Modifier le coût
+                        {/* La flèche se voit sans ouvrir : c'est au moment de
+                          taper le chiffre que le gérant peut encore discuter,
+                          pas après (§74). */}
+                        {ecart && ecart.sens !== 'stable' ? (
+                          <span className="ecart" data-sens={ecart.sens}>
+                            {ecart.sens === 'hausse' ? '↑' : '↓'}{' '}
+                            {money(Math.abs(ecart.ecart), currency)}
+                          </span>
+                        ) : null}
                       </summary>
                       <div className="grid-2">
                         <SelectField
@@ -334,6 +367,11 @@ export default function PurchaseOrderForm({ initial }: { initial?: PurchaseOrder
                           />
                         </label>
                       </div>
+                      {ecart && ancien ? (
+                        <p className="ecart__phrase" data-sens={ecart.sens}>
+                          {phraseEcartDePrix(ecart, ancien, currency)}
+                        </p>
+                      ) : null}
                     </details>
                   </li>
                 );
