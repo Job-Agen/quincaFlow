@@ -7,6 +7,7 @@ import { referenceFormat } from '../lib/references';
 import { loadCatalog } from './products';
 import { resolveCustomerName } from './contacts';
 import type {
+  Money,
   PaymentMethod,
   PricedLine,
   Quantity,
@@ -341,4 +342,113 @@ export async function cancelSale(
 
   await runTransaction(queries);
   return getSale(session.businessId, saleId);
+}
+
+/**
+ * Plusieurs ventes d'un coup (§75).
+ *
+ * Le cahier du comptoir se rattrape le soir : « 3 sacs de ciment, 2 tôles,
+ * 1 bidon de peinture », chacune une vente séparée, chacune encaissée. Les
+ * saisir une par une par l'écran ordinaire, c'est dix allers-retours ; ici
+ * c'est une liste et un bouton.
+ *
+ * Deux garanties, et elles comptent plus que la vitesse.
+ *
+ * **Le stock est vérifié sur l'ensemble, avant la première écriture.** Trois
+ * lignes de cinq sacs passent chacune isolément quand il en reste douze, et
+ * ne passent pas ensemble. Vérifier ligne à ligne laisserait les deux
+ * premières s'écrire avant que la troisième ne bute.
+ *
+ * **Ce qui s'est écrit est dit.** Si une vente échoue malgré tout — une
+ * course avec le comptoir d'à côté —, on s'arrête et on rend la liste de ce
+ * qui est passé et le rang de ce qui a buté. Un lot qui échouerait en
+ * silence laisserait le gérant ressaisir des ventes déjà enregistrées.
+ */
+export interface VenteDuLot {
+  id: string;
+  reference: string;
+  total: Money;
+}
+
+export interface ResultatDuLot {
+  creees: VenteDuLot[];
+  echec: { rang: number; message: string } | null;
+}
+
+export async function enregistrerLot(
+  session: Session,
+  body: Record<string, unknown>
+): Promise<ResultatDuLot> {
+  // `list` refuse déjà la liste vide : un second contrôle ici ne serait
+  // jamais atteint, et donnerait à croire qu'il protège quelque chose.
+  const brutes = list(body.ventes, 'ventes') as Record<string, unknown>[];
+
+  const entrees = brutes.map((vente, index) => ({
+    productId: str(vente.productId, `produit (vente ${index + 1})`),
+    unitId: (vente.unitId as string | null) ?? null,
+    quantity: round3(num(vente.quantity, `quantité (vente ${index + 1})`, { min: 0.001 })),
+    unitPrice:
+      vente.unitPrice === undefined || vente.unitPrice === null || vente.unitPrice === ''
+        ? null
+        : round2(num(vente.unitPrice, `prix (vente ${index + 1})`, { min: 0 })),
+  }));
+
+  const catalog = await loadCatalog(
+    session.businessId,
+    entrees.map((entree) => entree.productId)
+  );
+
+  const lignes = entrees.map((entree) => {
+    const trouve = catalog.get(entree.productId);
+    if (!trouve) throw badRequest('Un produit de la liste est introuvable dans votre catalogue.');
+    return buildSaleLine(entree, trouve.product, trouve.units);
+  });
+
+  // Le stock, vérifié sur la somme de toutes les ventes du lot.
+  baseQuantitiesByProduct(lignes).forEach((demande, productId) => {
+    const trouve = catalog.get(productId);
+    if (!trouve || demande <= trouve.product.stock_quantity) return;
+    throw conflict(
+      `Il ne reste que ${trouve.product.stock_quantity} ${trouve.product.base_unit} de ` +
+        `${trouve.product.name}, et la liste en vend ${demande}.`
+    );
+  });
+
+  const paymentMethod = body.paymentMethod;
+  const paymentProvider = body.paymentProvider;
+  const creees: VenteDuLot[] = [];
+
+  for (const [index, entree] of entrees.entries()) {
+    const ligne = lignes[index];
+    if (!ligne) continue;
+    try {
+      const vente = await createSale(session, {
+        lines: [
+          {
+            productId: entree.productId,
+            unitId: entree.unitId,
+            quantity: entree.quantity,
+            unitPrice: entree.unitPrice,
+          },
+        ],
+        // Le lot est le cahier du comptant : chaque vente est encaissée en
+        // entier. Une ardoise se saisit par l'écran ordinaire, qui demande le
+        // client et le montant reçu.
+        amountPaid: ligne.lineTotal,
+        paymentMethod,
+        paymentProvider,
+      });
+      creees.push({ id: vente.id, reference: vente.reference, total: vente.total });
+    } catch (souci) {
+      return {
+        creees,
+        echec: {
+          rang: index + 1,
+          message: souci instanceof Error ? souci.message : 'Enregistrement impossible.',
+        },
+      };
+    }
+  }
+
+  return { creees, echec: null };
 }

@@ -11,6 +11,7 @@ import {
   Settings,
   Smartphone,
   Sparkles,
+  ListPlus,
   Truck,
   UserCog,
   Users,
@@ -53,6 +54,9 @@ const LINKS: readonly MoreLink[] = [
   // Le cahier du §42 n'est pas réservé au propriétaire : il ne montre que ce qui
   // est entré, jamais une marge ni un coût, et le vendeur doit pouvoir y
   // inscrire la réparation qu'il vient d'encaisser au comptoir.
+  // Rattraper le cahier du comptoir d'un coup (§75). Ouvert au vendeur :
+  // c'est lui qui tient le cahier.
+  { href: '/sales/lot', label: 'Plusieurs ventes', icon: ListPlus },
   { href: '/income', label: 'Cahier de recettes', icon: BookOpen },
   { href: '/customers', label: 'Clients', icon: Users },
   { href: '/suppliers', label: 'Fournisseurs', icon: Truck },

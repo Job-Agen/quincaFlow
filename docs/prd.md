@@ -4060,3 +4060,65 @@ la hausse suivante.
 5. Les commandes annulées ne servent jamais de référence.
 6. Sans référence utilisable, rien ne s'affiche.
 7. Les prix d'une autre boutique ne sont jamais visibles.
+
+---
+
+## 75. Rattraper le cahier : plusieurs ventes d'un coup
+
+**Objectif**
+
+Le comptoir ne s'arrête pas pour l'application. On vend, on note sur le
+cahier, et le soir il faut saisir. L'écran de vente demande à chaque fois un
+panier, un encaissement, une confirmation : dix ventes font dix
+allers-retours, et le gérant renonce.
+
+Ici, une liste et un bouton.
+
+**F135 — Une ligne, une vente**
+
+C'est la distinction qui fait tout : trois lignes du cahier, ce sont **trois
+ventes**, pas une vente à trois lignes. Chacune a sa référence, sa facture,
+son heure. Les grouper en une seule fausserait le compte des ventes du jour,
+le panier moyen, et le ticket qu'un client viendrait réclamer.
+
+Le numéro de rang devant chaque ligne le dit, et c'est lui que l'écran cite
+quand une vente bute.
+
+**F136 — Le stock se vérifie sur l'ensemble, avant la première écriture**
+
+Trois ventes de cinq sacs passent **chacune isolément** quand il en reste
+douze, et ne passent pas **ensemble**. Vérifier ligne à ligne laisserait les
+deux premières s'écrire avant que la troisième ne bute, et le lot serait à
+moitié saisi.
+
+Le total demandé par marchandise est donc comparé au stock avant d'écrire
+quoi que ce soit : « Il ne reste que 12 sac de Ciment, et la liste en vend
+15. » Rien n'est écrit, la liste reste entière.
+
+**F137 — Ce qui s'est écrit est dit**
+
+Si une vente échoue malgré tout — une course avec le comptoir d'à côté —, on
+s'arrête, et la réponse porte la liste de ce qui est passé **et** le rang de
+ce qui a buté. Les ventes réussies quittent la liste, celle qui a échoué y
+reste avec les suivantes.
+
+Un lot qui échouerait en silence ferait ressaisir des ventes déjà
+enregistrées — et le stock sortirait deux fois.
+
+**F138 — Une limite, assumée et dite**
+
+Tout y est encaissé **comptant**. Une ardoise demande un client et un montant
+reçu ; l'écran de vente prend le temps de les demander, et c'est bien ainsi.
+La phrase en tête de l'écran le dit et renvoie là-bas d'un lien, plutôt que
+de laisser découvrir le manque.
+
+Les ventes du lot sont datées du jour de la saisie, comme toute vente.
+
+**Critères d'acceptation**
+
+1. Chaque ligne de la liste devient une vente distincte, avec sa référence.
+2. Chaque vente du lot est encaissée en entier.
+3. Le stock est vérifié sur la somme du lot ; en cas de dépassement, rien n'est écrit.
+4. Un échec en cours de lot rend la liste de ce qui est passé et le rang de l'échec.
+5. Les ventes réussies quittent la liste ; l'échec et la suite y restent.
+6. Un produit d'une autre boutique est refusé.

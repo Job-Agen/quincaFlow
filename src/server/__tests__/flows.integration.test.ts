@@ -582,6 +582,81 @@ describe.skipIf(!CONNECTION)('flux métier', () => {
     expect(await stockOf(vitre.id)).toBe(50);
   });
 
+  // ────────────────────── Plusieurs ventes d'un coup (§75) ─────────────
+
+  describe('lot de ventes (§75)', () => {
+    it('écrit une vente par ligne, pas une vente à plusieurs lignes', async () => {
+      // La distinction est tout l'intérêt : trois ventes du cahier, ce sont
+      // trois factures, trois références, trois encaissements.
+      const vitre = await seedVitre(80);
+      const lot = await sales.enregistrerLot(OWNER, {
+        paymentMethod: 'CASH',
+        ventes: [
+          { productId: vitre.id, quantity: 2 },
+          { productId: vitre.id, quantity: 3 },
+          { productId: vitre.id, quantity: 1 },
+        ],
+      });
+
+      expect(lot.echec).toBeNull();
+      expect(lot.creees).toHaveLength(3);
+      expect(new Set(lot.creees.map((vente) => vente.reference)).size).toBe(3);
+      expect(await stockOf(vitre.id)).toBe(74);
+    });
+
+    it('encaisse chaque vente en entier', async () => {
+      const vitre = await seedVitre(80);
+      await sales.enregistrerLot(OWNER, {
+        paymentMethod: 'CASH',
+        ventes: [{ productId: vitre.id, quantity: 2 }],
+      });
+      const { rows: lignes } = await pool.query(
+        'SELECT total::float8 AS total, amount_paid::float8 AS paid, payment_status FROM sales'
+      );
+      expect(lignes[0].paid).toBe(lignes[0].total);
+      expect(lignes[0].payment_status).toBe('PAID');
+    });
+
+    it('vérifie le stock sur la somme du lot, avant d’écrire quoi que ce soit', async () => {
+      // Trois ventes de cinq passent chacune isolément quand il reste douze,
+      // et ne passent pas ensemble. Vérifier ligne à ligne laisserait les deux
+      // premières s'écrire avant que la troisième ne bute.
+      const vitre = await seedVitre(12);
+      await expect(
+        sales.enregistrerLot(OWNER, {
+          paymentMethod: 'CASH',
+          ventes: [
+            { productId: vitre.id, quantity: 5 },
+            { productId: vitre.id, quantity: 5 },
+            { productId: vitre.id, quantity: 5 },
+          ],
+        })
+      ).rejects.toThrow(/ne reste que/i);
+
+      // Rien n'a bougé : ni le stock, ni le journal des ventes.
+      expect(await stockOf(vitre.id)).toBe(12);
+      const { rows: lignes } = await pool.query('SELECT count(*)::int AS n FROM sales');
+      expect(lignes[0].n).toBe(0);
+    });
+
+    it('refuse un lot vide', async () => {
+      await expect(
+        sales.enregistrerLot(OWNER, { paymentMethod: 'CASH', ventes: [] })
+      ).rejects.toThrow(/au moins 1/);
+    });
+
+    it('ne vend pas le produit d’une autre boutique', async () => {
+      const vitre = await seedVitre(80);
+      await expect(
+        sales.enregistrerLot(RIVAL, {
+          paymentMethod: 'CASH',
+          ventes: [{ productId: vitre.id, quantity: 1 }],
+        })
+      ).rejects.toThrow(/introuvable/i);
+      expect(await stockOf(vitre.id)).toBe(80);
+    });
+  });
+
   // ────────────────────── Le prix d'avant (§74) ────────────────────────
 
   describe('dernier prix commandé (§74)', () => {
